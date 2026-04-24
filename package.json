@@ -1,7 +1,7 @@
 {
   "name": "rag-assistant",
   "productName": "RAG Assistant",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "AI-powered research assistant for your Zotero library",
   "main": "dist/electron/main.js",
   "author": {

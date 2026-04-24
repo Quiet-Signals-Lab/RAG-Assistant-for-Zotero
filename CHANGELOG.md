@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-04-24
+
+### Added
+- **GitHub Models Provider**: Users with a GitHub Copilot subscription can now connect via a dedicated "GitHub Models" provider (contributed by [@ComePerin](https://github.com/ComePerin))
+  - Hardcodes the GitHub Models base URL — no manual endpoint configuration needed
+  - Labels the credential field "GitHub Token" for clarity
+
+### Fixed
+- **ZotMoov / Linked-File PDF Paths**: Correctly resolves PDF paths for attachments stored outside the default Zotero storage directory (e.g. via ZotMoov)
+  - `storage:` paths use existing stored-file logic (unchanged)
+  - Absolute paths are used as-is
+  - `attachments:` paths are joined with the configured storage directory
+  - Fixes [#17](https://github.com/aahepburn/RAG-Assistant-for-Zotero/discussions/17)
+- **SourcesPanel API fetch**: Fixed missing `apiFetch` import that caused the Sources panel to fail to load
+- **OpenAI-Compatible Model Listing**: Added raw HTTP fallback when the OpenAI SDK cannot parse non-standard model list responses (e.g. plain arrays instead of `{"data":[...]}`)
+  - Also normalises Azure ML resource-path model IDs to simple names (e.g. `azureml://…/gpt-4o/versions/2` → `gpt-4o`)
+
+### Documentation
+- Revised README with improved project description, privacy note for local model usage, and Homebrew / winget installation instructions
+- Corrected Ollama installation formatting in README
+
 ## [0.4.5] - 2026-03-22
 
 ### Added
