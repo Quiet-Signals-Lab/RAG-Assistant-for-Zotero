@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **OpenRouter / Cloud Provider — No Models Shown**: Fixed issue where users who enabled OpenRouter (or any cloud provider) while Ollama was the default active provider would see an empty model list and receive a `ProviderConnectionError` pointing at Ollama even after disabling it
+  - Backend now auto-switches `activeProviderId` to the first enabled provider when the stored active provider is disabled, both on startup and when settings are saved
+  - Frontend (`ActiveModelPanel`) now auto-switches the provider dropdown to the first configured provider when the current selection is disabled or has no credentials
+  - Fixes [#26](https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues/26)
+- **OpenRouter `list_models` empty result**: `list_models` now filters out entries with no model ID and falls through to the hardcoded fallback list when the API returns nothing useful
+
 ## [0.4.6] - 2026-04-24
 
 ### Added

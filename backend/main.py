@@ -295,6 +295,17 @@ def initialize_chatbot():
         if provider_config.get("enabled"):
             provider_credentials[provider_id] = provider_config.get("credentials", {})
     
+    # Validate that activeProviderId is an enabled provider; auto-switch if not
+    active_provider_id = settings.get("activeProviderId", "ollama")
+    all_providers = settings.get("providers", {})
+    if not all_providers.get(active_provider_id, {}).get("enabled", False):
+        fallback = next(
+            (pid for pid, cfg in all_providers.items() if cfg.get("enabled", False)),
+            "ollama"
+        )
+        print(f"[initialize_chatbot] Active provider '{active_provider_id}' is disabled; switching to '{fallback}'")
+        active_provider_id = fallback
+
     # Use profile-specific chroma path if not customized
     chroma_path = settings.get("chromaPath")
     if not chroma_path:
@@ -303,7 +314,7 @@ def initialize_chatbot():
     return ZoteroChatbot(
         db_path=settings.get("zoteroPath", DB_PATH),
         chroma_path=chroma_path,
-        active_provider_id=settings.get("activeProviderId", "ollama"),
+        active_provider_id=active_provider_id,
         active_model=settings.get("activeModel"),
         credentials=provider_credentials,
         embedding_model_id=settings.get("embeddingModel", "bge-base"),
@@ -1499,6 +1510,19 @@ def update_settings(settings: dict = Body(...)):
             if key != "providers":
                 updated_settings[key] = value
         
+        # Auto-switch activeProviderId if it refers to a disabled provider
+        _active_pid = updated_settings.get("activeProviderId", "ollama")
+        _updated_providers = updated_settings.get("providers", {})
+        if not _updated_providers.get(_active_pid, {}).get("enabled", False):
+            _fallback_pid = next(
+                (pid for pid, cfg in _updated_providers.items() if cfg.get("enabled", False)),
+                _active_pid
+            )
+            if _fallback_pid != _active_pid:
+                print(f"[update_settings] Active provider '{_active_pid}' is disabled; switching to '{_fallback_pid}'")
+                updated_settings["activeProviderId"] = _fallback_pid
+                updated_settings["activeModel"] = ""
+
         if save_settings(updated_settings):
             # Update global paths if they changed
             global DB_PATH, chatbot

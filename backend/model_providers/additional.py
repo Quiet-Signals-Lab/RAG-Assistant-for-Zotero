@@ -962,8 +962,8 @@ class OpenRouterProvider(BaseProvider):
             client = self._get_client(credentials)
             models_response = client.models.list()
             
-            # OpenRouter has many models, return popular ones
-            return [
+            # OpenRouter has many models, return popular ones; skip entries with no ID
+            models = [
                 ModelInfo(
                     id=model.id,
                     name=model.id,
@@ -971,10 +971,15 @@ class OpenRouterProvider(BaseProvider):
                     context_length=None
                 )
                 for model in models_response.data[:20]  # Limit to first 20
+                if model.id  # Skip models without IDs
             ]
+            if models:
+                return models
+            # Fall through to fallback if API returned nothing useful
         except Exception:
-            # Fallback to known popular models
-            return [
+            pass
+        # Fallback to known popular models
+        return [
                 ModelInfo(
                     id="anthropic/claude-3.5-sonnet",
                     name="Claude 3.5 Sonnet",

@@ -46,6 +46,14 @@ const ActiveModelPanel: React.FC = () => {
     }
   }, [availableModels[settings.activeProviderId]]);
 
+  // Auto-switch active provider if the current one is disabled or has no credentials
+  useEffect(() => {
+    const activeIsConfigured = configuredProviders.find(p => p.id === settings.activeProviderId);
+    if (!activeIsConfigured && configuredProviders.length > 0 && !saving) {
+      handleProviderChange(configuredProviders[0].id);
+    }
+  }, [settings.activeProviderId, settings.providers, availableProviders]);
+
   const handleProviderChange = async (providerId: string) => {
     try {
       setSaving(true);
