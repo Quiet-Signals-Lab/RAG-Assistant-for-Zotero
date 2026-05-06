@@ -160,7 +160,8 @@ const SourcesPanel: React.FC = () => {
               <div style={{ padding: "8px 12px", borderTop: "1px solid var(--border-subtle)", background: "var(--bg-panel-alt, #fafafa)", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 <button
                   className="btn"
-                  title="Open PDF"
+                  title="PDF"
+                  style={{ fontFamily: "system-ui, sans-serif", fontSize: "9px" }}
                   onClick={async () => {
                     if (source.localPdfPath) {
                       const fp = String(source.localPdfPath);
@@ -184,39 +185,28 @@ const SourcesPanel: React.FC = () => {
                     }
                   }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M14 2v6h6M9 13h6M9 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  PDF
                 </button>
 
-                <a title="Google Scholar" className="btn" href={`https://scholar.google.com/scholar?q=${encodeURIComponent(source.title)}`} target="_blank" rel="noreferrer">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M7.5 4.21l4.5 2.6 4.5-2.6M12 22v-10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                <a className="btn" style={{ fontFamily: "system-ui, sans-serif", fontSize: "9px", display: "flex", alignItems: "center", gap: "5px" }} href={`https://scholar.google.com/scholar?q=${encodeURIComponent(source.title)}`} target="_blank" rel="noreferrer">
+                  <img src="https://www.google.com/s2/favicons?domain=scholar.google.com&sz=16" width="13" height="13" alt="" style={{ display: "block", flexShrink: 0 }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  Google Scholar
                 </a>
                 
-                <a title="Google Books" className="btn" href={`https://www.google.com/search?tbm=bks&q=${encodeURIComponent(source.title)}`} target="_blank" rel="noreferrer">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                <a className="btn" style={{ fontFamily: "system-ui, sans-serif", fontSize: "9px", display: "flex", alignItems: "center", gap: "5px" }} href={`https://www.google.com/search?tbm=bks&q=${encodeURIComponent(source.title)}`} target="_blank" rel="noreferrer">
+                  <img src="https://www.google.com/s2/favicons?domain=books.google.com&sz=16" width="13" height="13" alt="" style={{ display: "block", flexShrink: 0 }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  Google Books
                 </a>
 
                 <a 
-                  title="Semantic Scholar" 
                   className="btn"
+                  style={{ fontFamily: "system-ui, sans-serif", fontSize: "9px", display: "flex", alignItems: "center", gap: "5px" }}
                   href={`https://www.semanticscholar.org/search?q=${encodeURIComponent(source.title)}&sort=Relevance`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="4" r="2" stroke="currentColor" strokeWidth="1.75"/>
-                    <circle cx="4" cy="20" r="2" stroke="currentColor" strokeWidth="1.75"/>
-                    <circle cx="20" cy="20" r="2" stroke="currentColor" strokeWidth="1.75"/>
-                    <path d="M11 6L5 18M13 6l6 12M6 20h12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
-                  </svg>
+                  <img src="https://www.google.com/s2/favicons?domain=semanticscholar.org&sz=16" width="13" height="13" alt="" style={{ display: "block", flexShrink: 0 }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  Semantic Scholar
                 </a>
                 
                 {source.snippets && source.snippets.length > 0 && (

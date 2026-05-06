@@ -22,8 +22,11 @@ class ChromaClient:
     def __init__(self, db_path: str, collection_name: str = "zotero_lib", embedding_model_id: str = "bge-base"):
         self.db_path = db_path
         self.embedding_model_id = embedding_model_id
-        # Include embedding model in collection name to avoid dimension conflicts
-        self.collection_name = f"{collection_name}_{embedding_model_id}"
+        # Include embedding model in collection name to avoid dimension conflicts.
+        # Replace ':' with '-' so cloud model IDs (e.g. "openai:text-embedding-3-small")
+        # produce valid ChromaDB collection names.
+        safe_model_id = embedding_model_id.replace(":", "-")
+        self.collection_name = f"{collection_name}_{safe_model_id}"
         os.makedirs(self.db_path, exist_ok=True)
         self.chroma_client = chromadb.PersistentClient(path=self.db_path, settings=Settings())
         

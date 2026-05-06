@@ -41,6 +41,9 @@ const LibraryManagementPanel: React.FC = () => {
   const [embeddingModel, setEmbeddingModel] = useState(settings.embeddingModel || 'bge-base');
   const [savingModel, setSavingModel] = useState(false);
   const [modelSaveSuccess, setModelSaveSuccess] = useState(false);
+  // Cloud embedding privacy gate: holds the model ID the user wants to switch to until
+  // they explicitly acknowledge the privacy implications.
+  const [cloudWarningTarget, setCloudWarningTarget] = useState<string | null>(null);
   
   // Metadata sync state
   const [syncingMetadata, setSyncingMetadata] = useState(false);
@@ -54,6 +57,16 @@ const LibraryManagementPanel: React.FC = () => {
   useEffect(() => {
     setEmbeddingModel(settings.embeddingModel || 'bge-base');
   }, [settings.embeddingModel]);
+
+  const handleEmbeddingModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    if (value.includes(':')) {
+      // Cloud model selected — show privacy warning before applying the change
+      setCloudWarningTarget(value);
+    } else {
+      setEmbeddingModel(value);
+    }
+  };
 
   const handleSaveModel = async () => {
     setSavingModel(true);
@@ -81,8 +94,6 @@ const LibraryManagementPanel: React.FC = () => {
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   // Cleanup polling on unmount
@@ -153,33 +164,20 @@ const LibraryManagementPanel: React.FC = () => {
     }
   };
 
-  const cancelIndexing = async () => {
+  const stopIndexing = async () => {
     try {
-      const response = await apiFetch('/api/index_cancel', {
-        method: 'POST',
-      });
-      const json = await response.json();
-
-      if (json.error) {
-        console.error('Failed to cancel:', json.error);
-      }
-
-      // Stop polling
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-
-      // Update UI state
-      setIndexing(false);
-      indexingRef.current = false;
-      setIndexStatus({ status: 'idle', progress: undefined });
-
-      // Refresh stats to see current state
-      await fetchStats();
+      await apiFetch('/api/index_cancel', { method: 'POST' });
     } catch (e) {
-      console.error('Cancel request failed', e);
+      console.error('Stop request failed', e);
     }
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    setIndexing(false);
+    indexingRef.current = false;
+    setIndexStatus({ status: 'idle', progress: undefined });
+    await fetchStats();
   };
 
   const handleMigration = async () => {
@@ -298,12 +296,18 @@ const LibraryManagementPanel: React.FC = () => {
           <select
             className="lib-select"
             value={embeddingModel}
-            onChange={(e) => setEmbeddingModel(e.target.value)}
+            onChange={handleEmbeddingModelChange}
           >
-            <option value="bge-base">BAAI/bge-base-en-v1.5 (768 dim) — Best quality, slower</option>
-            <option value="specter">SPECTER (768 dim) — Optimized for scientific papers</option>
-            <option value="minilm-l6">all-MiniLM-L6-v2 (384 dim) — Good quality, faster</option>
-            <option value="minilm-l3">paraphrase-MiniLM-L3-v2 (384 dim) — Fastest</option>
+            <optgroup label="Local (runs on this device)">
+              <option value="bge-base">BAAI/bge-base-en-v1.5 (768 dim) — Best quality, slower</option>
+              <option value="specter">SPECTER (768 dim) — Optimized for scientific papers</option>
+              <option value="minilm-l6">all-MiniLM-L6-v2 (384 dim) — Good quality, faster</option>
+              <option value="minilm-l3">paraphrase-MiniLM-L3-v2 (384 dim) — Fastest</option>
+            </optgroup>
+            <optgroup label="Cloud — text sent to external API">
+              <option value="openai:text-embedding-3-small">OpenAI text-embedding-3-small (1536 dim) — Fast, cloud</option>
+              <option value="openai:text-embedding-3-large">OpenAI text-embedding-3-large (3072 dim) — Highest quality, cloud</option>
+            </optgroup>
           </select>
 
           <div style={{ marginTop: '10px' }}>
@@ -364,9 +368,9 @@ const LibraryManagementPanel: React.FC = () => {
             {indexing && (
               <button
                 className="lib-cancel-btn"
-                onClick={cancelIndexing}
+                onClick={stopIndexing}
               >
-                Cancel
+                {indexStatus?.progress?.mode === 'incremental' ? 'Pause' : 'Stop'}
               </button>
             )}
           </div>
@@ -417,13 +421,13 @@ const LibraryManagementPanel: React.FC = () => {
           )}
 
           <p className="muted" style={{ fontSize: '12px', marginTop: '10px', lineHeight: '1.5' }}>
-            <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>Sync:</strong> Add new items from your library &bull;{' '}
-            <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>Full Reindex:</strong> Rebuild entire index from scratch
+            <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>Sync Library:</strong> Indexes new items only — safe to interrupt and resume. Use this for your first index and for ongoing updates. &bull;{' '}
+            <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>Full Reindex:</strong> Wipes and rebuilds the entire index from scratch. Only needed if your index is corrupted or you change embedding models.
           </p>
 
           <div className="info-box" style={{ fontSize: '12px', marginTop: '14px', lineHeight: '1.5', background: 'rgba(100, 130, 240, 0.06)', border: '1.5px solid rgba(100, 130, 240, 0.25)', borderRadius: '6px', padding: '10px 12px', color: '#5b7bc5' }}>
-            <strong style={{ display: 'block', marginBottom: '4px', color: 'var(--text-main)' }}>Note:</strong>
-            If the new items count doesn't decrease after syncing, some PDFs may be scanned images without searchable text (OCR required).
+            <strong style={{ display: 'block', marginBottom: '4px', color: 'var(--text-main)' }}>Large libraries:</strong>
+            Indexing can take a long time for large collections. If you close the app or are interrupted, just click <strong>Sync Library</strong> again — it will pick up where it left off.
           </div>
         </section>
 
@@ -621,6 +625,64 @@ const LibraryManagementPanel: React.FC = () => {
         </section>
 
       </main>
+
+      {/* Cloud embedding privacy warning modal */}
+      {cloudWarningTarget && (
+        <div className="cloud-warning-overlay" role="dialog" aria-modal="true">
+          <div className="cloud-warning-modal">
+            <div className="cloud-warning-header">
+              <span className="cloud-warning-icon">⚠️</span>
+              <h3>Your document text will leave this device</h3>
+            </div>
+
+            <div className="cloud-warning-body">
+              <span className="cloud-warning-model-label">{cloudWarningTarget}</span>
+              <p>
+                Cloud embedding models send text to an external API. If you proceed:
+              </p>
+              <ul>
+                <li>
+                  The full text of every PDF in your library will be sent to{' '}
+                  <strong>OpenAI's servers</strong> to generate embeddings.
+                </li>
+                <li>
+                  This happens <strong>every time you index</strong> and every time you
+                  send a chat message (your query is also embedded via the API).
+                </li>
+                <li>
+                  Your <strong>OpenAI API key</strong> must remain configured for the
+                  app to function — it is not a one-time operation.
+                </li>
+                <li>
+                  Data is subject to{' '}
+                  <strong>OpenAI's privacy and data retention policies</strong>.
+                </li>
+              </ul>
+              <p style={{ marginTop: '10px' }}>
+                If privacy is a concern, use a local model instead.
+              </p>
+            </div>
+
+            <div className="cloud-warning-footer">
+              <button
+                className="btn-ghost"
+                onClick={() => setCloudWarningTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-danger"
+                onClick={() => {
+                  setEmbeddingModel(cloudWarningTarget);
+                  setCloudWarningTarget(null);
+                }}
+              >
+                I understand — use cloud embeddings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

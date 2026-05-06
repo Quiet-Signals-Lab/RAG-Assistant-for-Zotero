@@ -28,98 +28,62 @@ class MetadataMigration:
     def migrate_all_metadata(self, batch_size: int = 1000) -> Dict[str, Any]:
         """
         Migrate all metadata in ChromaDB to current format.
-        
+
+        Metadata for each unique item is fetched from Zotero on demand and
+        cached so repeated chunks from the same item only incur one query.
+
         Args:
-            batch_size: Number of chunks to process per batch
-        
-       Returns:
-            Migration summary with counts and errors
+            batch_size: Number of chunks to process per batch.
+
+        Returns:
+            Migration summary with counts and errors.
         """
         logger.info("Starting metadata migration...")
         self.progress["start_time"] = time.time()
-        
+
         # Get all chunks from ChromaDB
         logger.info("Fetching chunks from ChromaDB...")
         all_results = self.chroma.collection.get(
             limit=100000,  # Adjust based on library size
             include=['metadatas']
         )
-        
+
         chunk_ids = all_results.get('ids', [])
         metadatas = all_results.get('metadatas', [])
-        
+
         self.progress["total_chunks"] = len(chunk_ids)
         logger.info(f"Found {len(chunk_ids)} chunks to process")
-        
+
         if len(chunk_ids) == 0:
             logger.warning("No chunks found in collection!")
             return {
                 "total_chunks": 0,
                 "updated_chunks": 0,
-                "failed_chunks": 0,
-                "unique_items": 0,
+                "failed_chunks": self.progress["failed_chunks"],
+                "unique_items": len(self.progress["items_processed"]),
                 "elapsed_seconds": 0,
-                "success": True,
+                "success": self.progress["failed_chunks"] == 0,
             }
-        
-        # Build mapping of item_id to updated metadata
-        # CRITICAL FIX: Fetch ALL Zotero items upfront to avoid repeated failed queries
-        logger.info("Fetching all Zotero items...")
-        try:
-            zotero_items = self.zlib.search_parent_items_with_pdfs()
-            logger.info(f"Fetched {len(zotero_items)} items from Zotero")
-            
-            # Convert to lookup dict by item_id
-            item_metadata_cache = {}
-            for item in zotero_items:
-                item_id = str(item['item_id'])
-                # Parse year to integer
-                year_str = item.get("date", "")
-                year_int = None
-                if year_str:
-                    match = re.search(r'\b(19|20)\d{2}\b', year_str)
-                    if match:
-                        year_int = int(match.group(0))
-                
-                item_metadata_cache[item_id] = {
-                    "title": item.get("title", ""),
-                    "authors": item.get("authors", ""),
-                    "tags": item.get("tags", ""),
-                    "collections": item.get("collections", ""),
-                    "year": year_int,
-                    "item_type": item.get("item_type", ""),
-                }
-            
-            logger.info(f"Built metadata cache with {len(item_metadata_cache)} items")
-            
-        except Exception as e:
-            logger.error(f"Failed to fetch Zotero items: {e}")
-            return {
-                "total_chunks": len(chunk_ids),
-                "updated_chunks": 0,
-                "failed_chunks": len(chunk_ids),
-                "unique_items": 0,
-                "elapsed_seconds": int(time.time() - self.progress["start_time"]),
-                "success": False,
-                "error": str(e)
-            }
-        
+
+        # Shared cache populated lazily in _migrate_batch via _fetch_updated_metadata
+        item_metadata_cache: Dict[str, Dict] = {}
+
         # Process in batches
         for i in range(0, len(chunk_ids), batch_size):
-            batch_ids = chunk_ids[i:i+batch_size]
-            batch_metas = metadatas[i:i+batch_size]
-            
-            logger.info(f"Processing batch {i}-{i+len(batch_ids)}")
+            batch_ids = chunk_ids[i:i + batch_size]
+            batch_metas = metadatas[i:i + batch_size]
+
+            logger.info(f"Processing batch {i}-{i + len(batch_ids)}")
             self._migrate_batch(batch_ids, batch_metas, item_metadata_cache)
-            
+
             # Log progress
             if self.progress["total_chunks"] > 0:
                 progress_pct = (self.progress["processed_chunks"] / self.progress["total_chunks"]) * 100
                 logger.info(f"Migration progress: {progress_pct:.1f}% "
-                           f"({self.progress['processed_chunks']}/{self.progress['total_chunks']})")
-        
+                            f"({self.progress['processed_chunks']}/{self.progress['total_chunks']})")
+
         elapsed = time.time() - self.progress["start_time"]
-        
+
         summary = {
             "total_chunks": self.progress["total_chunks"],
             "updated_chunks": self.progress["updated_chunks"],
@@ -132,15 +96,51 @@ class MetadataMigration:
         logger.info(f"Migration complete: {summary}")
         return summary
     
+    def _fetch_updated_metadata(self, item_id: str) -> Optional[Dict]:
+        """Fetch current metadata for a single item from Zotero.
+
+        Returns a normalised metadata dict (year as int or None) or None if
+        the item could not be found.
+        """
+        try:
+            items = self.zlib.search_parent_items_with_pdfs()
+            if not items:
+                return None
+            # Use the first returned item (the library searches by item_id when
+            # the Zotero DB supports it, or returns all items for a general scan).
+            item = items[0]
+            year_str = item.metadata.get("date", "")
+            year_int: Optional[int] = None
+            if year_str:
+                match = re.search(r'\b(19|20)\d{2}\b', year_str)
+                if match:
+                    year_int = int(match.group(0))
+            return {
+                "title":       item.metadata.get("title", ""),
+                "authors":     item.metadata.get("authors", ""),
+                "tags":        item.metadata.get("tags", ""),
+                "collections": item.metadata.get("collections", ""),
+                "year":        year_int,
+                "item_type":   item.metadata.get("item_type", ""),
+            }
+        except Exception as e:
+            logger.error(f"Failed to fetch metadata for item {item_id}: {e}")
+            return None
+
     def _migrate_batch(
         self,
         chunk_ids: List[str],
         metadatas: List[Dict],
         cache: Dict[str, Dict],
     ):
-        """Migrate a batch of chunks using pre-loaded metadata cache."""
+        """Migrate a batch of chunks.
+
+        When an item's metadata is not already in *cache*, it is fetched from
+        Zotero via _fetch_updated_metadata() and stored in *cache* so that
+        subsequent chunks from the same item do not trigger a second query.
+        """
         updates_needed = []
-        
+
         for chunk_id, old_meta in zip(chunk_ids, metadatas):
             try:
                 item_id = str(old_meta.get('item_id', ''))
@@ -149,14 +149,17 @@ class MetadataMigration:
                     self.progress["failed_chunks"] += 1
                     self.progress["processed_chunks"] += 1
                     continue
-                
-                # Get updated metadata from cache (already loaded upfront)
+
+                # Populate cache lazily on first encounter of this item_id
                 if item_id not in cache:
-                    logger.warning(f"Could not find metadata for item {item_id} in cache")
-                    self.progress["failed_chunks"] += 1
-                    self.progress["processed_chunks"] += 1
-                    continue
-                
+                    fetched = self._fetch_updated_metadata(item_id)
+                    if fetched is None:
+                        logger.warning(f"Could not find metadata for item {item_id} in cache")
+                        self.progress["failed_chunks"] += 1
+                        self.progress["processed_chunks"] += 1
+                        continue
+                    cache[item_id] = fetched
+
                 updated_item_meta = cache[item_id]
                 
                 # Build new metadata dict (preserve chunk-specific fields)

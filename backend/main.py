@@ -311,7 +311,7 @@ def initialize_chatbot():
     if not chroma_path:
         chroma_path = profile_manager.get_profile_chroma_path(active['id'])
     
-    return ZoteroChatbot(
+    new_chatbot = ZoteroChatbot(
         db_path=settings.get("zoteroPath", DB_PATH),
         chroma_path=chroma_path,
         active_provider_id=active_provider_id,
@@ -320,6 +320,14 @@ def initialize_chatbot():
         embedding_model_id=settings.get("embeddingModel", "bge-base"),
         storage_path=settings.get("pdfStoragePath") or None
     )
+
+    # Propagate API credentials to the embedding dispatch layer so cloud
+    # embedding providers (OpenAI, etc.) can authenticate at index and query time.
+    from backend.embed_utils import set_embedding_credentials
+    for provider_id, creds in provider_credentials.items():
+        set_embedding_credentials(provider_id, creds)
+
+    return new_chatbot
 
 chatbot = initialize_chatbot()
 
@@ -971,14 +979,16 @@ def list_embedding_collections():
         embedding_collections = []
         for col in collections:
             # Collection names follow pattern: zotero_lib_{embedding_model_id}
+            # Cloud model IDs have ':' replaced with '-' in collection names.
             if col.name.startswith("zotero_lib_"):
                 embedding_model_id = col.name.replace("zotero_lib_", "")
                 item_count = col.count()
+                current_safe = chatbot.embedding_model_id.replace(":", "-")
                 embedding_collections.append({
                     "collection_name": col.name,
                     "embedding_model_id": embedding_model_id,
                     "item_count": item_count,
-                    "is_current": embedding_model_id == chatbot.embedding_model_id
+                    "is_current": embedding_model_id == current_safe,
                 })
         
         return {
@@ -1049,17 +1059,19 @@ def ollama_status():
 
 @app.get("/api/embedding_models")
 def list_embedding_models():
-    """List all available embedding models."""
+    """List all available embedding models (local and cloud)."""
     from backend.embed_utils import EMBEDDING_MODELS
+    from backend.embedding_providers import CLOUD_EMBEDDING_MODELS
     try:
-        models = [
-            {
-                "id": model_id,
-                **config
-            }
+        local_models = [
+            {"id": model_id, **config}
             for model_id, config in EMBEDDING_MODELS.items()
         ]
-        return {"models": models}
+        cloud_models = [
+            {"id": model_id, **config}
+            for model_id, config in CLOUD_EMBEDDING_MODELS.items()
+        ]
+        return {"models": local_models + cloud_models}
     except Exception as e:
         return {"error": str(e)}
 
@@ -1536,7 +1548,12 @@ def update_settings(settings: dict = Body(...)):
                     for pid, pconfig in updated_settings.get("providers", {}).items():
                         if pconfig.get("enabled"):
                             provider_credentials[pid] = pconfig.get("credentials", {})
-                    
+
+                    # Keep embedding credentials in sync whenever any provider creds change
+                    from backend.embed_utils import set_embedding_credentials
+                    for pid, creds in provider_credentials.items():
+                        set_embedding_credentials(pid, creds)
+
                     # Update provider settings if changed
                     if "activeProviderId" in settings or "activeModel" in settings:
                         chatbot.update_provider_settings(

@@ -8,6 +8,132 @@
   height: 100%;
 }
 
+/* ── Cloud embedding privacy warning modal ─────────────────────────────────── */
+
+.cloud-warning-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: cwFadeIn 0.18s ease;
+}
+
+@keyframes cwFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.cloud-warning-modal {
+  background: var(--bg-main, #fff);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 480px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  animation: cwSlideUp 0.22s ease;
+}
+
+@keyframes cwSlideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.cloud-warning-header {
+  padding: 18px 20px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cloud-warning-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.cloud-warning-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+  line-height: 1.35;
+}
+
+.cloud-warning-body {
+  padding: 12px 20px 16px;
+  font-size: 13px;
+  color: var(--text-secondary, #444);
+  line-height: 1.55;
+}
+
+.cloud-warning-body ul {
+  margin: 8px 0 0 0;
+  padding-left: 18px;
+}
+
+.cloud-warning-body li {
+  margin-bottom: 4px;
+}
+
+.cloud-warning-model-label {
+  display: inline-block;
+  background: rgba(230, 160, 32, 0.12);
+  border: 1px solid rgba(230, 160, 32, 0.4);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 12px;
+  font-family: monospace;
+  color: #b07820;
+  margin-bottom: 8px;
+}
+
+.cloud-warning-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 0 20px 18px;
+}
+
+.cloud-warning-footer .btn-danger {
+  background: var(--accent, #c0392b);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.cloud-warning-footer .btn-danger:hover {
+  opacity: 0.88;
+}
+
+.cloud-warning-footer .btn-ghost {
+  background: transparent;
+  color: var(--text-secondary, #444);
+  border: 1px solid var(--border-subtle, #ddd);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cloud-warning-footer .btn-ghost:hover {
+  background: var(--bg-hover, #f5f5f5);
+}
+
+
 /* ── Sections (flat, bottom-border only — same as .scope-section) ─────────── */
 
 .lib-section {

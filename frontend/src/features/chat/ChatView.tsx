@@ -9,9 +9,11 @@ const ChatView: React.FC = () => {
 
   return (
     <div className="chat-view">
-      <div style={{ padding: "6px 16px" }}>
-        {error && <ErrorBanner message={error} />}
-      </div>
+      {error && (
+        <div style={{ padding: "6px 16px" }}>
+          <ErrorBanner message={error} />
+        </div>
+      )}
       <ChatMessages messages={messages} loading={loading} />
       <ChatInput onSend={sendMessage} onStop={stopGeneration} disabled={loading} />
     </div>

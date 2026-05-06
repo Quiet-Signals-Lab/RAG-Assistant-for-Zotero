@@ -328,11 +328,17 @@ class GoogleProvider(BaseProvider):
                     raise Exception("No models returned from API")
                     
             except Exception as list_error:
-                # If dynamic discovery fails (e.g., gRPC errors), use static fallback
-                # but still validate the credentials work
-                print(f"[Google Provider] Dynamic discovery failed ({type(list_error).__name__}), using static fallback")
-                
-                # Use static fallback models
+                # If dynamic discovery fails due to an invalid API key
+                # (InvalidArgument), propagate the error so the outer handler
+                # can return valid=False.  For transient/gRPC errors, fall
+                # back to the static model list so the user can still select
+                # a model and the key is accepted.
+                error_type = type(list_error).__name__
+                if error_type == 'InvalidArgument':
+                    raise
+
+                # Transient failure — use static fallback
+                print(f"[Google Provider] Dynamic discovery failed ({error_type}), using static fallback")
                 models = self._get_fallback_models()
             
             return {

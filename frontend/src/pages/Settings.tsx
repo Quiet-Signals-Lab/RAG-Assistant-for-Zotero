@@ -500,7 +500,7 @@ const Settings: React.FC = () => {
             </Button>
           </div>
           
-          <p className="settings-hint" style={{ marginTop: '12px' }}>
+          <div className="settings-hint" style={{ marginTop: '12px' }}>
             <strong>Found a bug?</strong> Open an issue on GitHub and include:
             <ul style={{ marginTop: '8px', marginLeft: '20px', lineHeight: '1.6' }}>
               <li>Screenshots of the problem</li>
@@ -508,7 +508,7 @@ const Settings: React.FC = () => {
               <li>Console logs (open Dev Tools with <kbd style={{ padding: '2px 6px', backgroundColor: 'var(--bg-secondary, #e9ecef)', borderRadius: '3px', fontSize: '12px' }}>Cmd+Option+I</kbd> on Mac or <kbd style={{ padding: '2px 6px', backgroundColor: 'var(--bg-secondary, #e9ecef)', borderRadius: '3px', fontSize: '12px' }}>Ctrl+Shift+I</kbd> on Windows/Linux, then copy from the Console tab)</li>
             </ul>
             <strong>Like the app?</strong> Consider sponsoring to support continued development!
-          </p>
+          </div>
 
           <p className="settings-hint" style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px' }}>
             © 2025 Alexander Hepburn · Licensed under the{' '}

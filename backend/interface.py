@@ -4,7 +4,7 @@ from backend.zotero_dbase import ZoteroLibrary
 from backend.zoteroitem import ZoteroItem
 from backend.pdf import PDF
 from backend.vector_db import ChromaClient
-from backend.embed_utils import get_embedding, rerank_passages
+from backend.embed_utils import get_embedding, get_embeddings_batch, rerank_passages
 from backend.model_providers import ProviderManager, Message
 from backend.model_providers.base import (
     ResponseValidator, 
@@ -254,14 +254,14 @@ class ZoteroChatbot:
                 
                 chunks = [c['text'] for c in chunks_with_pages]
                 try:
-                    vectors = [get_embedding(chunk, self.embedding_model_id) for chunk in chunks]
+                    vectors = get_embeddings_batch(chunks, self.embedding_model_id)
                 except Exception as e:
                     skip_reason = f"Item {item.metadata.get('item_id')}: Embedding generation failed - {str(e)}"
                     print(f"ERROR: {skip_reason}")
                     self.index_progress["skip_reasons"].append(skip_reason)
                     self.index_progress["processed_items"] += 1
                     continue
-                
+
                 # Validate embedding dimensions
                 from backend.embed_utils import get_embedding_dimension
                 expected_dim = get_embedding_dimension(self.embedding_model_id)
@@ -460,14 +460,14 @@ class ZoteroChatbot:
                 
                 chunks = [c['text'] for c in chunks_with_pages]
                 try:
-                    vectors = [get_embedding(chunk, self.embedding_model_id) for chunk in chunks]
+                    vectors = get_embeddings_batch(chunks, self.embedding_model_id)
                 except Exception as e:
                     skip_reason = f"Item {item.metadata.get('item_id')}: Embedding generation failed - {str(e)}"
                     print(f"ERROR: {skip_reason}")
                     self.index_progress["skip_reasons"].append(skip_reason)
                     self.index_progress["processed_items"] += 1
                     continue
-                
+
                 from backend.embed_utils import get_embedding_dimension
                 expected_dim = get_embedding_dimension(self.embedding_model_id)
                 if vectors and len(vectors[0]) != expected_dim:

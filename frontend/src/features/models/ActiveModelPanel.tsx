@@ -29,10 +29,11 @@ const ActiveModelPanel: React.FC = () => {
     }
   };
 
-  // Load models for enabled providers on mount
+  // Load models for enabled providers on mount; retry if list is empty (e.g. local server wasn't ready)
   useEffect(() => {
     Object.entries(settings.providers).forEach(([providerId, config]) => {
-      if (config.enabled && !loadingModels[providerId] && !availableModels[providerId]) {
+      const models = availableModels[providerId];
+      if (config.enabled && !loadingModels[providerId] && (!models || models.length === 0)) {
         loadModelsForProvider(providerId);
       }
     });
@@ -59,10 +60,8 @@ const ActiveModelPanel: React.FC = () => {
       setSaving(true);
       await updateSettings({ activeProviderId: providerId, activeModel: '' });
       
-      // Load models for new provider if not already loaded
-      if (!availableModels[providerId]) {
-        await loadModelsForProvider(providerId);
-      }
+      // Always reload models when switching providers to ensure fresh data
+      await loadModelsForProvider(providerId);
       
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -157,8 +156,17 @@ const ActiveModelPanel: React.FC = () => {
         <div className="active-model-field">
           <label className="active-model-label" htmlFor="active-model">
             Model
-            {loadingModels[settings.activeProviderId] && (
+            {loadingModels[settings.activeProviderId] ? (
               <span className="active-model-loading"> (loading...)</span>
+            ) : (
+              <button
+                className="active-model-refresh-btn"
+                onClick={() => loadModelsForProvider(settings.activeProviderId)}
+                title="Refresh model list"
+                aria-label="Refresh model list"
+              >
+                &#x21bb;
+              </button>
             )}
           </label>
           <select

@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-05-06
+
+### Added
+- **Source card action buttons**: Replaced icon-only buttons in the Sources panel with labelled text buttons for clarity
+  - Full service names displayed: "Open PDF", "Google Scholar", "Google Books", "Semantic Scholar"
+  - Google Scholar, Google Books, and Semantic Scholar buttons now display site favicons fetched via Google's favicon proxy service
+  - Uses the system UI font (`system-ui, sans-serif`) at 11 px for a clean, neutral appearance
+  - Favicon images hide gracefully on load failure
+- **Cloud Embedding Models**: Support for OpenAI Embeddings API as an embedding backend (resolves [#27](https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues/27) Feature 1)
+  - New `backend/embedding_providers/` package with abstract base class and OpenAI implementation
+  - Automatic batching (up to 2 048 texts per API call) with exponential-backoff retry on rate-limit errors
+  - Available models: `openai:text-embedding-3-small` (1 536 dims) and `openai:text-embedding-3-large` (3 072 dims)
+  - Cloud model IDs are sanitised (`:` → `-`) before use as ChromaDB collection-name suffixes
+  - Privacy warning modal shown in the UI before switching to a cloud embedding model
+  - OpenAI API key is passed through from provider settings at chatbot initialisation
+
 ### Fixed
+- **Chat window top border**: Removed a persistent empty `<div>` wrapper in `ChatView` that created a visible strip at the top of the chat panel; the error banner container now only renders when there is an active error
+- **Metadata filter extraction without a provider**: `MetadataExtractor` now extracts explicit metadata patterns (year ranges, `after YYYY`, `before YYYY`, `tagged "…"`, `in "…"`) via a regex pre-pass that runs regardless of whether an LLM provider is configured
+- **Metadata migration — lazy item fetch**: `MetadataMigration._migrate_batch` now fetches Zotero item metadata on demand per unique item instead of requiring a bulk pre-fetch; avoids a crash when item objects do not support dict-style subscript access
+- **Google provider — invalid API key not detected**: `InvalidArgument` exceptions thrown by `genai.list_models()` (indicating a bad API key) are no longer swallowed by the dynamic-discovery fallback; they propagate to the outer handler so `validate_credentials_and_list_models` correctly returns `valid: False`
+- **LM Studio / Single-Provider — No Models Shown**: Fixed issue where users with only one provider configured (e.g. LM Studio) would see an empty model list that never populated unless a second provider was also enabled
+  - Empty model lists were cached permanently; the app now retries fetching models whenever settings change
+  - Switching providers now always fetches a fresh model list instead of reusing a potentially stale empty cache
+  - Added a ↻ refresh button next to the Model label for manual on-demand reload
+  - Fixes [#28](https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues/28)
 - **OpenRouter / Cloud Provider — No Models Shown**: Fixed issue where users who enabled OpenRouter (or any cloud provider) while Ollama was the default active provider would see an empty model list and receive a `ProviderConnectionError` pointing at Ollama even after disabling it
   - Backend now auto-switches `activeProviderId` to the first enabled provider when the stored active provider is disabled, both on startup and when settings are saved
   - Frontend (`ActiveModelPanel`) now auto-switches the provider dropdown to the first configured provider when the current selection is disabled or has no credentials

@@ -130,13 +130,20 @@ class TestMetadataExtractorLLM:
 # ── TestNoProvider ────────────────────────────────────────────────────────────
 
 class TestNoProvider:
-    """Without a provider_manager extraction always returns empty filters."""
+    """Without a provider_manager, regex extraction still works for explicit patterns."""
 
-    def test_no_provider_returns_empty(self):
+    def test_no_provider_extracts_via_regex(self):
+        # Regex can pull year from explicit patterns even with no LLM configured
         filters = MetadataExtractor(provider_manager=None).extract_filters("Papers after 2020")
+        assert filters["year_min"] == 2020
+        assert filters["has_filters"] is True
+        assert filters["tags"] == []
+
+    def test_no_provider_returns_empty_for_generic_query(self):
+        # A query with no explicit metadata patterns yields empty filters
+        filters = MetadataExtractor(provider_manager=None).extract_filters("What are the main findings?")
         assert filters["has_filters"] is False
         assert filters["year_min"] is None
-        assert filters["tags"] == []
 
     def test_no_provider_all_fields_present(self):
         """Empty result still contains all expected keys."""
@@ -150,8 +157,9 @@ class TestNoProvider:
 class TestExtractMetadataFiltersFunction:
     """Convenience function mirrors MetadataExtractor behaviour."""
 
-    def test_no_provider_returns_empty(self):
-        filters = extract_metadata_filters("Papers after 2020")
+    def test_no_provider_returns_empty_for_generic_query(self):
+        # Generic query with no explicit metadata pattern → empty
+        filters = extract_metadata_filters("What are the main findings?")
         assert filters["has_filters"] is False
 
     def test_with_provider_calls_llm(self):

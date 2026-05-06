@@ -65,28 +65,91 @@ Return ONLY valid JSON, no explanation:"""
 
     def extract_filters(self, query: str) -> Dict[str, Any]:
         """
-        Extract metadata filters from *query* using the LLM.
+        Extract metadata filters from *query*.
+
+        Always runs a lightweight regex pre-pass first.  When a
+        provider_manager is configured the LLM result takes precedence;
+        on LLM failure the regex result is used as the fallback so the
+        caller can always proceed safely.
 
         Returns a dict with keys: year_min, year_max, tags, collections,
-        author, title, item_types, has_filters.  When no provider_manager is
-        configured (or the LLM call fails), returns an empty-filters dict so
-        the caller can safely proceed without any metadata constraint.
+        author, title, item_types, has_filters.
         """
+        regex_filters = self._extract_with_regex(query)
+
         if not self.provider_manager:
-            logger.debug("No provider_manager — skipping metadata extraction")
-            return dict(_EMPTY)
+            logger.debug("No provider_manager — using regex-only extraction")
+            return regex_filters
 
         try:
             filters = self._extract_with_llm(query)
             logger.debug(f"LLM-extracted filters: {filters}")
             return filters
         except Exception as e:
-            logger.warning(f"Metadata extraction failed, returning empty filters: {e}")
-            return dict(_EMPTY)
+            logger.warning(f"Metadata extraction failed, falling back to regex: {e}")
+            return regex_filters
 
     # ------------------------------------------------------------------ #
     # Private helpers                                                      #
     # ------------------------------------------------------------------ #
+
+    def _extract_with_regex(self, query: str) -> Dict[str, Any]:
+        """Lightweight regex extraction that requires no LLM.
+
+        Handles the most common explicit patterns in academic queries:
+        - Year ranges:  "from 2018 to 2022", "2018-2022", "between 2018 and 2022"
+        - Year min:     "after 2020", "since 2019", "from 2020"
+        - Year max:     "before 2023", "until 2022"
+        - Quoted tags:  tagged "NLP"
+        - Quoted colls: in "PhD Research"
+
+        Only extracts what is EXPLICITLY stated; never infers.
+        """
+        filters: Dict[str, Any] = dict(_EMPTY)
+
+        # ── Year range ────────────────────────────────────────────────────────
+        range_match = (
+            re.search(r'\bfrom\s+(\d{4})\s+to\s+(\d{4})\b', query, re.IGNORECASE)
+            or re.search(r'\bbetween\s+(\d{4})\s+and\s+(\d{4})\b', query, re.IGNORECASE)
+            or re.search(r'\b(\d{4})\s*[-\u2013]\s*(\d{4})\b', query)
+        )
+        if range_match:
+            filters['year_min'] = int(range_match.group(1))
+            filters['year_max'] = int(range_match.group(2))
+        else:
+            # ── Year min ──────────────────────────────────────────────────────
+            min_match = (
+                re.search(r'\bafter\s+(\d{4})\b', query, re.IGNORECASE)
+                or re.search(r'\bsince\s+(\d{4})\b', query, re.IGNORECASE)
+                or re.search(r'\bfrom\s+(\d{4})\b', query, re.IGNORECASE)
+            )
+            if min_match:
+                filters['year_min'] = int(min_match.group(1))
+
+            # ── Year max ──────────────────────────────────────────────────────
+            max_match = (
+                re.search(r'\bbefore\s+(\d{4})\b', query, re.IGNORECASE)
+                or re.search(r'\buntil\s+(\d{4})\b', query, re.IGNORECASE)
+            )
+            if max_match:
+                filters['year_max'] = int(max_match.group(1))
+
+        # ── Quoted tags: tagged "NLP" ─────────────────────────────────────────
+        tags = re.findall(r'\btagged\s+"([^"]+)"', query, re.IGNORECASE)
+        if tags:
+            filters['tags'] = tags
+
+        # ── Quoted collections: in "PhD Research" ────────────────────────────
+        collections = re.findall(r'\bin\s+"([^"]+)"', query, re.IGNORECASE)
+        if collections:
+            filters['collections'] = collections
+
+        # ── has_filters flag ─────────────────────────────────────────────────
+        if (filters['year_min'] or filters['year_max']
+                or filters['tags'] or filters['collections']):
+            filters['has_filters'] = True
+
+        return filters
 
     def _extract_with_llm(self, query: str) -> Dict[str, Any]:
         if self.provider_manager is None:
