@@ -61,7 +61,7 @@ PyMuPDF==1.26.6
 PyPika==0.48.9
 pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0
-python-dotenv==1.2.1
+python-dotenv==1.2.2
 PyYAML==6.0.3
 peft==0.14.0
 rank-bm25==0.2.2
