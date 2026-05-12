@@ -93,7 +93,7 @@ typer==0.20.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 unicorn==2.1.4
-urllib3==2.3.0
+urllib3==2.7.0
 uvicorn==0.38.0
 uvloop==0.22.1; sys_platform != 'win32'
 watchfiles==1.1.1
