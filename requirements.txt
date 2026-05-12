@@ -67,7 +67,7 @@ peft==0.14.0
 rank-bm25==0.2.2
 referencing==0.37.0
 regex==2025.11.3
-requests==2.32.5
+requests==2.33.0
 requests-oauthlib==2.0.0
 rich==14.2.0
 rpds-py==0.29.0
