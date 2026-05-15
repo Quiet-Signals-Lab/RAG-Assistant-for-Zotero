@@ -73,7 +73,8 @@ Download the latest installer from [Releases](https://github.com/aahepburn/RAG-A
 
 **Via Homebrew (recommended):**
 ```bash
-brew install aahepburn/rag-assistant-for-zotero/rag-assistant-for-zotero
+brew tap Quiet-Signals-Lab/rag-assistant-for-zotero
+brew install --cask rag-assistant-for-zotero
 ```
 > Note: Since the app isn't notarized, macOS will block it on first launch. Run this command after installing: `xattr -dr com.apple.quarantine "/Applications/RAG Assistant.app"`
 
