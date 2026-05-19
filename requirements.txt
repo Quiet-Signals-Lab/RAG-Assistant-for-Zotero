@@ -27,7 +27,7 @@ httptools==0.7.1
 httpx==0.28.1
 huggingface-hub==0.36.0
 humanfriendly==10.0
-idna==3.11
+idna==3.15
 importlib_metadata==8.7.0
 importlib_resources==6.5.2
 Jinja2==3.1.6
