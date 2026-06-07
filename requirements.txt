@@ -34,7 +34,7 @@ Jinja2==3.1.6
 joblib==1.5.2
 jsonschema==4.25.1
 jsonschema-specifications==2025.9.1
-kubernetes==34.1.0
+kubernetes==36.0.2
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
