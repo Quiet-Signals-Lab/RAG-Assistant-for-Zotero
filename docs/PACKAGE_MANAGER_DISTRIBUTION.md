@@ -23,7 +23,7 @@ On GitHub.com, create a new public repository:
 
 ```bash
 cd ~/Projects
-git clone https://github.com/aahepburn/homebrew-rag-assistant-for-zotero.git
+git clone https://github.com/Quiet-Signals-Lab/homebrew-rag-assistant-for-zotero.git
 cd homebrew-rag-assistant-for-zotero
 mkdir Casks
 ```
@@ -37,10 +37,10 @@ cask "rag-assistant-for-zotero" do
   version "0.4.5"
   sha256 :no_check # TODO: Add SHA256 once you verify the download URL
   
-  url "https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/download/v#{version}/RAG.Assistant-#{version}-universal.dmg"
+  url "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/download/v#{version}/RAG.Assistant-#{version}-universal.dmg"
   name "RAG Assistant for Zotero"
   desc "AI-powered research assistant for your Zotero library"
-  homepage "https://github.com/aahepburn/RAG-Assistant-for-Zotero"
+  homepage "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero"
   
   livecheck do
     url :url
@@ -69,7 +69,7 @@ AI-powered research assistant for your Zotero library.
 ## Installation
 
 \`\`\`bash
-brew tap aahepburn/rag-assistant-for-zotero
+brew tap Quiet-Signals-Lab/rag-assistant-for-zotero
 brew install --cask rag-assistant-for-zotero
 \`\`\`
 
@@ -87,7 +87,7 @@ brew uninstall --cask rag-assistant-for-zotero
 
 ## More Information
 
-Visit the [main repository](https://github.com/aahepburn/RAG-Assistant-for-Zotero) for documentation and support.
+Visit the [main repository](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero) for documentation and support.
 ```
 
 ### 5. Verify Release File Name
@@ -99,7 +99,7 @@ Check your actual release filename:
 ls -la release/
 
 # Option 2: Check GitHub releases page
-# Visit: https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases
+# Visit: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases
 ```
 
 Common filename patterns:
@@ -113,7 +113,7 @@ Update the `url` line in the cask file to match your actual filename.
 
 ```bash
 # Download the release file
-curl -L "https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/download/v0.4.5/RAG.Assistant-0.4.5-universal.dmg" -o test.dmg
+curl -L "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/download/v0.4.5/RAG.Assistant-0.4.5-universal.dmg" -o test.dmg
 
 # Calculate SHA256
 shasum -a 256 test.dmg
@@ -138,7 +138,7 @@ git push origin main
 
 ```bash
 # Add your tap
-brew tap aahepburn/rag-assistant-for-zotero
+brew tap Quiet-Signals-Lab/rag-assistant-for-zotero
 
 # Install the cask
 brew install --cask rag-assistant-for-zotero
@@ -158,7 +158,7 @@ Add installation instructions to your main README.md:
 ### Installation via Homebrew (macOS/Linux)
 
 \`\`\`bash
-brew tap aahepburn/rag-assistant-for-zotero
+brew tap Quiet-Signals-Lab/rag-assistant-for-zotero
 brew install --cask rag-assistant-for-zotero
 \`\`\`
 ```
@@ -209,11 +209,11 @@ PackageVersion: 0.4.5
 PackageLocale: en-US
 Publisher: Alexander Hepburn
 PublisherUrl: https://github.com/aahepburn
-PublisherSupportUrl: https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues
+PublisherSupportUrl: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues
 PackageName: RAG Assistant for Zotero
-PackageUrl: https://github.com/aahepburn/RAG-Assistant-for-Zotero
+PackageUrl: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero
 License: Apache-2.0
-LicenseUrl: https://github.com/aahepburn/RAG-Assistant-for-Zotero/blob/master/LICENSE
+LicenseUrl: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/blob/master/LICENSE
 ShortDescription: AI-powered research assistant for your Zotero library
 Description: |-
   RAG-Assistant-for-Zotero is an AI-powered research assistant that helps you
@@ -249,7 +249,7 @@ InstallModes:
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/download/v0.4.5/RAG.Assistant.Setup.0.4.5.exe
+    InstallerUrl: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/download/v0.4.5/RAG.Assistant.Setup.0.4.5.exe
     InstallerSha256: PUT_HASH_HERE
 ManifestType: installer
 ManifestVersion: 1.6.0
@@ -261,7 +261,7 @@ ManifestVersion: 1.6.0
 
 ```bash
 # Download Windows installer
-curl -L "https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/download/v0.4.5/RAG.Assistant.Setup.0.4.5.exe" -o installer.exe
+curl -L "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/download/v0.4.5/RAG.Assistant.Setup.0.4.5.exe" -o installer.exe
 
 # Calculate SHA256 (on Mac)
 shasum -a 256 installer.exe
@@ -466,7 +466,7 @@ To submit to official Homebrew Casks (homebrew/cask):
 
 ### macOS/Linux (Homebrew)
 ```bash
-brew tap aahepburn/rag-assistant-for-zotero
+brew tap Quiet-Signals-Lab/rag-assistant-for-zotero
 brew install --cask rag-assistant-for-zotero
 ```
 
@@ -487,8 +487,8 @@ Add these instructions to your main README.md under an "Installation" section.
 
 **"Cask not found"**
 ```bash
-brew untap aahepburn/rag-assistant-for-zotero
-brew tap aahepburn/rag-assistant-for-zotero
+brew untap Quiet-Signals-Lab/rag-assistant-for-zotero
+brew tap Quiet-Signals-Lab/rag-assistant-for-zotero
 ```
 
 **SHA256 mismatch**

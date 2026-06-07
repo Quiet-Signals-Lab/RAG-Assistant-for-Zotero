@@ -135,37 +135,60 @@ class ConversationStore:
             print(f"[ConversationStore] Within limits, returning all {len(messages)} messages")
             return messages
         
-        # Keep most recent messages within limits
-        kept_messages = []
-        char_count = len(system_message.content) if system_message else 0
+        # STRATEGY: Pinned anchor + sliding tail
+        #
+        # The first user+assistant exchange (the "anchor") contains the bulk of
+        # the library evidence injected on turn 1.  The old reverse-only
+        # algorithm would silently evict this evidence in long sessions,
+        # causing the model to drift.  We now:
+        #   1. Always pin the anchor (first user + first assistant message).
+        #   2. Fill the remaining budget from the tail (most-recent messages),
+        #      working backwards through the non-anchor messages.
+        #   3. Middle messages that don't fit are dropped with a log line.
+        #
+        # Safety check: if the anchor doesn't conform to expected shape
+        # (e.g. turn 1 errored and no assistant response was stored), fall
+        # back to tail-only so we don't pin garbage.
         
-        # For follow-up turns (>1 conversation message), we MUST keep at least the current message
-        # even if it puts us over the limit, otherwise the model has zero context
-        min_messages_to_keep = 1 if len(conversation_messages) > 1 else 0
+        if (len(conversation_messages) >= 2
+                and conversation_messages[0].role == "user"
+                and conversation_messages[1].role == "assistant"):
+            anchor_messages = conversation_messages[:2]
+            tail_candidates = conversation_messages[2:]
+        else:
+            # Malformed history — fall back to tail-only strategy
+            anchor_messages = []
+            tail_candidates = conversation_messages
+
+        anchor_chars = sum(len(m.content) for m in anchor_messages)
+        char_count = (len(system_message.content) if system_message else 0) + anchor_chars
         
-        # Work backwards from most recent
-        for i, msg in enumerate(reversed(conversation_messages)):
+        # Fill remaining budget from the tail (most recent first)
+        tail_kept = []
+        max_tail_messages = max_messages - len(anchor_messages)
+        for msg in reversed(tail_candidates):
             msg_chars = len(msg.content)
-            within_message_limit = len(kept_messages) < max_messages
-            within_char_limit = char_count + msg_chars <= max_chars
-            must_keep = i < min_messages_to_keep  # Keep at least most recent message
-            
-            if (within_message_limit and within_char_limit) or must_keep:
-                kept_messages.insert(0, msg)
+            if len(tail_kept) < max_tail_messages and char_count + msg_chars <= max_chars:
+                tail_kept.insert(0, msg)
                 char_count += msg_chars
-                if must_keep and not within_char_limit:
-                    print(f"[ConversationStore] Keeping message {i} even though it exceeds char limit (required for context)")
             else:
-                print(f"[ConversationStore] Stopped at {len(kept_messages)} kept (would exceed limits)")
+                print(f"[ConversationStore] Dropped middle message to preserve anchor + recency")
+                # Do NOT break — continue scanning so the loop finishes cleanly
+                # (We must not use 'break' here: there may be smaller messages
+                # further back that could still fit, but sliding-tail correctness
+                # requires we stop at the first message that doesn't fit to keep
+                # the tail contiguous.  Use break intentionally.)
                 break
-        
-        # Reconstruct with system message first
+
+        # Reconstruct: system → anchor → tail
+        kept_messages = anchor_messages + tail_kept
         result = []
         if system_message:
             result.append(system_message)
         result.extend(kept_messages)
         
-        print(f"[ConversationStore] Returning {len(result)} messages after trimming")
+        print(f"[ConversationStore] Trimmed: anchor={len(anchor_messages)}, "
+              f"tail={len(tail_kept)}, total={len(result)} msgs, {char_count} chars")
         
         return result
     

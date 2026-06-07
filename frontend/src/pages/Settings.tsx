@@ -24,7 +24,7 @@ const Settings: React.FC = () => {
   const [providerValidation, setProviderValidation] = useState<Record<string, { valid: boolean; message?: string }>>({});
   const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
   const [detectedEnvKeys, setDetectedEnvKeys] = useState<Record<string, { detected: boolean; env_var?: string }>>({});
-  const [activeTab, setActiveTab] = useState<'general' | 'local' | 'cloud'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'local' | 'cloud' | 'advanced'>('general');
   
   // Auto-updater hook (only used in Electron)
   const updater = useAppUpdater();
@@ -462,6 +462,15 @@ const Settings: React.FC = () => {
           </svg>
           Cloud Providers
         </button>
+        <button 
+          className={`settings-tab ${activeTab === 'advanced' ? 'active' : ''}`}
+          onClick={() => setActiveTab('advanced')}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Advanced
+        </button>
       </div>
 
       <div className="settings-container">{activeTab === 'general' && (
@@ -474,7 +483,7 @@ const Settings: React.FC = () => {
           
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>
             <Button
-              onClick={() => window.open('https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues/new', '_blank', 'noopener,noreferrer')}
+              onClick={() => window.open('https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues/new', '_blank', 'noopener,noreferrer')}
               variant="secondary"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '8px' }}>
@@ -693,7 +702,7 @@ const Settings: React.FC = () => {
                     Version {updater.updateInfo.version} is available. To update, please download the new release file manually from GitHub Releases.
                   </p>
                   <Button
-                    onClick={() => window.electron?.openExternal('https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/latest')}
+                    onClick={() => window.electron?.openExternal('https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/latest')}
                     variant="primary"
                     style={{ marginTop: '8px' }}
                   >
@@ -715,7 +724,7 @@ const Settings: React.FC = () => {
                 <p style={{ margin: '0 0 8px 0', lineHeight: '1.5' }}>
                   Automatic updates are disabled. When a new version is available, you'll need to download and install it manually from{' '}
                   <a 
-                    href="https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases" 
+                    href="https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     style={{ color: '#0c5d29', textDecoration: 'underline', fontWeight: '500' }}
@@ -782,6 +791,47 @@ const Settings: React.FC = () => {
           </p>
 
           {cloudProviders.map(provider => renderProviderCard(provider))}
+        </section>
+      )}
+
+      {activeTab === 'advanced' && (
+        <section className="settings-section">
+          <h2 className="settings-section-title">Retrieval</h2>
+          <p className="settings-section-description">
+            Control how much evidence the system retrieves from your library for each query.
+            By default, the limit is set automatically based on your active model's context window.
+          </p>
+
+          <div className="settings-field">
+            <label className="settings-label">Evidence snippets per query</label>
+            <select
+              className="settings-input"
+              value={formData.maxSources ?? 0}
+              onChange={e => {
+                const v = parseInt(e.target.value, 10);
+                setFormData(prev => ({ ...prev, maxSources: v }));
+                setSaveSuccess(false);
+                setSaveError(null);
+              }}
+            >
+              <option value={0}>Auto — scaled to model context window (recommended)</option>
+              <option value={4}>4 snippets</option>
+              <option value={6}>6 snippets</option>
+              <option value={8}>8 snippets</option>
+              <option value={10}>10 snippets</option>
+              <option value={12}>12 snippets</option>
+              <option value={16}>16 snippets</option>
+              <option value={20}>20 snippets</option>
+              <option value={30}>30 snippets</option>
+            </select>
+            <p className="settings-hint">
+              Each snippet is a relevant passage from your library. Multiple snippets may come from
+              the same paper; the number of cited sources shown will typically be lower than this
+              value. Increase this if your answers are missing key sources. Local/Ollama models
+              default to 6 snippets (conservative) — setting a higher value may cause context
+              overflow on small-context models (&lt;16k tokens).
+            </p>
+          </div>
         </section>
       )}
 

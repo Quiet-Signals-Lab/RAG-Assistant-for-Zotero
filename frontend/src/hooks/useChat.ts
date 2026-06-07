@@ -22,6 +22,7 @@ export function useChat() {
         collections?: string[];
       };
       use_rrf?: boolean;
+      max_sources?: number;
     }
   ): Promise<
     | { userMessage: ChatMessage; assistantMessage: ChatMessage; response: ChatResponse }

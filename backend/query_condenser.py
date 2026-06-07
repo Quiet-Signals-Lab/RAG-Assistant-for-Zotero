@@ -170,6 +170,24 @@ Now do the same for the conversation below."""
             if standalone_query.lower().startswith("standalone question:"):
                 standalone_query = standalone_query[20:].strip()
             
+            # Hallucination guard: if the condensed query shares very few content
+            # words with the original, the LLM has wandered off-topic.  Fall back
+            # to the original rather than retrieving with a hallucinated query.
+            original_words = set(query.lower().split())
+            condensed_words = set(standalone_query.lower().split())
+            # Remove stopwords that are uninformative for overlap comparison
+            stopwords = {"a", "an", "the", "is", "are", "was", "were", "be",
+                         "in", "on", "at", "to", "of", "for", "and", "or",
+                         "what", "how", "why", "when", "where", "who", "does",
+                         "do", "did", "can", "could", "would", "will", "about"}
+            orig_content = original_words - stopwords
+            cond_content = condensed_words - stopwords
+            if orig_content and cond_content:
+                overlap = len(orig_content & cond_content) / max(len(orig_content), len(cond_content))
+                if overlap < 0.15:
+                    print(f"Warning: Condensed query diverged from original (overlap={overlap:.2f}), using original")
+                    return query
+            
             print(f" Query condensation:")
             print(f"   Original: {query}")
             print(f"   Standalone: {standalone_query}")
@@ -188,7 +206,12 @@ Now do the same for the conversation below."""
     ) -> bool:
         """
         Determine if a query needs condensation based on heuristics.
-        
+
+        Requires at least one completed exchange (a prior user turn AND a prior
+        assistant response) before condensation is attempted.  This prevents
+        garbling standalone first-turn questions that happen to contain
+        comparison or elliptical language.
+
         Args:
             query: User's question
             conversation_history: Recent messages
@@ -196,46 +219,57 @@ Now do the same for the conversation below."""
         Returns:
             True if query appears to be a follow-up requiring condensation
         """
-        # If no history (first turn), no condensation needed
+        # Require a completed exchange: at least one prior user turn AND one
+        # prior assistant response.  Checking only user count (old behaviour)
+        # triggers on turn 2 even when the assistant hasn't responded yet.
         user_messages = [m for m in conversation_history if m.role == "user"]
-        if len(user_messages) == 0:
+        asst_messages = [m for m in conversation_history if m.role == "assistant"]
+        if len(user_messages) == 0 or len(asst_messages) == 0:
             return False
-        
-        q = query.lower().strip()
-        
-        # Check for anaphoric references (pronouns that need resolution)
+
+        # Strip trailing punctuation before word-boundary tests so that
+        # "Can you elaborate on that?" correctly matches the word "that".
+        q_raw = query.lower().strip()
+        import re as _re
+        q = _re.sub(r'[?.!,;:]+$', '', q_raw).strip()
+
+        # Check for anaphoric references (pronouns and determiners that refer
+        # to something named earlier in the conversation).
         has_anaphora = any(
-            # Pronouns and determiners
             (q.startswith(word + " ") or f" {word} " in q or q.endswith(" " + word))
             for word in ["it", "they", "them", "that", "this", "these", "those", "its", "their"]
         )
-        
-        # Check for formal anaphoric expressions
+
+        # Formal anaphoric expressions
         has_formal_anaphora = any(phrase in q for phrase in [
             "said", "such", "aforementioned", "the former", "the latter"
         ])
-        
-        # Check for elliptical constructions (incomplete sentences)
+
+        # Elliptical constructions — the query is syntactically incomplete
+        # without the prior conversation context.
         has_ellipsis = any(phrase in q for phrase in [
-            "what about", "how about", "and", "also", "additionally",
+            "what about", "how about", "also", "additionally",
             "the above", "the previous", "earlier", "you mentioned",
-            "as mentioned", "like you said"
+            "as mentioned", "like you said",
+            "expand on", "elaborate on", "tell me more",
         ])
-        
-        # Check for comparative language (likely needs both topics)
-        has_comparison = any(phrase in q for phrase in [
-            "overlap", "relationship", "compare", "contrast", "versus", "vs",
-            "difference", "similar", "relate", "connection", "between"
-        ])
-        
-        # Short queries (<8 words) after turn 1 are likely follow-ups
-        is_short = len(q.split()) < 8
-        
-        # Condense if any strong signal is present
-        should_cond = has_anaphora or has_formal_anaphora or has_ellipsis or (has_comparison and is_short)
-        
+        # NOTE: "and" removed from ellipsis list — too broad, fires on
+        # legitimate standalone questions like "What are X and Y?"
+        # "expand on" / "elaborate on" are safe because we require a completed
+        # exchange before triggering, so standalone first-turn questions like
+        # "Can you elaborate on cognitive load?" won't match.
+
+        # Condense only when a genuine dependency signal is present.
+        # Comparative language alone ("How does Piaget compare to Vygotsky?")
+        # is NOT a dependency signal — the query is already self-contained.
+        # We previously triggered on (has_comparison AND is_short) which
+        # caused false positives on every short comparison question after turn 1.
+        should_cond = has_anaphora or has_formal_anaphora or has_ellipsis
+
         if should_cond:
-            print(f"[QueryCondenser] should_condense=True: anaphora={has_anaphora}, formal_anaphora={has_formal_anaphora}, ellipsis={has_ellipsis}, comparison={has_comparison}, short={is_short}")
+            print(f"[QueryCondenser] should_condense=True: "
+                  f"anaphora={has_anaphora}, formal_anaphora={has_formal_anaphora}, "
+                  f"ellipsis={has_ellipsis}")
         
         return should_cond
 

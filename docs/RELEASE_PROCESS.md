@@ -35,7 +35,7 @@ git push origin master
 git push origin v0.x.x
 
 # 4. Verify workflow triggered
-echo "Check status at: https://github.com/aahepburn/RAG-Assistant-for-Zotero/actions"
+echo "Check status at: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/actions"
 ```
 
 **Important notes:**
@@ -87,7 +87,7 @@ After pushing the tag, monitor the GitHub Actions workflow:
 
 1. **Go to Actions page:**
    ```
-   https://github.com/aahepburn/RAG-Assistant-for-Zotero/actions
+   https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/actions
    ```
 
 2. **Check workflow status:**
@@ -97,7 +97,7 @@ After pushing the tag, monitor the GitHub Actions workflow:
 
 3. **Verify the release:**
    ```
-   https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/latest
+   https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/latest
    ```
 
 4. **Confirm all artifacts are present:**
@@ -144,7 +144,7 @@ Download and test the installers from the GitHub Release:
 
 - Verify tag starts with `v` (e.g., `v0.2.3`, not `0.2.3`)
 - Check GitHub Actions is enabled for your repository
-- View workflow runs at: https://github.com/aahepburn/RAG-Assistant-for-Zotero/actions
+- View workflow runs at: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/actions
 
 ### Build fails on specific platform
 

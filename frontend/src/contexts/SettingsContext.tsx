@@ -37,6 +37,7 @@ export interface Settings {
   providers: Record<string, ProviderConfig>;
   showSystemNotification?: boolean;
   playSoundNotification?: boolean;
+  maxSources?: number;
 }
 
 interface SettingsContextType {
@@ -57,6 +58,7 @@ const defaultSettings: Settings = {
   chromaPath: '',
   showSystemNotification: true,
   playSoundNotification: false,
+  maxSources: 0,
   providers: {
     ollama: {
       enabled: true,

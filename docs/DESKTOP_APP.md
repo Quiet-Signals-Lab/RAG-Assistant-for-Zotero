@@ -38,7 +38,7 @@ For a complete release that supports auto-updates:
    ```
 
 4. **Create GitHub Release**:
-   - Go to: https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/new
+   - Go to: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/new
    - Select tag `v0.1.1`
    - Title: `v0.1.1 - Description`
    - Upload all files from `release/` directory:
@@ -358,6 +358,6 @@ app.on('open-url', (event, url) => {
 
 ## Getting Help
 
-- **Issues**: https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues
-- **Discussions**: https://github.com/aahepburn/RAG-Assistant-for-Zotero/discussions
+- **Issues**: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues
+- **Discussions**: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/discussions
 - **Electron Discord**: https://discord.gg/electron

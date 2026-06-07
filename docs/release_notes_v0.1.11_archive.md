@@ -93,10 +93,10 @@ This release is backward compatible. Existing indexes and settings are preserved
 
 - Full diagnostic guide: `SYNC_DIAGNOSTICS.md`
 - API documentation: `/diagnose_unindexed` endpoint
-- Issue tracker: [GitHub Issues](https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues)
+- Issue tracker: [GitHub Issues](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues)
 
 ---
 
-**Installation**: Download the appropriate installer for your platform from the [releases page](https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/tag/v0.1.11).
+**Installation**: Download the appropriate installer for your platform from the [releases page](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/tag/v0.1.11).
 
-**Feedback**: Report issues or suggest improvements via [GitHub Issues](https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues).
+**Feedback**: Report issues or suggest improvements via [GitHub Issues](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues).

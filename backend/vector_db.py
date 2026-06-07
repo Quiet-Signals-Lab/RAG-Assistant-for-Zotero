@@ -2,10 +2,54 @@
 import chromadb
 from chromadb.config import Settings
 import os
+import re
 from typing import List, Dict, Any, Iterable, Optional
 from rank_bm25 import BM25Okapi
-import pickle
+import json
 import numpy as np
+
+# ---------------------------------------------------------------------------
+# BM25 tokenizer — handles both Latin and CJK scripts
+# ---------------------------------------------------------------------------
+# CJK scripts (Chinese, Japanese, Korean) have no whitespace between words.
+# Inserting spaces around each CJK character before splitting allows
+# BM25Okapi to treat individual characters as tokens, which is the standard
+# character-level approach used by many CJK IR systems and works correctly
+# with bag-of-words models.  No additional NLP dependency is required.
+#
+# Ranges covered:
+#   U+2E80-U+2EFF  CJK Radicals Supplement
+#   U+2F00-U+2FDF  Kangxi Radicals
+#   U+3040-U+309F  Hiragana
+#   U+30A0-U+30FF  Katakana
+#   U+3100-U+312F  Bopomofo
+#   U+3400-U+4DBF  CJK Extension A
+#   U+4E00-U+9FFF  CJK Unified Ideographs (the main block)
+#   U+F900-U+FAFF  CJK Compatibility Ideographs
+#   U+FE30-U+FE4F  CJK Compatibility Forms
+_CJK_RE = re.compile(
+    r'[\u2e80-\u2eff\u2f00-\u2fdf\u3040-\u309f\u30a0-\u30ff'
+    r'\u3100-\u312f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\ufe30-\ufe4f]'
+)
+
+
+def _tokenize_for_bm25(text: str) -> list:
+    """Tokenize text for BM25 indexing and querying.
+
+    For Latin/Western scripts: lowercases and splits on whitespace (existing
+    behaviour, unchanged).
+
+    For CJK scripts: inserts a space before and after every CJK character so
+    that the subsequent whitespace split produces individual character tokens.
+    Character-level tokenization is correct for BM25 on CJK text and requires
+    no external dependency (e.g. jieba).
+
+    Mixed text (e.g. an English abstract followed by Chinese keywords) is
+    handled correctly: the regex only expands CJK characters, leaving Latin
+    words intact.
+    """
+    return _CJK_RE.sub(r' \g<0> ', text.lower()).split()
+
 
 class ChromaClient:
     """
@@ -45,7 +89,7 @@ class ChromaClient:
         self.bm25_index = None
         self.bm25_corpus = None
         self.bm25_ids = None
-        self.bm25_path = os.path.join(self.db_path, f"bm25_index_{embedding_model_id}.pkl")
+        self.bm25_path = os.path.join(self.db_path, f"bm25_index_{safe_model_id}.json")
 
     def add_chunks(self,
         ids: List[str],
@@ -104,8 +148,8 @@ class ChromaClient:
         if self.bm25_index is None:
             return []  # No BM25 index available
         
-        # Tokenize query (simple whitespace tokenization)
-        query_tokens = query.lower().split()
+        # Tokenize query — supports CJK character-level splitting
+        query_tokens = _tokenize_for_bm25(query)
         
         # Get BM25 scores
         scores = self.bm25_index.get_scores(query_tokens)
@@ -374,11 +418,11 @@ class ChromaClient:
         """Load BM25 index from disk if it exists."""
         if os.path.exists(self.bm25_path):
             try:
-                with open(self.bm25_path, 'rb') as f:
-                    data = pickle.load(f)
-                    self.bm25_index = data['index']
+                with open(self.bm25_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
                     self.bm25_corpus = data['corpus']
                     self.bm25_ids = data['ids']
+                    self.bm25_index = BM25Okapi(self.bm25_corpus) if self.bm25_corpus else None
             except Exception as e:
                 print(f"Error loading BM25 index: {e}")
                 self.bm25_index = None
@@ -387,11 +431,10 @@ class ChromaClient:
         """Save BM25 index to disk."""
         if self.bm25_index is not None:
             try:
-                with open(self.bm25_path, 'wb') as f:
-                    pickle.dump({
-                        'index': self.bm25_index,
+                with open(self.bm25_path, 'w', encoding='utf-8') as f:
+                    json.dump({
                         'corpus': self.bm25_corpus,
-                        'ids': self.bm25_ids
+                        'ids': self.bm25_ids,
                     }, f)
             except Exception as e:
                 print(f"Error saving BM25 index: {e}")
@@ -411,10 +454,10 @@ class ChromaClient:
             print("No documents in collection to index")
             return
         
-        # Tokenize documents (simple whitespace tokenization)
+        # Tokenize documents — supports CJK character-level splitting
         corpus = []
         for doc in all_docs['documents']:
-            tokens = doc.lower().split()
+            tokens = _tokenize_for_bm25(doc)
             corpus.append(tokens)
         
         # Build BM25 index

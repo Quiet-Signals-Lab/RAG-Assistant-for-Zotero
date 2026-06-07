@@ -20,7 +20,7 @@ The app provides native `.deb` packages for Debian-based distributions (Ubuntu, 
 **Installation:**
 ```bash
 # Download the .deb
-wget https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/download/v0.1.7/RAG-Assistant-0.1.7-linux-amd64.deb
+wget https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/download/v0.1.7/RAG-Assistant-0.1.7-linux-amd64.deb
 
 # Install
 sudo apt install ./RAG-Assistant-0.1.7-linux-amd64.deb
@@ -47,7 +47,7 @@ rag-assistant
 **Usage:**
 ```bash
 # Download
-wget https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/download/v0.1.7/RAG-Assistant-0.1.7-linux-x64.AppImage
+wget https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/download/v0.1.7/RAG-Assistant-0.1.7-linux-x64.AppImage
 
 # Make executable
 chmod +x RAG-Assistant-0.1.7-linux-x64.AppImage

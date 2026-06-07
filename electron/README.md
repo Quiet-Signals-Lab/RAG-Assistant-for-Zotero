@@ -209,7 +209,7 @@ To enable auto-updates:
 2. **Build installers** for all platforms
 
 3. **Create GitHub Release**:
-   - Go to: https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/new
+   - Go to: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/new
    - Select your tag
    - Upload all build artifacts from `release/` directory
    - Include `latest-mac.yml`, `latest-linux.yml`, `latest.yml` (Windows)

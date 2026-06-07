@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-06-08
+
+### Added
+- **Configurable evidence snippet limit (discussion [#43](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/discussions/43))**: A new **Advanced** tab in Settings exposes an "Evidence snippets per query" selector. Choose from Auto (default — scaled to the active model's context window, same as before), 4, 6, 8, 10, 12, 16, 20, or 30 snippets. Setting a fixed value overrides the automatic tier-based limit while proportionally adjusting the underlying fetch and rerank parameters so the pipeline can actually reach the target. Particularly useful for local/Ollama users, where the automatic default is 6 (conservative for unknown context windows) but the model may comfortably handle more. The setting is persisted per profile. Setting a high value on a small-context model (< 16k tokens) may cause context overflow — this is documented in the UI hint.
+- **Multilingual embedding model support (issue #37)**: Three new local embedding models are now available in the Library → Embedding Model selector:
+  - `BAAI/bge-m3` (1024 dim, ~2.3 GB) — BGE multilingual supporting 100+ languages including Chinese, Japanese, and Korean. Natural upgrade path from the default `bge-base` (same BGE family).
+  - `BAAI/bge-large-zh-v1.5` (1024 dim, ~1.3 GB) — Chinese-optimised BGE model for users with primarily Chinese-language Zotero libraries.
+  - `paraphrase-multilingual-MiniLM-L12-v2` (384 dim, ~470 MB) — Lightweight multilingual option supporting 50+ languages.
+  - All three models download automatically via sentence-transformers on first use. No additional Python dependencies are required.
+  - **Known limitation:** The cross-encoder reranker (`cross-encoder/ms-marco-MiniLM-L-6-v2`) is English-only and is not replaced in this release. Reranking quality on non-English text will be reduced; dense retrieval quality is unaffected.
+
+### Fixed
+- **BM25 tokenization broken for CJK text (issue #37)**: The BM25 sparse retrieval index used `text.lower().split()`, which produces whole sentences as single tokens for Chinese, Japanese, and Korean text (these scripts have no word-boundary whitespace). BM25 scores were effectively zero for all CJK queries. A `_tokenize_for_bm25()` helper now uses a compiled Unicode regex to insert spaces around every CJK character before splitting, producing character-level tokens. This is the standard approach for CJK bag-of-words retrieval and requires no additional dependency. Applied consistently to both index building (`build_bm25_index`) and query time (`query_bm25`). Existing BM25 index files will be rebuilt automatically on the next "Sync Library" run.
+- **Follow-up answers regress to a new question (issue #35)**: On turn 2+, fresh retrieval evidence was silently discarded, leaving the model with no context but a system prompt that says "use only provided context". GPT-4o would respond by generating a new question instead of an answer. Evidence is now injected into every follow-up turn via `AcademicPrompts.build_hybrid_user_message`, framing it as supplementary evidence for a follow-up exchange.
+- **Context history evicts first-turn evidence anchor (issue #37 / trim bug)**: `trim_messages_for_context` previously used a reverse-only iteration that could silently drop the first user+assistant exchange — the turn that carries the bulk of library evidence. Replaced with a pinned-anchor + sliding-tail algorithm: the first exchange is always retained; only middle messages are evicted when the context budget is exceeded.
+- **Dynamic context budget replaces hardcoded `max_chars=12000`**: `ZoteroChatbot` now computes the character budget from the active model's declared context window (60 % of window × 4 chars/token, capped at 400 000 chars). Falls back to 24 000 chars when the model context length cannot be determined. Eliminates context overflow on small models and underutilisation on large ones.
+- **Query condenser false positives on comparative questions**: `should_condense` was triggering on any short query that contained comparison keywords (`compare`, `overlap`, `versus` …). A user asking "How does Piaget compare to Vygotsky?" on turn 2+ would have their query condensed into something about the prior conversation topic. Removed the `(has_comparison AND is_short)` trigger — comparative language alone is not a dependency signal.
+- **Query condenser false negatives from trailing punctuation**: Queries like "Can you elaborate on that?" never triggered anaphora detection because the word-boundary check `q.endswith(" that")` failed on `"that?"`. Query is now stripped of trailing punctuation before all word-boundary tests.
+- **Query condenser condensing before any assistant response exists**: `should_condense` previously fired after only one user turn with no prior assistant reply. Guard strengthened to require at least one completed exchange (user AND assistant) before condensation is attempted.
+- **Query condenser hallucination guard**: After condensation, if the content-word overlap between the original query and the condensed version is below 15 %, the condenser falls back to the original. Prevents a rare LLM hallucination from producing an off-topic retrieval query.
+
+### Removed
+- **Database Migration UI removed from Library tab**: The "Database Migration" section (version check, migrate button, status indicators) has been removed from the Library management panel. All existing libraries are already on the current metadata format; the one-time migration path is no longer needed. `MigrationProvider`, `MigrationContext`, and the migration banner have been unwired from the app shell.
+
+### Security
+- **Dependency updates** (Dependabot PRs [#29](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/29)–[#36](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/36), [#40](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/40), [#44](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/44)–[#46](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/46)):
+  - `starlette` 0.49.3 → 1.0.1 — fixes malformed `Host` header vulnerability; required bumping `fastapi` to 0.134.0 to support starlette 1.x
+  - `fastapi` 0.121.2 → 0.134.0 — required to allow starlette ≥ 1.0
+  - `axios` 1.13.2 → 1.17.0 (Electron/root)
+  - `react-router` / `react-router-dom` 7.9.6 → 7.17.0 (frontend)
+  - `idna` 3.11 → 3.15
+  - `pillow` 12.0.0 → 12.2.0
+  - `Pygments` 2.19.2 → 2.20.0
+  - `python-dotenv` 1.2.1 → 1.2.2
+  - `requests` 2.32.5 → 2.33.0
+  - `urllib3` 2.3.0 → 2.7.0
+  - Frontend dev deps (`vite`, `rollup`) patched via `npm audit fix`
+
 ## [0.4.7] - 2026-05-06
 
 ### Added
@@ -15,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Google Scholar, Google Books, and Semantic Scholar buttons now display site favicons fetched via Google's favicon proxy service
   - Uses the system UI font (`system-ui, sans-serif`) at 11 px for a clean, neutral appearance
   - Favicon images hide gracefully on load failure
-- **Cloud Embedding Models**: Support for OpenAI Embeddings API as an embedding backend (resolves [#27](https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues/27) Feature 1)
+- **Cloud Embedding Models**: Support for OpenAI Embeddings API as an embedding backend (resolves [#27](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues/27) Feature 1)
   - New `backend/embedding_providers/` package with abstract base class and OpenAI implementation
   - Automatic batching (up to 2 048 texts per API call) with exponential-backoff retry on rate-limit errors
   - Available models: `openai:text-embedding-3-small` (1 536 dims) and `openai:text-embedding-3-large` (3 072 dims)
@@ -32,11 +70,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Empty model lists were cached permanently; the app now retries fetching models whenever settings change
   - Switching providers now always fetches a fresh model list instead of reusing a potentially stale empty cache
   - Added a ↻ refresh button next to the Model label for manual on-demand reload
-  - Fixes [#28](https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues/28)
+  - Fixes [#28](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues/28)
 - **OpenRouter / Cloud Provider — No Models Shown**: Fixed issue where users who enabled OpenRouter (or any cloud provider) while Ollama was the default active provider would see an empty model list and receive a `ProviderConnectionError` pointing at Ollama even after disabling it
   - Backend now auto-switches `activeProviderId` to the first enabled provider when the stored active provider is disabled, both on startup and when settings are saved
   - Frontend (`ActiveModelPanel`) now auto-switches the provider dropdown to the first configured provider when the current selection is disabled or has no credentials
-  - Fixes [#26](https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues/26)
+  - Fixes [#26](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues/26)
 - **OpenRouter `list_models` empty result**: `list_models` now filters out entries with no model ID and falls through to the hardcoded fallback list when the API returns nothing useful
 
 ## [0.4.6] - 2026-04-24
@@ -51,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `storage:` paths use existing stored-file logic (unchanged)
   - Absolute paths are used as-is
   - `attachments:` paths are joined with the configured storage directory
-  - Fixes [#17](https://github.com/aahepburn/RAG-Assistant-for-Zotero/discussions/17)
+  - Fixes [#17](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/discussions/17)
 - **SourcesPanel API fetch**: Fixed missing `apiFetch` import that caused the Sources panel to fail to load
 - **OpenAI-Compatible Model Listing**: Added raw HTTP fallback when the OpenAI SDK cannot parse non-standard model list responses (e.g. plain arrays instead of `{"data":[...]}`)
   - Also normalises Azure ML resource-path model IDs to simple names (e.g. `azureml://…/gpt-4o/versions/2` → `gpt-4o`)
@@ -637,7 +675,7 @@ This is the standard approach for macOS apps as the industry transitions to Appl
 
 Previous versions were web-based only, requiring manual setup of Python backend and Node.js frontend.
 
-See git history for details: https://github.com/aahepburn/RAG-Assistant-for-Zotero/commits/master
+See git history for details: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/commits/master
 
 ---
 

@@ -67,7 +67,7 @@ Configure API keys in Settings for: **OpenAI**, **Anthropic**, **Google**, **Mis
 
 ### Desktop App (Recommended)
 
-Download the latest installer from [Releases](https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases):
+Download the latest installer from [Releases](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases):
 
 #### macOS
 
@@ -115,13 +115,13 @@ First, make sure you have the necessary Python packages installed.
 sudo apt install python3 python3-pip python3-venv
 ```
 
-Download the `.deb` package from [Releases](https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases) and install.
+Download the `.deb` package from [Releases](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases) and install.
 
 Or, run the following commands from the terminal:
 
 ```bash
 # Download the latest .deb package (amd64)
-wget https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/latest/download/RAG-Assistant-{version}-linux-amd64.deb
+wget https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/latest/download/RAG-Assistant-{version}-linux-amd64.deb
 
 # Install (automatically handles dependencies)
 sudo apt install ./RAG-Assistant-{version}-linux-amd64.deb
@@ -145,7 +145,7 @@ For development or customization:
 
 **Setup:**
 ```bash
-git clone https://github.com/aahepburn/RAG-Assistant-for-Zotero.git
+git clone https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero.git
 cd RAG-Assistant-for-Zotero
 
 # Python environment

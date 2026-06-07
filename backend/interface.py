@@ -115,12 +115,37 @@ class ZoteroChatbot:
             logger.debug(f"Could not determine model context length: {e}")
             return None
 
-    def get_retrieval_limits(self, is_focused: bool = False) -> Dict[str, int]:
+    def _get_context_char_budget(self) -> int:
+        """
+        Compute the character budget to pass to trim_messages_for_context.
+
+        Uses 60 % of the active model's context window (reserving 40 % for the
+        response and retrieval-prompt overhead).  Assumes ~4 chars per token as
+        a conservative estimate for academic text.
+
+        Returns a ceiling of 400 000 chars so we never send absurdly large
+        payloads to models with very large windows.  There is intentionally
+        NO floor: for small-context models (≤8k tokens) the computed budget
+        accurately reflects their limits.  Callers must accept that on ≤8k
+        models the system prompt + first-turn evidence alone may already
+        exceed the budget; that is a known limitation documented in the README.
+        """
+        ctx_tokens = self.get_active_model_context_length()
+        if ctx_tokens is None:
+            # Unknown model — use a conservative 24 000 char (~6k token) default
+            return 24_000
+        budget = int(ctx_tokens * 4 * 0.60)  # 60 % of window, 4 chars/token
+        return min(budget, 400_000)
+
+    def get_retrieval_limits(self, is_focused: bool = False, max_sources_override: int = 0) -> Dict[str, int]:
         """
         Calculate appropriate retrieval limits based on active model's context window.
 
         Args:
             is_focused: Whether this is a focused query (filters active or ≤2 papers)
+            max_sources_override: When > 0, overrides the computed max_total_snippets cap.
+                The other parameters (retrieval_k, rerank_top_k, max_snippets_per_paper)
+                are derived proportionally so the pipeline can actually reach the target.
 
         Returns:
             Dict with retrieval_k, rerank_top_k, max_snippets_per_paper, max_total_snippets
@@ -169,12 +194,24 @@ class ZoteroChatbot:
             "max_total_snippets": int(base["max_total_snippets"] * multiplier),
         }
 
+        # Apply user override: replace max_total_snippets and derive the other
+        # parameters proportionally so the pipeline can actually reach the target.
+        if max_sources_override > 0:
+            override = max_sources_override
+            scaled["max_total_snippets"] = override
+            # Diversity cap: at least 2, roughly 1/3 of total (same ratio as base)
+            scaled["max_snippets_per_paper"] = max(2, override // 3)
+            # Fetch enough candidates to satisfy the override after reranking
+            scaled["retrieval_k"] = max(scaled["retrieval_k"], override * 2)
+            scaled["rerank_top_k"] = max(scaled["rerank_top_k"], override + 5)
+
         # Log for debugging
         provider_id = self.provider_manager.active_provider_id
         model_id = self.provider_manager.get_active_model()
+        override_note = f", override={max_sources_override}" if max_sources_override > 0 else ""
         logger.info(
             f"Retrieval limits for {provider_id}/{model_id} "
-            f"(context: {context_length or 'unknown'}): {scaled}"
+            f"(context: {context_length or 'unknown'}{override_note}): {scaled}"
         )
 
         return scaled
@@ -742,6 +779,7 @@ class ZoteroChatbot:
         use_metadata_filters=False,
         manual_filters=None,
         use_rrf=True,
+        max_sources=0,
     ):
         """
         Process a chat query with stateful conversation history using Perplexity-style architecture.
@@ -852,7 +890,7 @@ class ZoteroChatbot:
 
         # Get dynamic retrieval limits based on model's context window
         is_focused_query_prelim = db_filter is not None
-        limits = self.get_retrieval_limits(is_focused=is_focused_query_prelim)
+        limits = self.get_retrieval_limits(is_focused=is_focused_query_prelim, max_sources_override=max_sources)
         retrieval_k = limits["retrieval_k"]
         rerank_top_k = limits["rerank_top_k"]
 
@@ -907,7 +945,7 @@ class ZoteroChatbot:
 
         # Recalculate limits if focus mode changed (rare but possible)
         if is_focused_query != is_focused_query_prelim:
-            limits = self.get_retrieval_limits(is_focused=is_focused_query)
+            limits = self.get_retrieval_limits(is_focused=is_focused_query, max_sources_override=max_sources)
 
         max_snippets_per_paper = limits["max_snippets_per_paper"]
         max_total_snippets = limits["max_total_snippets"]
@@ -985,16 +1023,24 @@ class ZoteroChatbot:
                     user_message = query
                     print("   Building FIRST turn message (no snippets)")
             else:
-                # Follow-up turn: ONLY send the question
-                # CRITICAL: NO evidence, NO instructions, NO additional context
-                # The model has the system prompt and full conversation history
-                user_message = query
-                print(f"   Building FOLLOW-UP turn #{user_turns + 1}")
-                print(f"   User message is PLAIN question only: '{user_message[:100]}...'")
-                print(f"   Message length: {len(user_message)} chars")
+                # Follow-up turn: inject fresh evidence so the model can satisfy
+                # its grounding instruction ("use only the provided context").
+                # Without evidence here, the model receives no context but the
+                # system prompt says "use only provided context" — on GPT-4o
+                # this causes it to generate a new question instead of an answer
+                # (root cause of issue #35).
+                #
+                # Use build_hybrid_user_message (not build_rag_user_message):
+                # the hybrid variant frames the content as supplementary evidence
+                # for a follow-up, not as a fresh first-turn RAG query.
                 if snippets:
-                    print(f"   NOTE: {len(snippets)} snippets retrieved but NOT added to user message")
-                    print(f"   (Model will answer from conversation history + general knowledge)")
+                    user_message = AcademicPrompts.build_hybrid_user_message(query, snippets)
+                    print(f"   Building FOLLOW-UP turn #{user_turns + 1} with {len(snippets)} snippets embedded")
+                    print(f"   Message length: {len(user_message)} chars")
+                else:
+                    user_message = AcademicPrompts.build_plain_user_message(query)
+                    print(f"   Building FOLLOW-UP turn #{user_turns + 1} (no snippets, answering from history)")
+                    print(f"   Message length: {len(user_message)} chars")
             
             # Append user message to history
             self.conversation_store.append_message(session_id, "user", user_message)
@@ -1012,7 +1058,7 @@ class ZoteroChatbot:
             messages = self.conversation_store.trim_messages_for_context(
                 full_history, 
                 max_messages=20,  # Last 10 turns
-                max_chars=12000   # ~3000 tokens (more room for context)
+                max_chars=self._get_context_char_budget()
             )
             
             # Log the actual messages being sent to LLM

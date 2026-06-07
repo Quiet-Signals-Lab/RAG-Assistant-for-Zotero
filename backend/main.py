@@ -77,6 +77,8 @@ import json
 import warnings
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 # Suppress resource_tracker warnings from loky/scikit-learn
 # These are harmless cleanup warnings from parallel processing in sentence-transformers
 warnings.filterwarnings("ignore", category=UserWarning, module="resource_tracker")
@@ -331,6 +333,54 @@ def initialize_chatbot():
 
 chatbot = initialize_chatbot()
 
+# ---------------------------------------------------------------------------
+# Security helpers
+# ---------------------------------------------------------------------------
+
+def _validate_profile_id(profile_id: str) -> None:
+    """Raise ValueError if profile_id contains characters outside [a-zA-Z0-9_-]."""
+    if not profile_id or not all(c.isalnum() or c in '-_' for c in profile_id):
+        raise ValueError(
+            "Invalid profile ID: must contain only alphanumeric characters, hyphens, and underscores"
+        )
+
+
+def _get_allowed_storage_dirs() -> list:
+    """Return resolved directories from which PDF file access is permitted."""
+    dirs = []
+    storage_path = getattr(chatbot.zlib, 'storage_path', None)
+    if storage_path:
+        dirs.append(Path(storage_path).resolve())
+    db_parent = Path(chatbot.zlib.db_path).parent
+    dirs.append((db_parent / "storage").resolve())
+    return dirs
+
+
+def _validate_pdf_path(filepath: str) -> Path:
+    """Validate a user-supplied file path for PDF access.
+
+    Ensures the resolved path:
+    - Is not empty
+    - Has a .pdf suffix
+    - Resolves within an allowed Zotero storage directory
+
+    Returns the resolved Path on success; raises ValueError otherwise.
+    """
+    if not filepath or not filepath.strip():
+        raise ValueError("File path must not be empty")
+    resolved = Path(filepath).resolve()
+    if resolved.suffix.lower() != '.pdf':
+        raise ValueError("Only PDF files are accessible via this endpoint")
+    allowed_dirs = _get_allowed_storage_dirs()
+    for allowed in allowed_dirs:
+        try:
+            resolved.relative_to(allowed)
+            return resolved
+        except ValueError:
+            continue
+    raise ValueError("Access denied: file is outside the Zotero storage directory")
+
+
 @app.get("/")
 def read_root():
     """Health check endpoint for Zotero LLM backend."""
@@ -427,9 +477,12 @@ def pdf_sample(
 ):
     """Extracts sample text from a PDF for testing purposes."""
     try:
-        pdf = PDF(filepath=filename)
+        safe_path = _validate_pdf_path(filename)
+        pdf = PDF(filepath=str(safe_path))
         text = pdf.extract_text(max_chars=max_chars)
         return {"sample": text}
+    except ValueError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": str(e)}
 
@@ -439,11 +492,14 @@ def get_item_metadata(
 ):
     """Retrieves metadata from the ZoteroItem class."""
     try:
-        item = ZoteroItem(filepath=filename)
+        safe_path = _validate_pdf_path(filename)
+        item = ZoteroItem(filepath=str(safe_path))
         title = item.get_title()
         author = item.get_author()
-        return {"title": title, 
+        return {"title": title,
                 "author": author}
+    except ValueError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": str(e)}
 
@@ -560,8 +616,8 @@ def chat(query: str, item_ids: Optional[str] = Query("", description="Comma sepa
         payload = chatbot.chat(query, filter_item_ids=filter_ids if filter_ids else None)
         return payload
     except Exception as e:
-        tb = traceback.format_exc()
-        return {"error": str(e), "traceback": tb}
+        logger.error("GET /api/chat error", exc_info=True)
+        return {"error": str(e)}
 
 
 @app.post("/api/chat")
@@ -605,6 +661,8 @@ def chat_post(payload: dict = Body(...)):
         use_metadata_filters = payload.get("use_metadata_filters", False)
         manual_filters = payload.get("manual_filters")
         use_rrf = payload.get("use_rrf", True)
+        # 0 = auto (dynamic, model-based); > 0 = user-specified evidence snippet cap
+        max_sources = int(payload.get("max_sources", 0) or 0)
 
         payload_out = chatbot.chat(
             query, 
@@ -613,12 +671,14 @@ def chat_post(payload: dict = Body(...)):
             use_metadata_filters=use_metadata_filters,
             manual_filters=manual_filters,
             use_rrf=use_rrf,
+            max_sources=max_sources,
         )
         print(f"Endpoint returning payload_out with generated_title: {payload_out.get('generated_title')}")
         return payload_out
     except Exception as e:
         error_msg = str(e)
-        
+        logger.error("POST /api/chat error", exc_info=True)
+
         # Provide helpful error messages for common issues
         if "embedding with dimension" in error_msg.lower():
             return {
@@ -627,11 +687,9 @@ def chat_post(payload: dict = Body(...)):
                         "Please delete the vector database and re-index your library. "
                         "Run: rm -rf <your_chroma_path> then use the Index Library button.",
                 "technical_details": error_msg,
-                "traceback": traceback.format_exc()
             }
-        
-        tb = traceback.format_exc()
-        return {"error": error_msg, "traceback": tb}
+
+        return {"error": error_msg}
 
 
 @app.get("/api/index_status")
@@ -952,8 +1010,8 @@ def diagnose_unindexed():
             "diagnostics": diagnostics
         }
     except Exception as e:
-        import traceback
-        return {"error": str(e), "traceback": traceback.format_exc()}
+        logger.error("GET /api/diagnose_unindexed error", exc_info=True)
+        return {"error": str(e)}
 
 
 @app.get("/api/embedding_collections")
@@ -1012,22 +1070,27 @@ def open_pdf(payload: dict = Body(...)):
         pdf_path = payload.get("pdf_path")
         if not pdf_path:
             return {"error": "Missing 'pdf_path' in request body"}
-        
-        if not os.path.exists(pdf_path):
-            return {"error": f"PDF file not found: {pdf_path}"}
-        
+
+        try:
+            safe_path = _validate_pdf_path(pdf_path)
+        except ValueError as e:
+            return {"error": str(e)}
+
+        if not safe_path.exists():
+            return {"error": "PDF file not found"}
+
         # Open the file with the system's default application
         system = platform.system()
         if system == "Darwin":  # macOS
-            subprocess.run(["open", pdf_path], check=True)
+            subprocess.run(["open", str(safe_path)], check=True)
         elif system == "Windows":
-            os.startfile(pdf_path)
+            os.startfile(str(safe_path))
         elif system == "Linux":
-            subprocess.run(["xdg-open", pdf_path], check=True)
+            subprocess.run(["xdg-open", str(safe_path)], check=True)
         else:
             return {"error": f"Unsupported operating system: {system}"}
-        
-        return {"success": True, "message": f"Opened {pdf_path}"}
+
+        return {"success": True, "message": f"Opened {safe_path.name}"}
     except subprocess.CalledProcessError as e:
         return {"error": f"Failed to open PDF: {str(e)}"}
     except Exception as e:
@@ -1345,7 +1408,6 @@ def detect_api_keys():
                 detected[provider_id] = {
                     "detected": True,
                     "env_var": env_var,
-                    "last_3_chars": os.getenv(env_var)[-3:] if os.getenv(env_var) else ""
                 }
                 break
         if provider_id not in detected:
@@ -1394,6 +1456,7 @@ def create_profile(payload: dict = Body(...)):
 def get_profile(profile_id: str):
     """Get metadata for a specific profile."""
     try:
+        _validate_profile_id(profile_id)
         profile = profile_manager.get_profile(profile_id)
         if not profile:
             return {"error": f"Profile '{profile_id}' not found"}
@@ -1409,6 +1472,7 @@ def update_profile(profile_id: str, payload: dict = Body(...)):
     Expects JSON body: {"name": "New Name", "description": "New Description"}
     """
     try:
+        _validate_profile_id(profile_id)
         name = payload.get("name")
         description = payload.get("description")
         
@@ -1425,6 +1489,7 @@ def update_profile(profile_id: str, payload: dict = Body(...)):
 def delete_profile(profile_id: str, force: bool = Query(False)):
     """Delete a profile and all its data."""
     try:
+        _validate_profile_id(profile_id)
         success = profile_manager.delete_profile(profile_id, force=force)
         if not success:
             return {"error": f"Profile '{profile_id}' not found"}
@@ -1439,6 +1504,7 @@ def delete_profile(profile_id: str, force: bool = Query(False)):
 def activate_profile(profile_id: str):
     """Set the active profile."""
     try:
+        _validate_profile_id(profile_id)
         success = profile_manager.set_active_profile(profile_id)
         if not success:
             return {"error": f"Profile '{profile_id}' not found"}
@@ -1459,6 +1525,7 @@ def activate_profile(profile_id: str):
 def get_profile_sessions(profile_id: str):
     """Get sessions for a specific profile."""
     try:
+        _validate_profile_id(profile_id)
         sessions_data = profile_manager.load_profile_sessions(profile_id)
         return sessions_data
     except Exception as e:
@@ -1469,6 +1536,7 @@ def get_profile_sessions(profile_id: str):
 def save_profile_sessions(profile_id: str, sessions_data: dict = Body(...)):
     """Save sessions for a specific profile."""
     try:
+        _validate_profile_id(profile_id)
         success = profile_manager.save_profile_sessions(profile_id, sessions_data)
         if not success:
             return {"error": "Failed to save sessions"}

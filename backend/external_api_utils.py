@@ -44,8 +44,11 @@ def fetch_google_book_reviews(isbn: str, google_api_key: str) -> List[Dict[str, 
         raise ValueError("Google API key is required")
     
     try:
-        url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}&key={google_api_key}"
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(
+            "https://www.googleapis.com/books/v1/volumes",
+            params={"q": f"isbn:{isbn}", "key": google_api_key},
+            timeout=10,
+        )
         resp.raise_for_status()
         data = resp.json()
         

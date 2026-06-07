@@ -136,7 +136,7 @@ Depends: libgtk-3-0, libnotify4, libxtst6, libnss3, libxss1, libasound2, libgbm1
 Recommends: libappindicator3-1
 Section: default
 Priority: optional
-Homepage: https://github.com/aahepburn/RAG-Assistant-for-Zotero
+Homepage: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero
 Description: AI-powered research assistant for your Zotero library.
  Chat with your documents and get cited answers with page numbers.
  Search semantically across your research collection.

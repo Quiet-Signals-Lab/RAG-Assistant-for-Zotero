@@ -90,7 +90,7 @@ When an update is found:
     "publish": [
       {
         "provider": "github",
-        "owner": "aahepburn",
+        "owner": "Quiet-Signals-Lab",
         "repo": "RAG-Assistant-for-Zotero",
         "releaseType": "release"
       }
@@ -237,7 +237,7 @@ GH_TOKEN=your_token electron-builder --mac --publish always
 
 **Manual download link not working**
 - Verify you have internet connection
-- Try opening https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/latest directly
+- Try opening https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/latest directly
 - Check if GitHub is accessible from your network
 
 **Update check fails**

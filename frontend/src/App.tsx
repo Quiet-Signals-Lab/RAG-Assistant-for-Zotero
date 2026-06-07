@@ -11,14 +11,12 @@ import { ResponseSelectionProvider } from "./contexts/ResponseSelectionContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ProfileProvider } from "./contexts/ProfileContext";
 import { SearchSettingsProvider } from "./contexts/SearchSettingsContext";
-import { MigrationProvider } from "./contexts/MigrationContext";
 
 const App: React.FC = () => (
 	<Router>
 		<ProfileProvider>
 			<SettingsProvider>
-				<MigrationProvider>
-					<SearchSettingsProvider>
+				<SearchSettingsProvider>
 						<SessionsProvider>
 							<ResponseSelectionProvider>
 								<ChatProvider>
@@ -29,8 +27,7 @@ const App: React.FC = () => (
 								</ChatProvider>
 							</ResponseSelectionProvider>
 						</SessionsProvider>
-					</SearchSettingsProvider>
-				</MigrationProvider>
+				</SearchSettingsProvider>
 			</SettingsProvider>
 		</ProfileProvider>
 	</Router>

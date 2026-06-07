@@ -5,6 +5,7 @@ import { useChat as useChatHook } from "../hooks/useChat";
 import { useSessions } from "./SessionsContext";
 import { useResponseSelection } from "./ResponseSelectionContext";
 import { useSearchSettings } from "./SearchSettingsContext";
+import { useSettings } from "./SettingsContext";
 import { useNotifications } from "../hooks/useNotifications";
 import type { Snippet as SessionSnippet, Source, Message as SessionMessage } from "../types/session";
 
@@ -82,6 +83,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }
   const sessions = useSessions();
   const { setSelectedResponseId } = useResponseSelection();
   const { searchSettings } = useSearchSettings();
+  const { settings } = useSettings();
   const { notifyResponse } = useNotifications();
 
   // Load messages when currentSessionId changes
@@ -145,6 +147,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }
           }
         : undefined,
       use_rrf: searchSettings.useRRF,
+      max_sources: settings.maxSources || 0,
     };
     
     // send via the chat hook, which returns created messages and the response

@@ -11,7 +11,7 @@ Quick commands for building RAG Assistant for Zotero on Windows.
 
 ```powershell
 # Clone repository
-git clone https://github.com/aahepburn/RAG-Assistant-for-Zotero.git
+git clone https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero.git
 cd RAG-Assistant-for-Zotero
 
 # Install dependencies

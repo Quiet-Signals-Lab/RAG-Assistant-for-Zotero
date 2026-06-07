@@ -47,6 +47,31 @@ EMBEDDING_MODELS = {
         'quality': 'moderate',
         'cloud': False,
     },
+    # ── Multilingual models ──────────────────────────────────────────────────
+    'bge-m3': {
+        'name': 'BAAI/bge-m3',
+        'dimension': 1024,
+        'description': 'BGE multilingual, 100+ languages including Chinese/Japanese/Korean (1024 dim, ~2.3GB)',
+        'speed': 'slow',
+        'quality': 'excellent',
+        'cloud': False,
+    },
+    'bge-large-zh': {
+        'name': 'BAAI/bge-large-zh-v1.5',
+        'dimension': 1024,
+        'description': 'BGE large Chinese-optimised, strong on Chinese academic text (1024 dim, ~1.3GB)',
+        'speed': 'slow',
+        'quality': 'excellent',
+        'cloud': False,
+    },
+    'multilingual-minilm': {
+        'name': 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+        'dimension': 384,
+        'description': 'Lightweight multilingual, 50+ languages (384 dim, ~470MB)',
+        'speed': 'fast',
+        'quality': 'good',
+        'cloud': False,
+    },
 }
 
 # Default model configuration

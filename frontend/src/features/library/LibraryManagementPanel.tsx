@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../api/client';
-import { useMigration } from '../../contexts/MigrationContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import '../../styles/library-management.css';
 
@@ -31,13 +30,10 @@ interface IndexStats {
 }
 
 const LibraryManagementPanel: React.FC = () => {
-  const migration = useMigration();
   const { settings, updateSettings } = useSettings();
   const [indexing, setIndexing] = useState(false);
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const [indexStats, setIndexStats] = useState<IndexStats | null>(null);
-  const [migrationSuccess, setMigrationSuccess] = useState<string | null>(null);
-  const [migrationError, setMigrationError] = useState<string | null>(null);
   const [embeddingModel, setEmbeddingModel] = useState(settings.embeddingModel || 'bge-base');
   const [savingModel, setSavingModel] = useState(false);
   const [modelSaveSuccess, setModelSaveSuccess] = useState(false);
@@ -180,23 +176,6 @@ const LibraryManagementPanel: React.FC = () => {
     await fetchStats();
   };
 
-  const handleMigration = async () => {
-    setMigrationSuccess(null);
-    setMigrationError(null);
-    try {
-      const result = await migration.startMigration();
-      if (result.status === 'completed') {
-        setMigrationSuccess(
-          `Migration completed! Updated ${result.summary?.updated_chunks} chunks in ${result.summary?.elapsed_seconds}s`
-        );
-      } else if (result.status === 'not_needed') {
-        setMigrationSuccess('Database is already up to date');
-      }
-    } catch (err) {
-      setMigrationError(err instanceof Error ? err.message : 'Migration failed');
-    }
-  };
-
   const handleMetadataSync = async () => {
     setMetadataSyncSuccess(null);
     setMetadataSyncError(null);
@@ -303,6 +282,11 @@ const LibraryManagementPanel: React.FC = () => {
               <option value="specter">SPECTER (768 dim) — Optimized for scientific papers</option>
               <option value="minilm-l6">all-MiniLM-L6-v2 (384 dim) — Good quality, faster</option>
               <option value="minilm-l3">paraphrase-MiniLM-L3-v2 (384 dim) — Fastest</option>
+            </optgroup>
+            <optgroup label="Multilingual — local, runs on this device">
+              <option value="bge-m3">BAAI/bge-m3 (1024 dim) — 100+ languages incl. Chinese, ~2.3GB download</option>
+              <option value="bge-large-zh">BAAI/bge-large-zh-v1.5 (1024 dim) — Chinese-optimised, ~1.3GB download</option>
+              <option value="multilingual-minilm">paraphrase-multilingual-MiniLM-L12-v2 (384 dim) — 50+ languages, ~470MB download</option>
             </optgroup>
             <optgroup label="Cloud — text sent to external API">
               <option value="openai:text-embedding-3-small">OpenAI text-embedding-3-small (1536 dim) — Fast, cloud</option>
@@ -432,7 +416,7 @@ const LibraryManagementPanel: React.FC = () => {
         </section>
 
         {/* Metadata Sync Section */}
-        <section className="lib-section">
+        <section className="lib-section lib-section-last">
           <h3 className="scope-section-title">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -489,139 +473,6 @@ const LibraryManagementPanel: React.FC = () => {
               <strong>Note:</strong> This updates metadata only. To index new PDFs, use "Sync Library" above.
             </div>
           </div>
-        </section>
-
-        {/* Database Migration Section */}
-        <section className="lib-section lib-section-last">
-          <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Database Migration
-          </h3>
-
-          <p className="muted" style={{ fontSize: '12px', marginBottom: '16px', lineHeight: '1.5' }}>
-            Update your database to enable advanced metadata filtering (tags, collections, year ranges)
-          </p>
-
-          {migration.loading ? (
-            <div className="lib-status-row loading">
-              <span className="spinner"></span> Checking database status...
-            </div>
-          ) : migration.versionInfo ? (
-            <>
-              {migration.versionInfo.migration_needed ? (
-                <>
-                  <div className="lib-status-row needs-update">
-                    <div className="status-indicator">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="10" stroke="#e6a020" strokeWidth="2" fill="none"/>
-                        <path d="M12 8v4M12 16h.01" stroke="#e6a020" strokeWidth="2" strokeLinecap="round"/>
-                      </svg>
-                    </div>
-                    <div className="status-text">
-                      <strong>Migration Required</strong>
-                      <div style={{ marginTop: '6px', fontSize: '13px', lineHeight: '1.5' }}>
-                        Your database is using version {migration.versionInfo.version} (legacy format).
-                        Metadata filtering features are currently disabled.
-                      </div>
-                      {migration.versionInfo.message && (
-                        <div style={{ marginTop: '6px', fontSize: '12px', opacity: 0.85 }}>
-                          {migration.versionInfo.message}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ margin: '14px 0' }}>
-                    <button
-                      className="btn-primary"
-                      onClick={handleMigration}
-                      disabled={migration.migrating}
-                    >
-                      {migration.migrating ? (
-                        <><span className="spinner" style={{ marginRight: '8px' }}></span>Migrating Database...</>
-                      ) : (
-                        <>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '8px' }}>
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                          Start Migration
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="lib-info-box">
-                    <div style={{ fontWeight: 600, marginBottom: '4px', fontSize: '12px' }}>What this does:</div>
-                    <ul style={{ margin: '4px 0', paddingLeft: '18px', fontSize: '12px', lineHeight: '1.7' }}>
-                      <li>Updates metadata to enable filtering by tags, collections, and year</li>
-                      <li>Does <strong>NOT</strong> require re-indexing your library</li>
-                      <li>Takes 5–10 minutes depending on library size</li>
-                      <li>Can continue working during migration</li>
-                    </ul>
-                  </div>
-                </>
-              ) : (
-                <div className="lib-status-row up-to-date">
-                  <div className="status-indicator">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="12" cy="12" r="10" stroke="#4caf50" strokeWidth="2" fill="none"/>
-                      <path d="M9 12l2 2 4-4" stroke="#4caf50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <div className="status-text">
-                    <strong>Database Up to Date</strong>
-                    <div style={{ marginTop: '4px', fontSize: '12px', opacity: 0.8 }}>
-                      Version {migration.versionInfo.version} · All features enabled
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {migrationSuccess && (
-                <div className="migration-result success" style={{ marginTop: '12px' }}>
-                  ✓ {migrationSuccess}
-                </div>
-              )}
-
-              {migrationError && (
-                <div className="migration-result error" style={{ marginTop: '12px' }}>
-                  ✗ {migrationError}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="lib-status-row error">
-              <div className="status-indicator">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="10" stroke="#f44336" strokeWidth="2" fill="none"/>
-                  <path d="M12 8v4M12 16h.01" stroke="#f44336" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </div>
-              <div className="status-text">
-                Unable to check database status
-                {migration.error && (
-                  <div style={{ marginTop: '6px', fontSize: '12px' }}>
-                    {migration.error}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {!migration.loading && !migration.versionInfo && (
-            <>
-              <p className="muted" style={{ fontSize: '12px', marginTop: '12px', lineHeight: '1.5' }}>
-                Make sure the backend server is running. Check the terminal for errors.
-              </p>
-              <button className="btn-secondary" onClick={migration.checkVersion} style={{ marginTop: '10px' }}>
-                Retry Connection
-              </button>
-            </>
-          )}
         </section>
 
       </main>

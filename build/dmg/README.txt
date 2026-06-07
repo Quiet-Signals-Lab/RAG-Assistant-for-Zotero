@@ -71,7 +71,7 @@ If the app doesn't launch:
 - Ensure Zotero is installed with a synced library
 
 For more help, visit:
-https://github.com/aahepburn/RAG-Assistant-for-Zotero/issues
+https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues
 
 
 LICENSE

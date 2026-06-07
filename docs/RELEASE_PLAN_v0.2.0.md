@@ -202,7 +202,7 @@ git push origin v0.2.0
 
 ### 3. Monitor GitHub Actions Build
 
-1. Go to: `https://github.com/aahepburn/RAG-Assistant-for-Zotero/actions`
+1. Go to: `https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/actions`
 2. Watch "Build All Platforms" workflow
 3. Verify all 3 jobs complete successfully:
    - ✅ `build-all (ubuntu-24.04)`
@@ -214,7 +214,7 @@ git push origin v0.2.0
 
 ### 4. Verify GitHub Release
 
-1. Go to: `https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases`
+1. Go to: `https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases`
 2. Verify `v0.2.0` release exists
 3. Check all artifacts are uploaded:
    - [ ] 4 macOS files (2 DMG, 2 ZIP)
@@ -401,7 +401,7 @@ New features:
 ✅ Full Windows support with native installers
 ✅ Improved profile isolation and switching
 
-Download now: https://github.com/aahepburn/RAG-Assistant-for-Zotero/releases/tag/v0.2.0
+Download now: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/tag/v0.2.0
 
 Questions? Join the discussion: [link to GitHub Discussions]
 ```
