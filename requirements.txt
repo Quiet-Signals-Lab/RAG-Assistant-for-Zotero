@@ -14,7 +14,7 @@ coloredlogs==15.0.1
 distro==1.9.0
 durationpy==0.10
 fastapi==0.134.0
-filelock==3.20.0
+filelock==3.20.3
 flatbuffers==25.9.23
 fsspec==2025.10.0
 google-auth==2.43.0
