@@ -520,7 +520,7 @@ const Settings: React.FC = () => {
           </div>
 
           <p className="settings-hint" style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px' }}>
-            © 2025 Alexander Hepburn · Licensed under the{' '}
+            © 2025-2026 Alexander Hepburn · Licensed under the{' '}
             <a
               href="https://www.apache.org/licenses/LICENSE-2.0"
               target="_blank"
@@ -529,6 +529,34 @@ const Settings: React.FC = () => {
               Apache License 2.0
             </a>
           </p>
+        </section>
+
+        <section className="settings-section">
+          <h2 className="settings-section-title">Appearance</h2>
+          <p className="settings-section-description">
+            Choose how the app looks. Changes apply immediately.
+          </p>
+
+          <div className="settings-field">
+            <label className="settings-label" style={{ cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={settings.theme === 'dark'}
+                onChange={(e) => updateSettings({ theme: e.target.checked ? 'dark' : 'light' })}
+                style={{
+                  marginRight: '8px',
+                  width: '18px',
+                  height: '18px',
+                  cursor: 'pointer',
+                  accentColor: 'var(--accent)'
+                }}
+              />
+              Dark mode
+            </label>
+            <p className="settings-hint">
+              Use a dark colour scheme for the interface.
+            </p>
+          </div>
         </section>
 
         <section className="settings-section">

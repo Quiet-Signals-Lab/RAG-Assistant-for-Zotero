@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-14
+
+### Added
+- **Exclude items from indexing (issue [#52](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues/52))**: A new **Excluded from Indexing** section in the Library panel lets you skip items from the vector index by **collection**, **tag**, or **item type** (e.g. keep ebooks out of search). A segmented Collections / Tags / Item type selector with a live search field shows one list at a time, with a running summary of all active rules. An item is skipped if it matches *any* rule on *any* axis, even when it is also filed in a collection you keep. Saving applies immediately — matching items are removed from the index without a reindex; clearing the rules and running **Sync Library** restores them. Rules are persisted per profile.
+- **Dark mode**: A **Dark mode** toggle in Settings → General → **Appearance** switches the interface to a warm-charcoal dark theme. The choice applies instantly and is persisted per profile. Implemented on the existing CSS-variable design system; several components that previously fell back to hardcoded light colours (nav bar, chat input, Active Model cards, active tab, sidebar) were migrated onto theme tokens.
+
+### Fixed
+- **Indexing crash on CJK Windows (issues [#37](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues/37), [#61](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues/61))**: On Chinese/Japanese/Korean Windows, the console defaults to a legacy code page (cp936/gbk, cp932), so `print()`ing any non-ASCII character during indexing (an emoji, a CJK model path or PDF text) raised `UnicodeEncodeError` and killed the whole indexing run. `backend/main.py` now reconfigures `stdout`/`stderr` to UTF-8 (`errors="backslashreplace"`) at startup, covering every print site in the server process.
+- **Electron auto-updater IPC error in development**: `setupAutoUpdater()` returned early in dev mode *before* registering its IPC handlers, so the renderer's updater hook logged `No handler registered for 'get-update-status'`. Only the update *scheduling* is now dev-gated; the IPC handlers always register (each guards dev mode internally).
+
+### Security
+- **Python dependency updates** (audited via pip-audit/OSV; resolves 18 of 25 known advisories with no compatibility regressions):
+  - `starlette` 1.0.1 → 1.3.1 (Dependabot [#55](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/55)) — fixes 4 advisories; compatible with pinned `fastapi` 0.134.0
+  - `pillow` 12.2.0 → 12.3.0 (5 advisories), `click` 8.3.1 → 8.3.3, `filelock` 3.20.0 → 3.20.3, `orjson` 3.11.4 → 3.11.6, `pyasn1` 0.6.1 → 0.6.3, `PyMuPDF` 1.26.6 → 1.26.7, `setuptools` 80.9.0 → 83.0.0
+  - **Held back deliberately** (unfixable without a risky major bump and not reachable in this app's usage): `transformers` 5.x (Dependabot [#62](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/62); would break `sentence-transformers` and force a huggingface-hub major bump; open CVEs require loading untrusted models), the `protobuf` < 5 cap, and `chromadb` (CVE requires the Chroma HTTP server, which the app does not run). See the note at the top of `requirements.txt`.
+- **npm / build-tooling dependency updates** (dev/build-time only — not shipped to users): `shell-quote` → 1.10.0 (Dependabot [#51](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/51)) and `js-yaml` → 4.3.0 ([#63](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/63), [#60](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/60)). **Deferred:** the `tar`/`electron-builder` bump ([#57](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/57)) needs a major `electron-builder` bump (24 → 26) with packaging-time-only CVEs; the `esbuild` advisory ([#54](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/pull/54)) has no clean resolution on the current Vite 7 line and is a dev-server-only (Windows) issue, so it will be picked up when Vite ships a patched esbuild.
+
 ## [0.4.8] - 2026-06-08
 
 ### Added

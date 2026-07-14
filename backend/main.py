@@ -5,6 +5,15 @@ import os
 import sys
 import logging
 
+# Force UTF-8 on stdout/stderr so print() of non-ASCII content (emoji, CJK
+# model paths / PDF text) doesn't crash indexing on CJK Windows, where the
+# console defaults to a legacy code page (cp932/gbk). See issues #37, #61.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except (AttributeError, ValueError):
+        pass  # non-reconfigurable stream (already wrapped / redirected)
+
 # Suppress gRPC verbose error logging BEFORE any imports
 # (known issue with google-generativeai package)
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
@@ -591,7 +600,13 @@ def index_library(payload: dict = Body(default={"incremental": True})):
     """
     try:
         incremental = payload.get("incremental", True)
-        chatbot.start_indexing(incremental=incremental)
+        settings = load_settings()
+        chatbot.start_indexing(
+            incremental=incremental,
+            excluded_collections=settings.get("excludedCollections", []) or [],
+            excluded_tags=settings.get("excludedTags", []) or [],
+            excluded_item_types=settings.get("excludedItemTypes", []) or [],
+        )
         mode = "incremental" if incremental else "full"
         return {"msg": f"Indexing started ({mode} mode)."}
     except Exception as e:
@@ -605,6 +620,23 @@ def index_cancel():
         chatbot.cancel_indexing()
         return {"msg": "Cancellation signaled."}
     except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/exclusions/purge")
+def purge_exclusions():
+    """Remove already-indexed items matching the saved exclusion rules from the
+    vector store, so exclusions take effect immediately without a reindex."""
+    try:
+        s = load_settings()
+        result = chatbot.purge_excluded_items(
+            excluded_collections=s.get("excludedCollections", []) or [],
+            excluded_tags=s.get("excludedTags", []) or [],
+            excluded_item_types=s.get("excludedItemTypes", []) or [],
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error("POST /api/exclusions/purge error", exc_info=True)
         return {"error": str(e)}
 
 import traceback

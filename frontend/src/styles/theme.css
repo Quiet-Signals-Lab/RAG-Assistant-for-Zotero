@@ -1,5 +1,8 @@
 :root {
+  color-scheme: light;
+
   --bg-body: #f4efe6;           /* slightly warmer paper */
+  --bg-body-gradient: #fdfbf6;  /* light corner glow behind bg-body */
   --bg-panel: #f9f4ec;
   --bg-panel-alt: #fdf9f2;
   --bg-sidebar: #f3ebde;
@@ -17,6 +20,21 @@
   --accent-soft: #c5cbe0;
   --accent-focus: #d6b26a;      /* bookmark gold */
   --bg-surface: #ffffff;        /* pure white surface */
+
+  --scrollbar-track: #f1ece1;
+  --scrollbar-thumb: #c3b59f;
+
+  /* Aliases used by components (resolve dynamically, so they follow the theme).
+     These previously had no definition and fell back to hardcoded light values. */
+  --text: var(--text-main);
+  --text-primary: var(--text-main);
+  --text-secondary: var(--text-muted);
+  --border: var(--border-subtle);
+  --bg-secondary: var(--bg-panel-alt);
+  --accent-dark: var(--accent-2);
+  --danger: #d9534f;
+  --bg-hover: #efe9de;          /* subtle raised/hover surface */
+  --bg-main: #ffffff;           /* active tab / raised content */
 
   /* Sans-serif: Clean, modern system fonts optimized for each platform */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", 
@@ -42,4 +60,38 @@
   --spacing-md: 12px;
   --spacing-lg: 18px;
   --spacing-xl: 26px;
+}
+
+/* Dark theme — warm charcoal to keep the "paper/book" feel. Only color tokens
+   are overridden; fonts, spacing and radii are inherited from :root above. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-body: #1c1915;
+  --bg-body-gradient: #241f18;  /* subtle warm corner glow */
+  --bg-panel: #232019;
+  --bg-panel-alt: #2b271f;
+  --bg-sidebar: #17140f;
+
+  --border-subtle: #3b342b;
+  --border-strong: #7a6748;
+
+  --text-main: #ece5d8;
+  --text-muted: #a89e8f;
+  --text-soft: #8d8272;
+  --text-accent: #b9c2e6;
+
+  --accent: #d6b26a;            /* keep bookmark gold */
+  --accent-2: #c38f5a;
+  --accent-soft: #464d69;
+  --accent-focus: #d6b26a;
+  --bg-surface: #26211a;
+
+  --scrollbar-track: #201c16;
+  --scrollbar-thumb: #4a4238;
+
+  --bg-hover: #2e2921;
+  --bg-main: #302a22;
+
+  --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.45);
 }

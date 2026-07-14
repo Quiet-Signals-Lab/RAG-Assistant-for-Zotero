@@ -60,6 +60,10 @@ class ZoteroChatbot:
         self.is_indexing = False
         # Cancellation flag for background indexing
         self._cancel_indexing = False
+        # Exclusion rules to skip during indexing (set per-run by start_indexing)
+        self.excluded_collections = []
+        self.excluded_tags = []
+        self.excluded_item_types = []
         # Optional: simple progress counter (chunks processed)
         self.index_progress = {
             "processed_items": 0,
@@ -216,6 +220,77 @@ class ZoteroChatbot:
 
         return scaled
 
+    @staticmethod
+    def _exclusion_sets(collections, tags, item_types):
+        """Build cleaned exclude sets from raw setting lists."""
+        def _clean(values):
+            return {v.strip() for v in (values or []) if v and v.strip()}
+        return _clean(collections), _clean(tags), _clean(item_types)
+
+    @staticmethod
+    def _item_is_excluded(it, excl_colls, excl_tags, excl_types):
+        """True if an item matches any exclusion rule on any axis."""
+        # ponytail: Zotero collections/tags are stored comma-joined (GROUP_CONCAT),
+        # matching how they're written to Chroma metadata. Names containing commas
+        # are not distinguishable here (existing limitation).
+        def _split(v):
+            return [x.strip() for x in (v or "").split(",") if x.strip()]
+        item_type = (it['item_type'] or "").strip()
+        return (any(c in excl_colls for c in _split(it['collections']))
+                or any(t in excl_tags for t in _split(it['tags']))
+                or (item_type and item_type in excl_types))
+
+    def _apply_exclusions(self, raw_items):
+        """Drop items matching any exclusion rule and purge any that were already
+        indexed. Returns the items that should be indexed.
+
+        An item is excluded if *any* of its collections or tags is in the
+        exclude set, or its item type is excluded — even when it is also filed
+        in a kept collection.
+        """
+        excl = self._exclusion_sets(self.excluded_collections, self.excluded_tags, self.excluded_item_types)
+        if not any(excl):
+            return raw_items
+
+        kept, excluded_ids = [], []
+        for it in raw_items:
+            if self._item_is_excluded(it, *excl):
+                excluded_ids.append(str(it['item_id']))
+            else:
+                kept.append(it)
+
+        self.index_progress["excluded_items"] = len(excluded_ids)
+        if excluded_ids:
+            indexed = self.chroma.get_indexed_item_ids()
+            purged = sum(self.chroma.delete_item(iid) for iid in excluded_ids if iid in indexed)
+            msg = f"Exclusions: skipping {len(excluded_ids)} item(s) matching exclusion rules"
+            if purged:
+                msg += f", purged {purged} previously-indexed chunk(s)"
+            print(msg)
+        return kept
+
+    def purge_excluded_items(self, excluded_collections=None, excluded_tags=None, excluded_item_types=None):
+        """Delete already-indexed items matching the given exclusion rules from
+        the vector store, so exclusions take effect without a reindex.
+
+        Returns {"purged_items": int, "purged_chunks": int}.
+        """
+        excl = self._exclusion_sets(excluded_collections, excluded_tags, excluded_item_types)
+        if not any(excl):
+            return {"purged_items": 0, "purged_chunks": 0}
+
+        raw_items = self.zlib.search_parent_items_with_pdfs()
+        indexed = self.chroma.get_indexed_item_ids()
+        purged_items = purged_chunks = 0
+        for it in raw_items:
+            iid = str(it['item_id'])
+            if iid in indexed and self._item_is_excluded(it, *excl):
+                purged_chunks += self.chroma.delete_item(iid)
+                purged_items += 1
+        if purged_items:
+            print(f"Exclusions: purged {purged_items} item(s) / {purged_chunks} chunk(s) from the index")
+        return {"purged_items": purged_items, "purged_chunks": purged_chunks}
+
     def _index_library_worker(self):
         try:
             start_time = time.time()
@@ -233,10 +308,12 @@ class ZoteroChatbot:
                 print(f"FATAL ERROR: {error_msg}")
                 self.index_progress["error"] = error_msg
                 return
-            
+
+            raw_items = self._apply_exclusions(raw_items)
+
             self.index_progress["total_items"] = len(raw_items)
             self.index_progress["processed_items"] = 0
-            
+
             if len(raw_items) == 0:
                 self.index_progress["error"] = "No items with PDFs found in Zotero library"
                 print("WARNING: No items with PDFs found")
@@ -431,7 +508,9 @@ class ZoteroChatbot:
                 print(f"FATAL ERROR: {error_msg}")
                 self.index_progress["error"] = error_msg
                 return
-            
+
+            raw_items = self._apply_exclusions(raw_items)
+
             all_item_ids = {str(it['item_id']) for it in raw_items}
             
             # Get already indexed item IDs
@@ -615,14 +694,22 @@ class ZoteroChatbot:
             self.is_indexing = False
             self._cancel_indexing = False
     
-    def start_indexing(self, incremental: bool = True):
+    def start_indexing(self, incremental: bool = True, excluded_collections=None,
+                       excluded_tags=None, excluded_item_types=None):
         """Start indexing in a background thread. No-op if already indexing.
-        
+
         Args:
             incremental: If True, only index new items. If False, reindex everything.
+            excluded_collections: Collection names whose items should be skipped.
+            excluded_tags: Tag names whose items should be skipped.
+            excluded_item_types: Zotero item types (e.g. "book") to skip.
+                An item is skipped if it matches any rule on any of these axes.
         """
         if self.is_indexing:
             return
+        self.excluded_collections = excluded_collections or []
+        self.excluded_tags = excluded_tags or []
+        self.excluded_item_types = excluded_item_types or []
         self.is_indexing = True
         self._cancel_indexing = False
         # Reset progress

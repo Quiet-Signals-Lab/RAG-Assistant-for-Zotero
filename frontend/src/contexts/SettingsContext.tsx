@@ -38,6 +38,10 @@ export interface Settings {
   showSystemNotification?: boolean;
   playSoundNotification?: boolean;
   maxSources?: number;
+  excludedCollections?: string[];
+  excludedTags?: string[];
+  excludedItemTypes?: string[];
+  theme?: 'light' | 'dark';
 }
 
 interface SettingsContextType {
@@ -59,6 +63,10 @@ const defaultSettings: Settings = {
   showSystemNotification: true,
   playSoundNotification: false,
   maxSources: 0,
+  excludedCollections: [],
+  excludedTags: [],
+  excludedItemTypes: [],
+  theme: 'light',
   providers: {
     ollama: {
       enabled: true,
@@ -159,6 +167,11 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     loadSettings();
     loadProviders();
   }, []);
+
+  // Apply the selected theme to the document root (drives [data-theme="dark"] CSS)
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', settings.theme === 'dark' ? 'dark' : 'light');
+  }, [settings.theme]);
 
   const updateSettings = async (newSettings: Partial<Settings>) => {
     try {

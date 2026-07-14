@@ -17,7 +17,7 @@ body,
 body {
   font-family: var(--font-sans);
   background:
-    radial-gradient(circle at top left, #fdfbf6, var(--bg-body));
+    radial-gradient(circle at top left, var(--bg-body-gradient), var(--bg-body));
   color: var(--text-main);
   
   /* Enhanced font rendering for all platforms */
@@ -81,11 +81,11 @@ pre {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1ece1;
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c3b59f;
+  background: var(--scrollbar-thumb);
   border-radius: 5px;
 }
 

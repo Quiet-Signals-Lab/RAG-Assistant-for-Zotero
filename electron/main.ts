@@ -1821,27 +1821,28 @@ function setupAutoUpdater(): void {
   autoUpdater.autoDownload = false; // Don't auto-download, let user decide
   autoUpdater.autoInstallOnAppQuit = true; // Install on quit after download
   
-  // Disable update checks in development
+  // Skip actual update checks in development, but still register the IPC
+  // handlers below so the renderer's updater hook doesn't hit "No handler
+  // registered for 'get-update-status'". Each handler guards IS_DEV itself.
   if (IS_DEV) {
-    console.log('Auto-updater disabled in development mode');
-    return;
+    console.log('Auto-updater update checks disabled in development mode');
+  } else {
+    // Check for updates on startup (after a delay to let app fully load)
+    setTimeout(() => {
+      console.log('Checking for updates on startup...');
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('Failed to check for updates on startup:', err);
+      });
+    }, 10000); // Wait 10 seconds after startup
+
+    // Check for updates periodically (every 4 hours)
+    setInterval(() => {
+      console.log('Periodic update check...');
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('Failed to check for updates periodically:', err);
+      });
+    }, 4 * 60 * 60 * 1000);
   }
-  
-  // Check for updates on startup (after a delay to let app fully load)
-  setTimeout(() => {
-    console.log('Checking for updates on startup...');
-    autoUpdater.checkForUpdates().catch(err => {
-      console.error('Failed to check for updates on startup:', err);
-    });
-  }, 10000); // Wait 10 seconds after startup
-  
-  // Check for updates periodically (every 4 hours)
-  setInterval(() => {
-    console.log('Periodic update check...');
-    autoUpdater.checkForUpdates().catch(err => {
-      console.error('Failed to check for updates periodically:', err);
-    });
-  }, 4 * 60 * 60 * 1000);
   
   // Update event handlers
   autoUpdater.on('checking-for-update', () => {

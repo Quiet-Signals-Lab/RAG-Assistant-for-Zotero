@@ -41,6 +41,19 @@ const LibraryManagementPanel: React.FC = () => {
   // they explicitly acknowledge the privacy implications.
   const [cloudWarningTarget, setCloudWarningTarget] = useState<string | null>(null);
   
+  // Exclusion picker state (collections, tags, item types)
+  const [collections, setCollections] = useState<{ name: string; count?: number }[]>([]);
+  const [tags, setTags] = useState<{ name: string; count?: number }[]>([]);
+  const [itemTypes, setItemTypes] = useState<{ name: string; count?: number }[]>([]);
+  const [exclCollections, setExclCollections] = useState<string[]>(settings.excludedCollections || []);
+  const [exclTags, setExclTags] = useState<string[]>(settings.excludedTags || []);
+  const [exclItemTypes, setExclItemTypes] = useState<string[]>(settings.excludedItemTypes || []);
+  const [activeAxis, setActiveAxis] = useState<'collections' | 'tags' | 'itemTypes'>('collections');
+  const [exclSearch, setExclSearch] = useState('');
+  const [savingExclusions, setSavingExclusions] = useState(false);
+  const [exclusionsSaved, setExclusionsSaved] = useState(false);
+  const [exclusionMessage, setExclusionMessage] = useState<string | null>(null);
+
   // Metadata sync state
   const [syncingMetadata, setSyncingMetadata] = useState(false);
   const [metadataSyncSuccess, setMetadataSyncSuccess] = useState<string | null>(null);
@@ -53,6 +66,101 @@ const LibraryManagementPanel: React.FC = () => {
   useEffect(() => {
     setEmbeddingModel(settings.embeddingModel || 'bge-base');
   }, [settings.embeddingModel]);
+
+  // Keep local exclusion selections in sync with saved settings
+  useEffect(() => {
+    setExclCollections(settings.excludedCollections || []);
+    setExclTags(settings.excludedTags || []);
+    setExclItemTypes(settings.excludedItemTypes || []);
+  }, [settings.excludedCollections, settings.excludedTags, settings.excludedItemTypes]);
+
+  // Load the library's collections, tags, and item types for the exclusion pickers
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cRes, tRes, iRes] = await Promise.all([
+          apiFetch('/api/library/collections').then(r => r.json()),
+          apiFetch('/api/library/tags').then(r => r.json()),
+          apiFetch('/api/library/item_types').then(r => r.json()),
+        ]);
+        setCollections(cRes.collections || []);
+        setTags((tRes.tags || []).map((name: string) => ({ name })));
+        setItemTypes(iRes.item_types || []);
+      } catch (err) {
+        console.error('Failed to fetch library metadata for exclusions', err);
+      }
+    })();
+  }, []);
+
+  const toggle = (list: string[], setList: (v: string[]) => void, name: string) =>
+    setList(list.includes(name) ? list.filter(n => n !== name) : [...list, name]);
+
+  const norm = (a?: string[]) => JSON.stringify([...(a || [])].sort());
+  const exclusionsDirty =
+    norm(exclCollections) !== norm(settings.excludedCollections) ||
+    norm(exclTags) !== norm(settings.excludedTags) ||
+    norm(exclItemTypes) !== norm(settings.excludedItemTypes);
+
+  const handleSaveExclusions = async () => {
+    setSavingExclusions(true);
+    setExclusionMessage(null);
+    try {
+      await updateSettings({
+        excludedCollections: exclCollections,
+        excludedTags: exclTags,
+        excludedItemTypes: exclItemTypes,
+      });
+      // Apply immediately: remove matching items from the index so users don't
+      // have to reindex. (Un-excluding still needs a Sync to re-embed items.)
+      try {
+        const resp = await apiFetch('/api/exclusions/purge', { method: 'POST' });
+        const data = await resp.json();
+        if (data?.purged_items > 0) {
+          setExclusionMessage(`Removed ${data.purged_items} item${data.purged_items !== 1 ? 's' : ''} from the index.`);
+          await fetchStats();
+        }
+      } catch (err) {
+        console.error('Failed to purge excluded items', err);
+      }
+      setExclusionsSaved(true);
+      setTimeout(() => setExclusionsSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to save exclusions', err);
+    } finally {
+      setSavingExclusions(false);
+    }
+  };
+
+  const handleClearExclusions = async () => {
+    setExclCollections([]);
+    setExclTags([]);
+    setExclItemTypes([]);
+    setExclusionMessage(null);
+    // Persist immediately so a following Sync actually restores excluded items.
+    // (Clearing only removes the rules; run Sync to re-index what was removed.)
+    setSavingExclusions(true);
+    try {
+      await updateSettings({ excludedCollections: [], excludedTags: [], excludedItemTypes: [] });
+      setExclusionMessage('Exclusions cleared — click "Sync Library" to restore any removed items.');
+    } catch (err) {
+      console.error('Failed to clear exclusions', err);
+    } finally {
+      setSavingExclusions(false);
+    }
+  };
+
+  const hasSelections =
+    exclCollections.length > 0 || exclTags.length > 0 || exclItemTypes.length > 0;
+
+  const exclusionAxes = [
+    { key: 'collections' as const, label: 'Collections', options: collections, selected: exclCollections, setSelected: setExclCollections },
+    { key: 'tags' as const, label: 'Tags', options: tags, selected: exclTags, setSelected: setExclTags },
+    { key: 'itemTypes' as const, label: 'Item type', options: itemTypes, selected: exclItemTypes, setSelected: setExclItemTypes },
+  ];
+  const activeAxisData = exclusionAxes.find(a => a.key === activeAxis)!;
+  const filteredOptions = activeAxisData.options.filter(o =>
+    o.name.toLowerCase().includes(exclSearch.trim().toLowerCase())
+  );
 
   const handleEmbeddingModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
@@ -307,6 +415,136 @@ const LibraryManagementPanel: React.FC = () => {
           <p className="muted" style={{ fontSize: '12px', marginTop: '10px', lineHeight: '1.5', background: 'rgba(230, 160, 32, 0.06)', border: '1.5px solid rgba(230, 160, 32, 0.3)', borderRadius: '6px', padding: '10px 12px', color: '#b07820' }}>
             Changing the embedding model requires a full re-index of your library. To try a different model while keeping existing embeddings, create a new profile instead.
           </p>
+        </section>
+
+        {/* Excluded from Indexing Section */}
+        <section className="lib-section">
+          <h3 className="scope-section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Excluded from Indexing
+          </h3>
+
+          <p className="muted" style={{ fontSize: '12px', marginBottom: '14px', lineHeight: '1.5' }}>
+            Items matching any rule below are skipped during indexing. An item is excluded if it belongs to an excluded collection or tag, or is an excluded item type — even when it is also filed in a collection you keep. Already-indexed items that become excluded are removed on your next sync.
+          </p>
+
+          {/* Axis selector */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+            {exclusionAxes.map(axis => (
+              <button
+                key={axis.key}
+                type="button"
+                onClick={() => { setActiveAxis(axis.key); setExclSearch(''); }}
+                style={{
+                  flex: 1,
+                  padding: '7px 10px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  border: '1px solid var(--border, rgba(0,0,0,0.12))',
+                  background: activeAxis === axis.key ? 'var(--accent, #5b7bc5)' : 'transparent',
+                  color: activeAxis === axis.key ? '#fff' : 'var(--text-main)',
+                }}
+              >
+                {axis.label}
+                {axis.selected.length > 0 && (
+                  <span style={{
+                    marginLeft: '6px',
+                    fontSize: '11px',
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                    background: activeAxis === axis.key ? 'rgba(255,255,255,0.25)' : 'rgba(100,130,240,0.15)',
+                  }}>
+                    {axis.selected.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Search field for the active axis */}
+          <input
+            type="text"
+            value={exclSearch}
+            onChange={e => setExclSearch(e.target.value)}
+            placeholder={`Search ${activeAxisData.label.toLowerCase()}...`}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '7px 10px',
+              fontSize: '13px',
+              marginBottom: '8px',
+              borderRadius: '6px',
+              border: '1px solid var(--border, rgba(0,0,0,0.12))',
+              background: 'var(--input-bg, transparent)',
+              color: 'var(--text-main)',
+            }}
+          />
+
+          {/* Active axis list */}
+          {activeAxisData.options.length === 0 ? (
+            <div className="muted" style={{ fontSize: '12px' }}>None found in your library.</div>
+          ) : filteredOptions.length === 0 ? (
+            <div className="muted" style={{ fontSize: '12px' }}>No matches for “{exclSearch}”.</div>
+          ) : (
+            <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border, rgba(0,0,0,0.12))', borderRadius: '6px', padding: '8px 10px' }}>
+              {filteredOptions.map(o => (
+                <label key={o.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={activeAxisData.selected.includes(o.name)}
+                    onChange={() => toggle(activeAxisData.selected, activeAxisData.setSelected, o.name)}
+                  />
+                  <span style={{ flex: 1 }}>{o.name}</span>
+                  {o.count != null && <span className="muted" style={{ fontSize: '11px' }}>{o.count}</span>}
+                </label>
+              ))}
+            </div>
+          )}
+
+          {/* Summary of all exclusion rules */}
+          <div style={{ marginTop: '12px', fontSize: '12px', lineHeight: '1.6' }}>
+            {exclusionAxes.every(a => a.selected.length === 0) ? (
+              <span className="muted">Nothing excluded — your whole library will be indexed.</span>
+            ) : (
+              <>
+                <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Excluding: </span>
+                {exclusionAxes
+                  .filter(a => a.selected.length > 0)
+                  .map(a => `${a.label} (${a.selected.length}): ${a.selected.join(', ')}`)
+                  .join('  ·  ')}
+              </>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '12px', maxWidth: '320px' }}>
+            <button
+              className="btn-primary"
+              style={{ flex: 1 }}
+              onClick={handleSaveExclusions}
+              disabled={savingExclusions || !exclusionsDirty}
+            >
+              {savingExclusions ? 'Saving...' : exclusionsSaved ? 'Saved!' : 'Save Exclusions'}
+            </button>
+            <button
+              className="btn-secondary"
+              style={{ flex: 1 }}
+              onClick={handleClearExclusions}
+              disabled={savingExclusions || !hasSelections}
+            >
+              Clear
+            </button>
+          </div>
+
+          {exclusionMessage && (
+            <div className="migration-result success" style={{ marginTop: '10px' }}>
+              ✓ {exclusionMessage}
+            </div>
+          )}
         </section>
 
         {/* Indexing Section */}
