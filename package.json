@@ -36,7 +36,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "axios": "^1.17.0",
+    "axios": "^1.18.1",
     "electron-updater": "^6.1.0"
   },
   "devDependencies": {
