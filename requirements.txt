@@ -62,7 +62,7 @@ packaging==25.0
 pillow==12.3.0
 posthog==5.4.0
 protobuf>=3.20.2,<5.0.0
-pyasn1==0.6.3
+pyasn1==0.6.4
 pyasn1_modules==0.4.2
 pybase64==1.4.2
 pydantic==2.12.4
