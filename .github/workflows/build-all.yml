@@ -140,13 +140,20 @@ jobs:
       - name: Package macOS
         if: runner.os == 'macOS'
         run: |
+          # Signing recursively touches every file in the app bundle (incl. the
+          # ~tens of thousands of torch/include headers), which blows past the
+          # default 256 fd limit -> EMFILE. Raise it before packaging.
+          ulimit -n 65536
+
           max_attempts=3
           attempt=1
           success=false
-          
+
           while [ $attempt -le $max_attempts ] && [ "$success" != "true" ]; do
             echo "Build attempt $attempt of $max_attempts for ${{ matrix.arch }}..."
-            if npm run package:mac -- --${{ matrix.arch }}; then
+            # teamId is passed explicitly: electron-builder 24 does not read
+            # APPLE_TEAM_ID from env, and -c.mac.notarize.teamId enables notarization.
+            if npm run package:mac -- --${{ matrix.arch }} -c.mac.notarize.teamId="$APPLE_TEAM_ID"; then
               success=true
               echo "Build succeeded on attempt $attempt"
             else
