@@ -359,3 +359,33 @@ If you encounter issues not covered here:
    - Python version
    - Error messages
    - Steps to reproduce
+
+---
+
+## Quick Reference
+
+**Build (after `npm install` + `cd frontend && npm install`):**
+
+```powershell
+.\scripts\bundle-python-pyinstaller-windows.bat   # bundle backend (5-10 min)
+npm run build
+npm run package:win
+```
+
+**Output** (`release/`): `RAG-Assistant-{version}-win-x64.exe`, `-win-x64.zip`, `latest.yml`.
+
+**Dev mode** (3 terminals): `uvicorn backend.main:app --reload --port 8000` · `cd frontend && npm run dev` · `npm run build:electron && npm run dev:electron:only`.
+
+**Clean rebuild:**
+
+```powershell
+Remove-Item python-dist,dist,release -Recurse -Force
+npm install; .\scripts\bundle-python-pyinstaller-windows.bat; npm run build; npm run package:win
+```
+
+**Common issues:**
+
+- *"Python not found"* — reinstall Python with "Add to PATH" checked.
+- *"Backend not starting"* — verify `python-dist\backend_server.exe` exists; if not, re-run the bundle script.
+- *SmartScreen warning* — expected for unsigned apps; "More info" → "Run anyway".
+- *Antivirus blocking* — add the project folder to Windows Security exclusions.

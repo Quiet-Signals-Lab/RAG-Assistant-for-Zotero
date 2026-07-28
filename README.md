@@ -271,7 +271,7 @@ For complete build instructions, see [docs/BUILD_CHECKLIST.md](docs/BUILD_CHECKL
 ** [Complete Documentation Index](docs/README.md)**
 
 **Quick Links:**
-- **Users:** [Prompting Guide](docs/PROMPTING_QUICKSTART.md) · [Provider Setup](docs/provider_guide.md)
+- **Users:** [Prompting Guide](docs/PROMPTING.md) · [Provider Setup](docs/provider_guide.md)
 - **Developers:** [Build Checklist](docs/BUILD_CHECKLIST.md) · [Desktop App Guide](docs/DESKTOP_APP.md)
 - **Platform-Specific:** [Windows Build](docs/WINDOWS_BUILD_GUIDE.md) · [Linux Packaging](docs/LINUX_PACKAGING.md)
 

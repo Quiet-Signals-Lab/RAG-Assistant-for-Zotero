@@ -83,6 +83,13 @@ sudo sysctl --system
 - Pop!_OS 20.04+
 - Most modern distributions
 
+> **Maintainer gotcha:** a Debian control file's `Description` continuation lines
+> **must** each start with a single space, or `dpkg` fails with a "error parsing
+> file ... control" on install. electron-builder's single-line `--description`
+> produces valid output; if you ever hit this error, the cause is almost always
+> stale build artifacts — `rm -rf release/ dist/ node_modules/.cache/electron-builder`
+> and rebuild. Inspect a built package with `dpkg-deb -R <pkg>.deb /tmp/x`.
+
 ### Dependencies
 
 The `.deb` package automatically installs these dependencies:
@@ -280,6 +287,59 @@ sudo apt upgrade
 2. No manual intervention should be needed
 3. Dependencies list covers typical Debian/Ubuntu systems
 4. Desktop file follows freedesktop.org standards
+
+## Troubleshooting
+
+Unlike macOS/Windows (which bundle Python), the Linux build creates a virtual
+environment at `~/.config/rag-assistant/venv` on first run and installs
+dependencies there (2-5 min). Most problems are venv setup issues.
+
+**Backend won't start (`ERR_CONNECTION_REFUSED` on `localhost:8000`)** — the venv
+didn't set up. Check `python3 --version` (needs 3.8+), then reset it (recreated on next launch):
+
+```bash
+rm -rf ~/.config/rag-assistant/venv
+```
+
+**"Python venv module is missing"** (Fedora: `python3`; Arch: `python`):
+
+```bash
+sudo apt install python3-venv
+```
+
+**"Failed to install required Python packages"** — usually no internet or missing
+build tools (Fedora: `gcc gcc-c++ python3-devel`):
+
+```bash
+sudo apt install build-essential python3-dev
+ping pypi.org
+rm -rf ~/.config/rag-assistant/venv            # then relaunch
+```
+
+**"Permission denied"**:
+
+```bash
+chmod -R u+rwX ~/.config/rag-assistant
+```
+
+**"Port 8000 already in use"**:
+
+```bash
+sudo lsof -i :8000 && kill -9 <PID>
+```
+
+**Seeing detailed errors** — launch from a terminal (`rag-assistant` or the
+AppImage path) to see stdout/stderr, or press `Ctrl+Shift+I` → Console and look
+for `[Backend Error]`. Logs: `~/.config/rag-assistant/logs/*.log`.
+
+**Running the bundled backend manually** (advanced):
+
+```bash
+source ~/.config/rag-assistant/venv/bin/activate
+python3 -m uvicorn backend.main:app --port 8000
+```
+
+For running from source as a developer, see [BUILD_CHECKLIST.md](BUILD_CHECKLIST.md).
 
 ## References
 

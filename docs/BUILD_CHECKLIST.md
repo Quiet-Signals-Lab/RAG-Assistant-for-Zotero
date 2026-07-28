@@ -197,4 +197,15 @@ export GH_TOKEN=your_token
 npm run publish:mac  # or :win, :linux
 ```
 
-See [PYINSTALLER_BUNDLE_GUIDE.md](PYINSTALLER_BUNDLE_GUIDE.md) for detailed build information.
+## How the Python bundle works
+
+The backend ships as a **PyInstaller** standalone executable, not a venv. The
+entry point is `backend_server_main.py`, built per the `backend_bundle.spec`
+spec into `python-dist/` by `scripts/bundle-python-pyinstaller.sh` (`.bat`/`.ps1`
+on Windows). PyInstaller replaced the old venv-with-symlinks approach because the
+symlinks broke once the app moved to `/Applications`, causing "Python interpreter
+missing" errors. If you ever see `backend_server` as a symlink, an old bundle is
+stale — `rm -rf python-dist/` and re-run the bundle script.
+
+> Linux is the exception: it uses a system-Python venv created on first run
+> (smaller download). See [LINUX_PACKAGING.md](LINUX_PACKAGING.md).

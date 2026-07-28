@@ -2,7 +2,7 @@
 
 > **Note:** This guide covers desktop app architecture and advanced topics. For build instructions, see:
 > - [BUILD_CHECKLIST.md](BUILD_CHECKLIST.md) - Step-by-step build process
-> - [PYINSTALLER_BUNDLE_GUIDE.md](PYINSTALLER_BUNDLE_GUIDE.md) - Python bundling
+> - [BUILD_CHECKLIST.md](BUILD_CHECKLIST.md) - Python bundling (PyInstaller)
 > - [WINDOWS_BUILD_GUIDE.md](WINDOWS_BUILD_GUIDE.md) - Windows-specific builds
 > - [LINUX_PACKAGING.md](LINUX_PACKAGING.md) - Linux-specific builds
 
