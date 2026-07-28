@@ -157,9 +157,9 @@ jobs:
 
           while [ $attempt -le $max_attempts ] && [ "$success" != "true" ]; do
             echo "Build attempt $attempt of $max_attempts for ${{ matrix.arch }}..."
-            # teamId is passed explicitly: electron-builder 24 does not read
-            # APPLE_TEAM_ID from env, and -c.mac.notarize.teamId enables notarization.
-            if npm run package:mac -- --${{ matrix.arch }} -c.mac.notarize.teamId="$APPLE_TEAM_ID"; then
+            # Sign only here (fast). Notarization is a separate explicit step below so
+            # it has a real timeout and visible notarytool output/logs.
+            if npm run package:mac -- --${{ matrix.arch }}; then
               success=true
               echo "Build succeeded on attempt $attempt"
             else
@@ -177,14 +177,46 @@ jobs:
             fi
           done
         env:
-          # Verbose electron-builder + notarize logging so the notarization phase
-          # (submit / wait / staple) is visible in the step log.
-          DEBUG: electron-builder,@electron/notarize*
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Code signing (Developer ID Application cert exported as base64 .p12)
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # Notarization (notarytool via app-specific password)
+
+      - name: Notarize and staple macOS
+        if: runner.os == 'macOS'
+        run: |
+          rc_all=0
+          notarize() {
+            local f="$1" out id rc
+            echo "::group::notarytool submit $f"
+            out=$(xcrun notarytool submit "$f" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait --timeout 40m 2>&1)
+            rc=$?
+            echo "$out"
+            # Pull the submission id and print Apple's log (the actual reason on failure)
+            id=$(printf '%s\n' "$out" | awk '/^[[:space:]]*id:/{print $2; exit}')
+            if [ -n "$id" ]; then
+              echo "--- notarytool log $id ---"
+              xcrun notarytool log "$id" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID" || true
+            fi
+            echo "::endgroup::"
+            return $rc
+          }
+          # Submit + staple the dmg only. Notarization is keyed to the app's code
+          # hash, so the identical app inside the (untouched) auto-update .zip is
+          # also recognized by Gatekeeper online. Leaving the .zip byte-identical
+          # keeps its latest-mac.yml sha512 valid for electron-updater.
+          for f in release/*.dmg; do
+            if notarize "$f"; then xcrun stapler staple "$f"; else rc_all=1; fi
+          done
+          exit $rc_all
+        env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
