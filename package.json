@@ -94,7 +94,8 @@
           "from": "python-dist",
           "to": "python",
           "filter": [
-            "**/*"
+            "**/*",
+            "!**/torch/include/**"
           ]
         }
       ],

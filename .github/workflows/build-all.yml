@@ -140,10 +140,13 @@ jobs:
       - name: Package macOS
         if: runner.os == 'macOS'
         run: |
-          # Signing recursively touches every file in the app bundle (incl. the
-          # ~tens of thousands of torch/include headers), which blows past the
-          # default 256 fd limit -> EMFILE. Raise it before packaging.
-          ulimit -n 65536
+          # Signing recursively touches every file in the app bundle, which blows
+          # past the default 256 fd limit -> EMFILE. torch/include headers are the
+          # bulk and are excluded from the bundle (see package.json); raise the fd
+          # limit too. On macOS the soft limit can't exceed kern.maxfilesperproc,
+          # so bump the kernel cap first, then ulimit.
+          sudo sysctl -w kern.maxfiles=524288 kern.maxfilesperproc=524288 || true
+          ulimit -n 65536 || ulimit -n "$(ulimit -Hn)" || true
 
           max_attempts=3
           attempt=1
