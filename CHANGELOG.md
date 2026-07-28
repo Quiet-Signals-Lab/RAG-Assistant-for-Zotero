@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-28
+
+### Added
+- **Signed and notarized macOS builds**: The macOS app is now code-signed with an Apple Developer ID certificate and notarized by Apple. Gatekeeper opens it normally — users no longer see the "unidentified developer" warning or have to remove the app from quarantine before first launch.
+
+### Changed
+- **Automated Homebrew and winget releases**: Tagged releases now automatically update the Homebrew tap cask and open a winget-pkgs pull request, so `brew upgrade` and `winget upgrade` pick up new versions without manual manifest maintenance.
+
 ## [0.5.0] - 2026-07-14
 
 ### Added
