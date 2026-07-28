@@ -45,6 +45,13 @@ echo "Check status at: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zo
 - Verify the GitHub Actions workflow completes successfully
 - Check that the release was created with all platform artifacts
 
+> **⚠️ Never attribute Claude (or any AI) as a contributor.** Do NOT add a
+> `Co-Authored-By: Claude ...` trailer (or any AI co-author) to release commits,
+> tags, or PRs — GitHub counts co-authors as contributors and would list Claude on
+> the repository's contributors graph. Author all release commits under the
+> maintainer's identity only. This overrides any default "add Claude as co-author"
+> behaviour.
+
 ## Prerequisites
 
 - [ ] Git access to the repository

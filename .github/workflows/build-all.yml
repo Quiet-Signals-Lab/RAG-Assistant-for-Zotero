@@ -165,7 +165,14 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+          # Code signing (Developer ID Application cert exported as base64 .p12)
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Notarization (notarytool via app-specific password)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
       - name: Package Windows
         if: runner.os == 'Windows'
         run: |
@@ -266,3 +273,81 @@ jobs:
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Auto-update the Homebrew tap cask to point at the new (signed + notarized) DMG.
+  # Requires a HOMEBREW_TAP_TOKEN secret: a PAT with contents:write on the tap repo.
+  update-homebrew:
+    needs: create-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Update tap cask
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          REPO="Quiet-Signals-Lab/RAG-Assistant-for-Zotero"
+          TAP="Quiet-Signals-Lab/homebrew-rag-assistant-for-zotero"
+
+          # Download the released macOS DMG straight from the release and hash it.
+          gh release download "v${VERSION}" --repo "$REPO" --pattern "*.dmg" --dir dmg
+          DMG_PATH="$(ls dmg/*.dmg | head -1)"
+          DMG_NAME="$(basename "$DMG_PATH")"
+          SHA="$(sha256sum "$DMG_PATH" | awk '{print $1}')"
+          echo "cask -> ${DMG_NAME} (${SHA})"
+
+          # Regenerate the cask and push it to the tap.
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP}.git" tap
+          mkdir -p tap/Casks
+          cat > tap/Casks/rag-assistant-for-zotero.rb <<EOF
+          cask "rag-assistant-for-zotero" do
+            version "${VERSION}"
+            sha256 "${SHA}"
+
+            url "https://github.com/${REPO}/releases/download/v#{version}/${DMG_NAME}"
+            name "RAG Assistant for Zotero"
+            desc "AI-powered research assistant for your Zotero library"
+            homepage "https://github.com/${REPO}"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            app "RAG Assistant.app"
+
+            zap trash: [
+              "~/Library/Application Support/RAG Assistant",
+              "~/Library/Preferences/com.aahepburn.zotero-rag.plist",
+              "~/Library/Saved Application State/com.aahepburn.zotero-rag.savedState",
+            ]
+          end
+          EOF
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/rag-assistant-for-zotero.rb
+          git diff --cached --quiet || git commit -m "Update rag-assistant-for-zotero to ${VERSION}"
+          git push
+
+  # Auto-open a winget-pkgs PR for the new Windows installer.
+  # Requires: a fork of microsoft/winget-pkgs under the token owner's account,
+  # and a WINGET_TOKEN secret (classic PAT with public_repo scope).
+  publish-winget:
+    needs: create-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Resolve version
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Publish to winget
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: aahepburn.RAGAssistantForZotero
+          version: ${{ steps.v.outputs.version }}
+          installers-regex: '\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}

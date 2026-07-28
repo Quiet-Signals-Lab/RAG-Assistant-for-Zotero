@@ -339,16 +339,24 @@ winget uninstall aahepburn.RAGAssistantForZotero
 
 When you release a new version (e.g., v0.4.6):
 
-#### Homebrew Tap Update
+#### Homebrew Tap Update — automated
+
+**This is fully automated.** The `update-homebrew` job in
+`.github/workflows/build-all.yml` runs after every tagged release: it downloads
+the newly published (signed + notarized) DMG, computes its SHA256, regenerates
+`Casks/rag-assistant-for-zotero.rb`, and pushes it to the tap repo. No manual
+steps — just push a `v*` tag as usual.
+
+**One-time setup:** create a Personal Access Token with `contents: write` on the
+tap repo (`Quiet-Signals-Lab/homebrew-rag-assistant-for-zotero`) and add it to
+this repo's Actions secrets as `HOMEBREW_TAP_TOKEN`. (`GITHUB_TOKEN` can't push
+across repos, so a PAT is required.)
+
+If you ever need to do it by hand:
 
 ```bash
 cd ~/Projects/homebrew-rag-assistant-for-zotero
-
-# Edit Casks/rag-assistant-for-zotero.rb
-# 1. Update version number
-# 2. Calculate new SHA256
-# 3. Commit and push
-
+# Edit Casks/rag-assistant-for-zotero.rb: bump version, recompute sha256
 git add Casks/rag-assistant-for-zotero.rb
 git commit -m "Update to v0.4.6"
 git push origin main
@@ -360,22 +368,38 @@ brew update
 brew upgrade rag-assistant-for-zotero
 ```
 
-#### Winget Update
+#### Winget Update — automated
+
+**This is automated.** The `publish-winget` job in
+`.github/workflows/build-all.yml` runs after every tagged release: the
+`winget-releaser` action detects the new `.exe`, computes its hash, generates
+the manifests, and opens a PR against `microsoft/winget-pkgs`. Microsoft's
+validation bot reviews and (if it passes) merges it. No manual manifests.
+
+**One-time setup:**
+
+1. Fork `microsoft/winget-pkgs` under the `aahepburn` account (the action pushes
+   its branch to your fork). Leave the fork in place permanently.
+2. Create a **classic** Personal Access Token with `public_repo` scope and add it
+   to this repo's Actions secrets as `WINGET_TOKEN`.
+
+The manual manifest steps below are only needed for the very first submission if
+the package identifier `aahepburn.RAGAssistantForZotero` doesn't exist in
+winget-pkgs yet — the action can create new packages too, but a brand-new
+identifier sometimes needs one manual PR first to get moderator-approved.
+
+<details><summary>Manual fallback</summary>
+
+<!-- markdownlint-disable -->
 
 ```bash
 cd ~/Projects/winget-pkgs
-
-# Create new version directory
 mkdir -p manifests/a/aahepburn/RAGAssistantForZotero/0.4.6
 cd manifests/a/aahepburn/RAGAssistantForZotero/0.4.6
-
-# Copy previous version and update:
-# 1. Version numbers
-# 2. InstallerUrl
-# 3. InstallerSha256
-
+# Copy previous version's 3 manifests, update version / InstallerUrl / InstallerSha256
 # Create PR following steps 9-10 above
 ```
+</details>
 
 ### Automation Options
 
