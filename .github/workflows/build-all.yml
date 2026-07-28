@@ -26,7 +26,10 @@ jobs:
           - os: windows-latest
             name: windows
     runs-on: ${{ matrix.os }}
-    
+    # Cap the job so a stuck notarization (notarytool --wait has no timeout of its
+    # own) can't hang for hours. Linux/Windows finish well under this.
+    timeout-minutes: 60
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -174,6 +177,9 @@ jobs:
             fi
           done
         env:
+          # Verbose electron-builder + notarize logging so the notarization phase
+          # (submit / wait / staple) is visible in the step log.
+          DEBUG: electron-builder,@electron/notarize*
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Code signing (Developer ID Application cert exported as base64 .p12)
           CSC_LINK: ${{ secrets.CSC_LINK }}
