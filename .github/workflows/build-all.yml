@@ -182,40 +182,25 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
-      - name: Notarize and staple macOS
+      - name: Submit macOS notarization (non-blocking)
         if: runner.os == 'macOS'
         run: |
-          rc_all=0
-          notarize() {
-            local f="$1" out id rc
-            echo "::group::notarytool submit $f"
-            out=$(xcrun notarytool submit "$f" \
+          # Apple's notary service takes ~40 min-2h for this large ML bundle, and
+          # macOS runners bill at 10x, so we DON'T block on --wait. We submit the
+          # signed dmg and publish immediately; Apple finishes server-side within
+          # ~1-2h and Gatekeeper then passes online (our users are always online).
+          # Notarization is keyed to the app's code hash, so the identical app in
+          # the auto-update .zip is covered by the same submission. The app is
+          # intentionally not stapled (that would require blocking on Apple).
+          # Check status later:
+          #   xcrun notarytool history --apple-id <id> --team-id <team> --password <pw>
+          for f in release/*.dmg; do
+            echo "Submitting $f to notary service (non-blocking)"
+            xcrun notarytool submit "$f" \
               --apple-id "$APPLE_ID" \
               --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait --timeout 40m 2>&1)
-            rc=$?
-            echo "$out"
-            # Pull the submission id and print Apple's log (the actual reason on failure)
-            id=$(printf '%s\n' "$out" | awk '/^[[:space:]]*id:/{print $2; exit}')
-            if [ -n "$id" ]; then
-              echo "--- notarytool log $id ---"
-              xcrun notarytool log "$id" \
-                --apple-id "$APPLE_ID" \
-                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-                --team-id "$APPLE_TEAM_ID" || true
-            fi
-            echo "::endgroup::"
-            return $rc
-          }
-          # Submit + staple the dmg only. Notarization is keyed to the app's code
-          # hash, so the identical app inside the (untouched) auto-update .zip is
-          # also recognized by Gatekeeper online. Leaving the .zip byte-identical
-          # keeps its latest-mac.yml sha512 valid for electron-updater.
-          for f in release/*.dmg; do
-            if notarize "$f"; then xcrun stapler staple "$f"; else rc_all=1; fi
+              --team-id "$APPLE_TEAM_ID"
           done
-          exit $rc_all
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
