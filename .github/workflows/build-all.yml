@@ -384,3 +384,6 @@ jobs:
           version: ${{ steps.v.outputs.version }}
           installers-regex: '\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}
+          # The winget-pkgs fork lives under the aahepburn user (owner of WINGET_TOKEN),
+          # not the repo org. Without this the action looks for Quiet-Signals-Lab/winget-pkgs.
+          fork-user: aahepburn
