@@ -3,8 +3,6 @@
 
 An open‑source desktop RAG application that enables semantic search across your Zotero library. Easily discover conceptually related papers and ideas within your PDF collection using local or cloud‑based LLMs. The app provides source attribution, metadata filtering, and seamless integration with Zotero.
 
-**Website:** [quietsignalslab.com/rag-assistant](https://quietsignalslab.com/rag-assistant/) — detailed documentation, FAQ, and troubleshooting.
-
 ## What It Does
 
 This tool indexes the PDFs in your Zotero library and uses retrieval-augmented generation (RAG) to answer questions based on their content. Every answer includes citations to the specific sources and page numbers used, making it easy to verify claims and follow up on interesting findings.
