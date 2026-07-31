@@ -387,3 +387,45 @@ jobs:
           # The winget-pkgs fork lives under the aahepburn user (owner of WINGET_TOKEN),
           # not the repo org. Without this the action looks for Quiet-Signals-Lab/winget-pkgs.
           fork-user: aahepburn
+
+      # komac inherits the previous version's installer layout. An early manual 0.4.6
+      # submission carried a stray zip/portable installer entry, so komac maps BOTH
+      # the inherited nullsoft and portable entries onto our single .exe -> winget
+      # rejects it as DuplicateInstallerEntry. This step deterministically strips any
+      # nested/portable installer so the PR always has exactly the nullsoft installer.
+      # Best-effort: never fails the release.
+      - name: Ensure single installer in winget PR
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -uo pipefail
+          FORK=aahepburn/winget-pkgs
+          MPATH="manifests/a/aahepburn/RAGAssistantForZotero/${VERSION}/aahepburn.RAGAssistantForZotero.installer.yaml"
+          BR=$(gh api "repos/${FORK}/branches?per_page=100" \
+                --jq "[.[].name | select(startswith(\"aahepburn.RAGAssistantForZotero-${VERSION}-\"))][0]" 2>/dev/null)
+          if [ -z "${BR:-}" ] || [ "$BR" = "null" ]; then
+            echo "No winget branch for ${VERSION}; nothing to fix"; exit 0
+          fi
+          echo "winget branch: $BR"
+          info=$(gh api "repos/${FORK}/contents/${MPATH}?ref=${BR}")
+          sha=$(printf '%s' "$info" | jq -r .sha)
+          printf '%s' "$info" | jq -r .content | base64 -d > installer.yaml
+          if ! grep -q "NestedInstallerType:" installer.yaml; then
+            echo "Manifest already has a single installer; nothing to do"; exit 0
+          fi
+          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml
+          python3 - <<'PY'
+          import yaml
+          m = yaml.safe_load(open("installer.yaml"))
+          insts = m.get("Installers", [])
+          kept = [i for i in insts if "NestedInstallerType" not in i]
+          m["Installers"] = kept or insts   # never empty the list
+          yaml.safe_dump(m, open("installer.yaml", "w"), sort_keys=False)
+          PY
+          gh api -X PUT "repos/${FORK}/contents/${MPATH}" \
+            -f message="Remove duplicate portable installer entry (inherited by komac from a prior manifest)" \
+            -f content="$(base64 -w0 installer.yaml 2>/dev/null || base64 installer.yaml | tr -d '\n')" \
+            -f sha="$sha" -f branch="$BR" >/dev/null
+          echo "Cleaned winget installer manifest on $BR"
