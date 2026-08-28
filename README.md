@@ -35,6 +35,7 @@ The app is not notarised on Windows and may throw a safety warning.
 
 **Linux** (Debian/Ubuntu): download the `.deb` from [Releases](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases) and install it with `sudo apt install ./RAG-Assistant-*.deb` — Python and all dependencies are bundled.
 
+<img width="1440" height="871" alt="Screenshot 2026-02-21 at 6 24 03 pm" src="https://github.com/user-attachments/assets/a3ef72b4-dd75-4bd9-b50d-ede5ac65cbdc" />
 
 ## Key Features
 
@@ -48,8 +49,6 @@ The app is not notarised on Windows and may throw a safety warning.
 - **Profile support**: Maintain separate workspaces with different settings, libraries, and chat histories
 - **Automatic updates**: Stay up to date with the latest features and improvements
 - **Cross-platform**: Available for macOS, Windows, and Linux
-
-<img width="1440" height="871" alt="Screenshot 2026-02-21 at 6 24 03 pm" src="https://github.com/user-attachments/assets/a3ef72b4-dd75-4bd9-b50d-ede5ac65cbdc" />
 
 
 ## Prerequisites
