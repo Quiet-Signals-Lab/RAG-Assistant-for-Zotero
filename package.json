@@ -43,7 +43,7 @@
     "@types/node": "^20.10.0",
     "concurrently": "^8.2.0",
     "electron": "^39.2.4",
-    "electron-builder": "^24.9.0",
+    "electron-builder": "^26.15.3",
     "electron-icon-builder": "^2.0.1",
     "js-yaml": "^4.1.0",
     "png2icons": "^2.0.1",
