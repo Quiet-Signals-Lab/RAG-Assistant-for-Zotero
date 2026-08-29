@@ -47,7 +47,7 @@
     "electron-icon-builder": "^2.0.1",
     "js-yaml": "^4.1.0",
     "png2icons": "^2.0.1",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.0",
     "typescript": "^5.3.0",
     "wait-on": "^7.2.0"
   },
