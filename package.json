@@ -36,18 +36,17 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "axios": "^1.17.0",
-    "electron-updater": "^6.1.0"
+    "axios": "^1.18.1",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "concurrently": "^8.2.0",
     "electron": "^39.2.4",
-    "electron-builder": "^24.9.0",
-    "electron-icon-builder": "^2.0.1",
-    "js-yaml": "^4.1.0",
+    "electron-builder": "^26.15.3",
+    "js-yaml": "^4.3.1",
     "png2icons": "^2.0.1",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.0",
     "typescript": "^5.3.0",
     "wait-on": "^7.2.0"
   },
@@ -181,7 +180,9 @@
         }
       ],
       "icon": "build/icon.ico",
-      "publisherName": "aahepburn"
+      "signtoolOptions": {
+        "publisherName": "aahepburn"
+      }
     },
     "nsis": {
       "oneClick": false,
@@ -217,10 +218,12 @@
       "synopsis": "AI-powered research assistant for Zotero",
       "description": "Chat with your Zotero library using AI. Get cited answers, search semantically, and manage your research with intelligent assistance.",
       "desktop": {
-        "Name": "RAG Assistant for Zotero",
-        "Comment": "AI-powered research assistant for Zotero",
-        "Categories": "Office;Education;Science;",
-        "StartupWMClass": "rag-assistant"
+        "entry": {
+          "Name": "RAG Assistant for Zotero",
+          "Comment": "AI-powered research assistant for Zotero",
+          "Categories": "Office;Education;Science;",
+          "StartupWMClass": "rag-assistant"
+        }
       },
       "executableName": "rag-assistant",
       "maintainer": "aahepburn <your-email@example.com>",
