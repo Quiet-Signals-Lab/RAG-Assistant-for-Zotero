@@ -369,63 +369,110 @@ jobs:
   # Auto-open a winget-pkgs PR for the new Windows installer.
   # Requires: a fork of microsoft/winget-pkgs under the token owner's account,
   # and a WINGET_TOKEN secret (classic PAT with public_repo scope).
+  # winget submission. komac generates the manifests; `gh` opens the PR.
+  #
+  # We previously used vedantmgoyal9/winget-releaser, which wraps both halves.
+  # Its submit step began failing with "aahepburn does not have the correct
+  # permissions to execute `CreateRef`" even though the same token creates refs
+  # on the fork fine over REST (verified: HTTP 201). Root cause never identified;
+  # regenerating the token and widening its scope to `repo` did not help. Since
+  # komac's manifest generation was always correct, we keep that and drive the
+  # git side with `gh`, which is what the manual v0.5.2 submission used.
   publish-winget:
     needs: create-release
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      PKG_ID: aahepburn.RAGAssistantForZotero
+      FORK: aahepburn/winget-pkgs
+      UPSTREAM: microsoft/winget-pkgs
+      KOMAC_VERSION: 2.16.0
     steps:
-      - name: Resolve version
+      - name: Resolve version and installer URL
         id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Publish to winget
-        uses: vedantmgoyal9/winget-releaser@v2
-        with:
-          identifier: aahepburn.RAGAssistantForZotero
-          version: ${{ steps.v.outputs.version }}
-          installers-regex: '\.exe$'
-          token: ${{ secrets.WINGET_TOKEN }}
-          # The winget-pkgs fork lives under the aahepburn user (owner of WINGET_TOKEN),
-          # not the repo org. Without this the action looks for Quiet-Signals-Lab/winget-pkgs.
-          fork-user: aahepburn
-
-      # komac inherits the previous version's installer layout. An early manual 0.4.6
-      # submission carried a stray zip/portable installer entry, so komac maps BOTH
-      # the inherited nullsoft and portable entries onto our single .exe -> winget
-      # rejects it as DuplicateInstallerEntry. This step deterministically strips any
-      # nested/portable installer so the PR always has exactly the nullsoft installer.
-      # Best-effort: never fails the release.
-      - name: Ensure single installer in winget PR
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
-          VERSION: ${{ steps.v.outputs.version }}
         run: |
-          set -uo pipefail
-          FORK=aahepburn/winget-pkgs
-          MPATH="manifests/a/aahepburn/RAGAssistantForZotero/${VERSION}/aahepburn.RAGAssistantForZotero.installer.yaml"
-          BR=$(gh api "repos/${FORK}/branches?per_page=100" \
-                --jq "[.[].name | select(startswith(\"aahepburn.RAGAssistantForZotero-${VERSION}-\"))][0]" 2>/dev/null)
-          if [ -z "${BR:-}" ] || [ "$BR" = "null" ]; then
-            echo "No winget branch for ${VERSION}; nothing to fix"; exit 0
-          fi
-          echo "winget branch: $BR"
-          info=$(gh api "repos/${FORK}/contents/${MPATH}?ref=${BR}")
-          sha=$(printf '%s' "$info" | jq -r .sha)
-          printf '%s' "$info" | jq -r .content | base64 -d > installer.yaml
-          if ! grep -q "NestedInstallerType:" installer.yaml; then
-            echo "Manifest already has a single installer; nothing to do"; exit 0
-          fi
-          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml
-          python3 - <<'PY'
-          import yaml
-          m = yaml.safe_load(open("installer.yaml"))
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          URL=$(gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" \
+                  --json assets --jq '.assets[] | select(.name|test("\\.exe$")) | .url' | head -1)
+          [ -n "$URL" ] || { echo "::error::no .exe asset on release v${VERSION}"; exit 1; }
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+          echo "Installer: $URL"
+
+      - name: Install komac
+        run: |
+          set -euo pipefail
+          curl -fsSL -o komac.tar.gz \
+            "https://github.com/russellbanks/Komac/releases/download/v${KOMAC_VERSION}/komac-${KOMAC_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          tar -xzf komac.tar.gz komac
+          sudo install -m755 komac /usr/local/bin/komac
+          komac --version
+
+      - name: Generate manifests
+        run: |
+          set -euo pipefail
+          komac update "$PKG_ID" --version "${{ steps.v.outputs.version }}" \
+            --urls "${{ steps.v.outputs.url }}" --dry-run --output ./wg
+          find ./wg -name '*.yaml' -print
+
+      # komac inherits the previous version's installer layout. An early manual
+      # 0.4.6 submission carried a stray portable entry, so komac can map BOTH
+      # the inherited nullsoft and portable entries onto our single .exe, which
+      # winget rejects as DuplicateInstallerEntry. Strip any nested/portable
+      # entry before submitting.
+      - name: Ensure a single installer entry
+        run: |
+          set -euo pipefail
+          f=$(find ./wg -name '*.installer.yaml' | head -1)
+          python3 - "$f" <<'PY'
+          import sys, yaml
+          p = sys.argv[1]
+          m = yaml.safe_load(open(p))
           insts = m.get("Installers", [])
           kept = [i for i in insts if "NestedInstallerType" not in i]
-          m["Installers"] = kept or insts   # never empty the list
-          yaml.safe_dump(m, open("installer.yaml", "w"), sort_keys=False)
+          if kept and len(kept) != len(insts):
+              m["Installers"] = kept
+              yaml.safe_dump(m, open(p, "w"), sort_keys=False)
+              print(f"stripped {len(insts) - len(kept)} nested installer entry/entries")
+          else:
+              print(f"{len(insts)} installer entry/entries, nothing to strip")
           PY
-          gh api -X PUT "repos/${FORK}/contents/${MPATH}" \
-            -f message="Remove duplicate portable installer entry (inherited by komac from a prior manifest)" \
-            -f content="$(base64 -w0 installer.yaml 2>/dev/null || base64 installer.yaml | tr -d '\n')" \
-            -f sha="$sha" -f branch="$BR" >/dev/null
-          echo "Cleaned winget installer manifest on $BR"
+
+      - name: Open winget PR
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.v.outputs.version }}"
+          BRANCH="${PKG_ID}-${VERSION}"
+          OWNER="${FORK%%/*}"
+          # komac writes the real winget layout (manifests/<a>/<Pub>/<Pkg>/<ver>/),
+          # so use its paths rather than deriving them.
+          DIR=$(cd wg && find manifests -name '*.yaml' -exec dirname {} \; | sort -u)
+          [ "$(printf '%s' "$DIR" | wc -l)" -eq 0 ] || { echo "::error::expected one manifest dir, got: $DIR"; exit 1; }
+
+          # A stale fork makes for a noisy PR; winget-pkgs moves fast.
+          gh api -X POST "repos/${FORK}/merge-upstream" -f branch=master --jq .merge_type
+
+          # Recreate the branch so re-runs are idempotent.
+          gh api -X DELETE "repos/${FORK}/git/refs/heads/${BRANCH}" >/dev/null 2>&1 || true
+          BASE=$(gh api "repos/${FORK}/commits/master" --jq .sha)
+          gh api -X POST "repos/${FORK}/git/refs" -f ref="refs/heads/${BRANCH}" -f sha="$BASE" --jq .ref
+
+          for f in $(cd wg && find manifests -name '*.yaml'); do
+            gh api -X PUT "repos/${FORK}/contents/${f}" \
+              -f message="New version: ${PKG_ID} version ${VERSION}" \
+              -f branch="${BRANCH}" \
+              -f content="$(base64 -w0 "wg/${f}")" --jq .content.path
+          done
+
+          # Refuse to open a PR that touches anything outside this version's directory.
+          STRAY=$(gh api "repos/${UPSTREAM}/compare/master...${OWNER}:${BRANCH}" \
+                    --jq '[.files[].filename | select(startswith("'"${DIR}"'/") | not)] | length')
+          [ "$STRAY" = "0" ] || { echo "::error::branch touches files outside ${DIR}"; exit 1; }
+
+          gh pr create --repo "${UPSTREAM}" --base master \
+            --head "${OWNER}:${BRANCH}" \
+            --title "New version: ${PKG_ID} version ${VERSION}" \
+            --body "Manifests generated with [komac](https://github.com/russellbanks/Komac) v${KOMAC_VERSION} and submitted via \`gh\`."
