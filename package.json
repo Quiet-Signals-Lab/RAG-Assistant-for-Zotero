@@ -8,7 +8,7 @@
     "name": "Alexander Hepburn",
     "email": "aahepburn@proton.me"
   },
-  "license": "Apache-2.0",
+  "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero.git"

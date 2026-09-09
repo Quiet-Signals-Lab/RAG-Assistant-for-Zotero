@@ -152,7 +152,9 @@ For complete build instructions, see [docs/BUILD_CHECKLIST.md](docs/BUILD_CHECKL
 
 ## License
 
-Apache 2.0
+GNU General Public License v3.0 or later. See [LICENSE](LICENSE).
+
+This project was licensed under Apache 2.0 through v0.5.1; releases from v0.5.2 onward are GPLv3.
 
 ## Contributing
 

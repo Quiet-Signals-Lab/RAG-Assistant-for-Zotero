@@ -212,7 +212,7 @@ PublisherUrl: https://github.com/aahepburn
 PublisherSupportUrl: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/issues
 PackageName: RAG Assistant for Zotero
 PackageUrl: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero
-License: Apache-2.0
+License: GPL-3.0-or-later
 LicenseUrl: https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/blob/master/LICENSE
 ShortDescription: AI-powered research assistant for your Zotero library
 Description: |-
