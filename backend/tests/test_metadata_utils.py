@@ -9,6 +9,8 @@ from backend.metadata_utils import (
     validate_where_clause,
     merge_where_clauses,
     format_filters_for_display,
+    separate_where_clauses,
+    _matches_where_clause,
 )
 
 
@@ -42,7 +44,7 @@ class TestBuildMetadataWhereClause:
         """Test single tag filter."""
         where = build_metadata_where_clause(tags=["NLP"])
         
-        assert where == {"tags": {"$contains": "NLP"}}
+        assert where == {"tags": {"$contains_item": "NLP"}}
     
     def test_multiple_tags(self):
         """Test multiple tags filter (OR logic)."""
@@ -50,9 +52,9 @@ class TestBuildMetadataWhereClause:
         
         assert where == {
             "$or": [
-                {"tags": {"$contains": "NLP"}},
-                {"tags": {"$contains": "ML"}},
-                {"tags": {"$contains": "CV"}}
+                {"tags": {"$contains_item": "NLP"}},
+                {"tags": {"$contains_item": "ML"}},
+                {"tags": {"$contains_item": "CV"}}
             ]
         }
     
@@ -60,7 +62,7 @@ class TestBuildMetadataWhereClause:
         """Test single collection filter."""
         where = build_metadata_where_clause(collections=["Research"])
         
-        assert where == {"collections": {"$contains": "Research"}}
+        assert where == {"collections": {"$contains_item": "Research"}}
     
     def test_multiple_collections(self):
         """Test multiple collections filter (OR logic)."""
@@ -68,8 +70,8 @@ class TestBuildMetadataWhereClause:
         
         assert where == {
             "$or": [
-                {"collections": {"$contains": "Research"}},
-                {"collections": {"$contains": "Papers"}}
+                {"collections": {"$contains_item": "Research"}},
+                {"collections": {"$contains_item": "Papers"}}
             ]
         }
     
@@ -84,8 +86,8 @@ class TestBuildMetadataWhereClause:
             "$and": [
                 {"year": {"$gte": 2020}},
                 {"$or": [
-                    {"tags": {"$contains": "NLP"}},
-                    {"tags": {"$contains": "ML"}}
+                    {"tags": {"$contains_item": "NLP"}},
+                    {"tags": {"$contains_item": "ML"}}
                 ]}
             ]
         }
@@ -103,8 +105,8 @@ class TestBuildMetadataWhereClause:
             "$and": [
                 {"year": {"$gte": 2018}},
                 {"year": {"$lte": 2022}},
-                {"tags": {"$contains": "Transformers"}},
-                {"collections": {"$contains": "PhD Research"}}
+                {"tags": {"$contains_item": "Transformers"}},
+                {"collections": {"$contains_item": "PhD Research"}}
             ]
         }
         
@@ -140,7 +142,7 @@ class TestValidateWhereClause:
         where = {
             "$and": [
                 {"year": {"$gte": 2020}},
-                {"tags": {"$contains": "NLP"}}
+                {"tags": {"$contains_item": "NLP"}}
             ]
         }
         assert validate_where_clause(where) == True
@@ -149,8 +151,8 @@ class TestValidateWhereClause:
         """Test validation of OR condition."""
         where = {
             "$or": [
-                {"tags": {"$contains": "NLP"}},
-                {"tags": {"$contains": "ML"}}
+                {"tags": {"$contains_item": "NLP"}},
+                {"tags": {"$contains_item": "ML"}}
             ]
         }
         assert validate_where_clause(where) == True
@@ -162,8 +164,8 @@ class TestValidateWhereClause:
                 {"year": {"$gte": 2020}},
                 {
                     "$or": [
-                        {"tags": {"$contains": "NLP"}},
-                        {"tags": {"$contains": "ML"}}
+                        {"tags": {"$contains_item": "NLP"}},
+                        {"tags": {"$contains_item": "ML"}}
                     ]
                 }
             ]
@@ -221,13 +223,13 @@ class TestMergeWhereClauses:
     def test_merge_two_simple(self):
         """Test merging two simple clauses."""
         clause1 = {"year": {"$gte": 2020}}
-        clause2 = {"tags": {"$contains": "NLP"}}
+        clause2 = {"tags": {"$contains_item": "NLP"}}
         result = merge_where_clauses(clause1, clause2)
         
         expected = {
             "$and": [
                 {"year": {"$gte": 2020}},
-                {"tags": {"$contains": "NLP"}}
+                {"tags": {"$contains_item": "NLP"}}
             ]
         }
         assert result == expected
@@ -242,8 +244,8 @@ class TestMergeWhereClauses:
         }
         clause2 = {
             "$or": [
-                {"tags": {"$contains": "NLP"}},
-                {"tags": {"$contains": "ML"}}
+                {"tags": {"$contains_item": "NLP"}},
+                {"tags": {"$contains_item": "ML"}}
             ]
         }
         result = merge_where_clauses(clause1, clause2)
@@ -351,7 +353,7 @@ class TestEdgeCases:
         where = build_metadata_where_clause(tags=["NLP"])
         
         # Should be simple, not wrapped in $or
-        assert where == {"tags": {"$contains": "NLP"}}
+        assert where == {"tags": {"$contains_item": "NLP"}}
         assert "$or" not in where
     
     def test_large_tag_list(self):
@@ -454,3 +456,44 @@ class TestRealWorldScenarios:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+class TestScopeFiltering:
+    """Regression tests for issue #75 (Scope collection/tag filtering)."""
+
+    METAS = [
+        {"item_id": "1", "tags": "Religion,Sociology", "collections": "Faith Studies"},
+        {"item_id": "2", "tags": "unique-tag", "collections": "Faith Studies,Religion and Society"},
+        {"item_id": "3", "tags": "", "collections": "Other"},
+        {"item_id": "4", "collections": "Faith"},  # no tags key at all
+    ]
+
+    def _matching(self, **filters):
+        where = build_metadata_where_clause(**filters)
+        _, client_where = separate_where_clauses(where)
+        assert client_where is not None, "tag/collection filters must reach client-side matching"
+        return {m["item_id"] for m in self.METAS if _matches_where_clause(m, client_where)}
+
+    def test_collection_matches_whole_entry_not_substring(self):
+        # "Faith" must not select items whose only collection is "Faith Studies"
+        assert self._matching(collections=["Faith"]) == {"4"}
+        assert self._matching(collections=["Faith Studies"]) == {"1", "2"}
+
+    def test_tag_matching_is_case_insensitive(self):
+        assert self._matching(tags=["religion"]) == {"1"}
+        assert self._matching(tags=["Religion"]) == {"1"}
+
+    def test_tag_matches_one_entry_of_a_joined_list(self):
+        assert self._matching(tags=["Sociology"]) == {"1"}
+        assert self._matching(tags=["unique-tag"]) == {"2"}
+
+    def test_missing_or_empty_field_never_matches(self):
+        assert self._matching(tags=["anything"]) == set()
+
+    def test_vector_db_matcher_agrees(self):
+        """ChromaClient kept its own case-sensitive copy that returned 0 items
+        for a tag the UI matched fine — it must delegate here now."""
+        import inspect
+        from backend import vector_db
+        src = inspect.getsource(vector_db.ChromaClient._matches_where_clause)
+        assert "from backend.metadata_utils import _matches_where_clause" in src

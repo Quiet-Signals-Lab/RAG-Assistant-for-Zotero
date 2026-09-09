@@ -107,17 +107,17 @@ class ProfileManager:
         }
         
         metadata_file = self.get_profile_metadata_file(profile_id)
-        with open(metadata_file, 'w') as f:
+        with open(metadata_file, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)
         
         # Initialize empty settings (will use defaults)
         settings_file = self.get_profile_settings_file(profile_id)
-        with open(settings_file, 'w') as f:
+        with open(settings_file, 'w', encoding='utf-8') as f:
             json.dump({}, f, indent=2)
         
         # Initialize empty sessions
         sessions_file = self.get_profile_sessions_file(profile_id)
-        with open(sessions_file, 'w') as f:
+        with open(sessions_file, 'w', encoding='utf-8') as f:
             json.dump({"sessions": {}, "currentSessionId": None}, f, indent=2)
         
         print(f"Created profile: {profile_id} ({name})")
@@ -142,7 +142,7 @@ class ProfileManager:
             metadata_file = profile_dir / "profile.json"
             if metadata_file.exists():
                 try:
-                    with open(metadata_file, 'r') as f:
+                    with open(metadata_file, 'r', encoding='utf-8') as f:
                         metadata = json.load(f)
                         profiles.append(metadata)
                 except Exception as e:
@@ -168,7 +168,7 @@ class ProfileManager:
             return None
         
         try:
-            with open(metadata_file, 'r') as f:
+            with open(metadata_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             print(f"Error reading profile metadata: {e}")
@@ -199,7 +199,7 @@ class ProfileManager:
         
         metadata_file = self.get_profile_metadata_file(profile_id)
         try:
-            with open(metadata_file, 'w') as f:
+            with open(metadata_file, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2)
             return True
         except Exception as e:
@@ -263,7 +263,7 @@ class ProfileManager:
             return None
         
         try:
-            with open(self.ACTIVE_PROFILE_FILE, 'r') as f:
+            with open(self.ACTIVE_PROFILE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 profile_id = data.get('activeProfileId')
                 if profile_id:
@@ -293,7 +293,7 @@ class ProfileManager:
             return False
         
         try:
-            with open(self.ACTIVE_PROFILE_FILE, 'w') as f:
+            with open(self.ACTIVE_PROFILE_FILE, 'w', encoding='utf-8') as f:
                 json.dump({
                     "activeProfileId": profile_id,
                     "switchedAt": datetime.utcnow().isoformat() + "Z"
@@ -323,7 +323,7 @@ class ProfileManager:
             return {}
         
         try:
-            with open(settings_file, 'r') as f:
+            with open(settings_file, 'r', encoding='utf-8') as f:
                 settings = json.load(f)
                 print(f"[ProfileManager] Loaded settings with keys: {list(settings.keys())}")
                 if 'zoteroPath' in settings:
@@ -349,7 +349,7 @@ class ProfileManager:
         settings_file = self.get_profile_settings_file(profile_id)
         
         try:
-            with open(settings_file, 'w') as f:
+            with open(settings_file, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, indent=2)
             
             # Update profile metadata timestamp
@@ -357,7 +357,7 @@ class ProfileManager:
             if metadata:
                 metadata["updatedAt"] = datetime.utcnow().isoformat() + "Z"
                 metadata_file = self.get_profile_metadata_file(profile_id)
-                with open(metadata_file, 'w') as mf:
+                with open(metadata_file, 'w', encoding='utf-8') as mf:
                     json.dump(metadata, mf, indent=2)
             
             return True
@@ -381,7 +381,7 @@ class ProfileManager:
             return {"sessions": {}, "currentSessionId": None}
         
         try:
-            with open(sessions_file, 'r') as f:
+            with open(sessions_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             print(f"Error loading profile sessions: {e}")
@@ -401,7 +401,7 @@ class ProfileManager:
         sessions_file = self.get_profile_sessions_file(profile_id)
         
         try:
-            with open(sessions_file, 'w') as f:
+            with open(sessions_file, 'w', encoding='utf-8') as f:
                 json.dump(sessions_data, f, indent=2)
             
             # Update profile metadata timestamp
@@ -409,7 +409,7 @@ class ProfileManager:
             if metadata:
                 metadata["updatedAt"] = datetime.utcnow().isoformat() + "Z"
                 metadata_file = self.get_profile_metadata_file(profile_id)
-                with open(metadata_file, 'w') as mf:
+                with open(metadata_file, 'w', encoding='utf-8') as mf:
                     json.dump(metadata, mf, indent=2)
             
             return True
@@ -481,7 +481,7 @@ class ProfileManager:
                     print("Error: Invalid profile export (missing profile.json)")
                     return None
                 
-                with open(metadata_path, 'r') as f:
+                with open(metadata_path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
                 
                 # Generate new profile ID if not provided
@@ -503,14 +503,14 @@ class ProfileManager:
                 # Copy settings
                 settings_path = Path(temp_dir) / "settings.json"
                 if settings_path.exists():
-                    with open(settings_path, 'r') as f:
+                    with open(settings_path, 'r', encoding='utf-8') as f:
                         settings = json.load(f)
                     self.save_profile_settings(new_profile_id, settings)
                 
                 # Copy sessions
                 sessions_path = Path(temp_dir) / "sessions.json"
                 if sessions_path.exists():
-                    with open(sessions_path, 'r') as f:
+                    with open(sessions_path, 'r', encoding='utf-8') as f:
                         sessions = json.load(f)
                     self.save_profile_sessions(new_profile_id, sessions)
                 

@@ -481,7 +481,11 @@ class ZoteroChatbot:
         except Exception as e:
             # Catch any unexpected exceptions at thread level
             import traceback
-            error_msg = f"Indexing crashed: {str(e)}"
+            # Name the failing frame in the user-visible error: crash reports that
+            # only carry str(e) (e.g. issue #79) can't be located without it.
+            tb_last = traceback.extract_tb(e.__traceback__)[-1] if e.__traceback__ else None
+            where = f" [{os.path.basename(tb_last.filename)}:{tb_last.lineno}]" if tb_last else ""
+            error_msg = f"Indexing crashed: {str(e)}{where}"
             traceback_str = traceback.format_exc()
             print(f"FATAL ERROR: {error_msg}")
             print(f"Traceback:\\n{traceback_str}")
@@ -685,7 +689,11 @@ class ZoteroChatbot:
         except Exception as e:
             # Catch any unexpected exceptions at thread level
             import traceback
-            error_msg = f"Indexing crashed: {str(e)}"
+            # Name the failing frame in the user-visible error: crash reports that
+            # only carry str(e) (e.g. issue #79) can't be located without it.
+            tb_last = traceback.extract_tb(e.__traceback__)[-1] if e.__traceback__ else None
+            where = f" [{os.path.basename(tb_last.filename)}:{tb_last.lineno}]" if tb_last else ""
+            error_msg = f"Indexing crashed: {str(e)}{where}"
             traceback_str = traceback.format_exc()
             print(f"FATAL ERROR: {error_msg}")
             print(f"Traceback:\n{traceback_str}")

@@ -90,20 +90,15 @@ class ZoteroLibrary:
             return cur.fetchall()
     
 
-    def search_parent_items_with_pdfs(self, 
-                                      authors=None, 
-                                      titles=None, 
-                                      dates=None, 
-                                      tags=None, 
-                                      collections=None):
-        filters = []
-        params = []
+    def search_parent_items_with_pdfs(self):
+        """Return every parent item that has a PDF attachment.
 
-        # Add filters as needed (same as above for search_parent_items)
-        # You can implement the filter logic
-
-        where_clause = " AND ".join(filters) if filters else "1"
-        query = f"""
+        Took author/title/date/tag/collection arguments that were never
+        implemented — the filter block was a stub, so any caller passing them
+        silently got the whole library back. No caller passed them; filtering
+        happens downstream on the indexed metadata instead. See issue #75.
+        """
+        query = """
         SELECT 
             i.itemID,
             i.key,
@@ -134,13 +129,12 @@ class ZoteroLibrary:
         LEFT JOIN itemDataValues att_mime ON att_data.valueID = att_mime.valueID
         LEFT JOIN itemAttachments att_path ON att.itemID = att_path.itemID
 
-        WHERE {where_clause}
-        AND (att_mime.value = 'application/pdf' OR att_path.path LIKE '%.pdf')
+        WHERE (att_mime.value = 'application/pdf' OR att_path.path LIKE '%.pdf')
         GROUP BY i.itemID
         """
 
         with self._cursor() as cur:
-            cur.execute(query, tuple(params))
+            cur.execute(query)
             results = cur.fetchall()
         # Use cross-platform path relative to Zotero database location
         # The storage directory is typically at the same level as the database

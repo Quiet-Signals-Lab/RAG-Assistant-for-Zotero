@@ -361,59 +361,15 @@ class ChromaClient:
         return filtered
     
     def _matches_where_clause(self, metadata: Dict[str, Any], where: Dict[str, Any]) -> bool:
-        """Check if metadata matches a where clause."""
-        # Simple implementation - can be extended for complex clauses
-        for key, condition in where.items():
-            if key == "$and":
-                # All conditions must match
-                return all(self._matches_where_clause(metadata, c) for c in condition)
-            elif key == "$or":
-                # Any condition must match
-                return any(self._matches_where_clause(metadata, c) for c in condition)
-            elif key == "$not":
-                # Condition must not match
-                return not self._matches_where_clause(metadata, condition)
-            elif isinstance(condition, dict):
-                # Field condition (e.g., {"year": {"$gte": 2020}})
-                field_value = metadata.get(key)
-                if field_value is None:
-                    return False
-                
-                for op, target in condition.items():
-                    if op == "$eq":
-                        if field_value != target:
-                            return False
-                    elif op == "$ne":
-                        if field_value == target:
-                            return False
-                    elif op == "$gt":
-                        if not (field_value > target):
-                            return False
-                    elif op == "$gte":
-                        if not (field_value >= target):
-                            return False
-                    elif op == "$lt":
-                        if not (field_value < target):
-                            return False
-                    elif op == "$lte":
-                        if not (field_value <= target):
-                            return False
-                    elif op == "$contains":
-                        if target not in str(field_value):
-                            return False
-                    elif op == "$in":
-                        if field_value not in target:
-                            return False
-                    elif op == "$nin":
-                        if field_value in target:
-                            return False
-            else:
-                # Direct equality check
-                if metadata.get(key) != condition:
-                    return False
-        
-        return True
-    
+        """Check if metadata matches a where clause.
+
+        Delegates to metadata_utils so scope filtering here and in the query path
+        can't diverge again: this copy was case-sensitive on $contains and silently
+        returned 0 items for a tag the UI matched fine. See issue #75.
+        """
+        from backend.metadata_utils import _matches_where_clause
+        return _matches_where_clause(metadata, where)
+
     def _load_bm25_index(self):
         """Load BM25 index from disk if it exists."""
         if os.path.exists(self.bm25_path):

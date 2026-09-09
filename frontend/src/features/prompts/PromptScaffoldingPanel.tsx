@@ -37,6 +37,7 @@ const PromptScaffoldingPanel: React.FC = () => {
   // State for filtered item count
   const [estimatedItemCount, setEstimatedItemCount] = useState<number>(0);
   const [loadingCount, setLoadingCount] = useState<boolean>(false);
+  const [countError, setCountError] = useState<string | null>(null);
   
   // Load available tags, collections, and item types from backend
   useEffect(() => {
@@ -199,9 +200,17 @@ const PromptScaffoldingPanel: React.FC = () => {
         const data = await response.json();
         if (data.unique_items !== undefined) {
           setEstimatedItemCount(data.unique_items);
+          setCountError(null);
+        } else {
+          // Keeping the previous number here made a failed filter look exactly
+          // like "no filter applied" (issue #75) — surface it instead.
+          setEstimatedItemCount(0);
+          setCountError(data.error || 'Could not count items for this filter');
         }
       } catch (err) {
         console.error('Failed to fetch filtered item count:', err);
+        setEstimatedItemCount(0);
+        setCountError(err instanceof Error ? err.message : 'Could not reach the backend');
       } finally {
         setLoadingCount(false);
       }
@@ -596,6 +605,20 @@ const PromptScaffoldingPanel: React.FC = () => {
                 <strong>{loadingCount ? '...' : estimatedItemCount}</strong>
                 <span className="muted">items in scope</span>
               </div>
+              
+              {countError && (
+                <p className="scope-note" style={{ color: 'var(--danger)' }}>
+                  Could not count items in scope: {countError}
+                </p>
+              )}
+              
+              {!loadingCount && !countError && estimatedItemCount === 0 && hasActiveFilters() && (
+                <p className="scope-note muted">
+                  No indexed items match. Scope filters run on metadata captured when
+                  items were indexed, so tags or collections you changed in Zotero
+                  since then won't match until you sync metadata in Settings.
+                </p>
+              )}
               
               {(selectedTags.length > 0 || selectedCollections.length > 0 || yearStart || yearEnd || titleFilter || authorFilter || itemTypeFilter.length > 0) && (
                 <button 

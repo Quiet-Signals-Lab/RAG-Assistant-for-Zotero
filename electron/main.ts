@@ -1088,6 +1088,11 @@ async function startBackend(): Promise<boolean> {
       ...process.env,
       PYTHONUNBUFFERED: '1',
       PYTHONIOENCODING: 'utf-8',
+      // PEP 540 UTF-8 mode: PYTHONIOENCODING only covers stdio, so open() and any
+      // dependency relying on locale.getpreferredencoding() still used the legacy
+      // Windows code page (cp1252/cp932/gbk) and crashed indexing on non-ASCII
+      // text extracted from PDFs. UTF-8 mode covers those too. See issues #61, #79.
+      PYTHONUTF8: '1',
       // Ensure Python can find the bundled libraries in production
       ...((!IS_DEV && process.platform === 'darwin') ? {
         DYLD_LIBRARY_PATH: path.join(process.resourcesPath, 'python', 'lib')
@@ -1103,6 +1108,7 @@ async function startBackend(): Promise<boolean> {
     console.log('Backend environment:');
     console.log(`  - PYTHONUNBUFFERED: ${backendEnv.PYTHONUNBUFFERED}`);
     console.log(`  - PYTHONIOENCODING: ${backendEnv.PYTHONIOENCODING}`);
+    console.log(`  - PYTHONUTF8: ${backendEnv.PYTHONUTF8}`);
     if (backendEnv.DYLD_LIBRARY_PATH) {
       console.log(`  - DYLD_LIBRARY_PATH: ${backendEnv.DYLD_LIBRARY_PATH}`);
     }

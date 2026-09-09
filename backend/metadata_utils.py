@@ -65,17 +65,17 @@ def build_metadata_where_clause(
     if year_max is not None:
         conditions.append({"year": {"$lte": year_max}})
     
-    # Tags conditions (any tag matches) - uses $contains which requires client-side filtering
+    # Tags conditions (any tag matches) - uses $contains_item which requires client-side filtering
     if tags:
-        tag_conditions = [{"tags": {"$contains": tag}} for tag in tags]
+        tag_conditions = [{"tags": {"$contains_item": tag}} for tag in tags]
         if len(tag_conditions) == 1:
             conditions.append(tag_conditions[0])
         else:
             conditions.append({"$or": tag_conditions})
     
-    # Collections conditions (any collection matches) - uses $contains which requires client-side filtering
+    # Collections conditions (any collection matches) - uses $contains_item which requires client-side filtering
     if collections:
-        coll_conditions = [{"collections": {"$contains": coll}} for coll in collections]
+        coll_conditions = [{"collections": {"$contains_item": coll}} for coll in collections]
         if len(coll_conditions) == 1:
             conditions.append(coll_conditions[0])
         else:
@@ -133,7 +133,7 @@ def separate_where_clauses(
     Separate a where clause into ChromaDB-compatible and client-side filters.
     
     ChromaDB only supports: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or
-    The $contains operator must be filtered client-side after retrieval.
+    The $contains / $contains_item operators must be filtered client-side after retrieval.
     
     Args:
         where: Where clause that may contain unsupported operators
@@ -162,7 +162,7 @@ def separate_where_clauses(
     def _has_contains(clause: Dict[str, Any]) -> bool:
         """Check if clause contains $contains operator"""
         for key, value in clause.items():
-            if key == "$contains":
+            if key.startswith("$contains"):  # $contains, $contains_item
                 return True
             if isinstance(value, dict):
                 if _has_contains(value):
@@ -315,6 +315,14 @@ def _matches_where_clause(metadata: Dict[str, Any], where: Dict[str, Any]) -> bo
                         # Case-insensitive substring matching for better UX
                         if target.lower() not in str(field_value).lower():
                             return False
+                    elif op == "$contains_item":
+                        # Whole-entry match against a comma-joined list (tags,
+                        # collections). Substring matching would let the
+                        # collection "Faith" also select items whose only
+                        # collection is "Faith Studies". See issue #75.
+                        entries = {e.strip().lower() for e in str(field_value).split(",")}
+                        if target.strip().lower() not in entries:
+                            return False
                     elif op == "$in":
                         if field_value not in target:
                             return False
@@ -347,7 +355,7 @@ def validate_where_clause(where: Optional[Dict[str, Any]]) -> bool:
     
     # Allowed operators
     logical_ops = {"$and", "$or", "$not"}
-    comparison_ops = {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin", "$contains"}
+    comparison_ops = {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin", "$contains", "$contains_item"}
     
     # Recursive validation
     for key, value in where.items():
