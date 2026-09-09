@@ -139,14 +139,14 @@
           "x": 140,
           "y": 340,
           "type": "file",
-          "path": "dmg/README.txt",
+          "path": "build/dmg/README.txt",
           "name": "Installation Instructions.txt"
         },
         {
           "x": 400,
           "y": 340,
           "type": "file",
-          "path": "dmg/LICENSE.txt"
+          "path": "build/dmg/LICENSE.txt"
         }
       ],
       "window": {
