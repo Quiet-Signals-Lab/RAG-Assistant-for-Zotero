@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-09-09
+
+### Changed
+- **Licence is now GPLv3**: RAG Assistant for Zotero is licensed under the GNU General Public License v3.0 or later. Releases up to and including v0.5.1 remain under Apache 2.0.
+
+### Fixed
+- **Indexing no longer crashes on non-English Windows** (#79): indexing could fail with `'charmap' codec can't encode character`. The earlier fix for this class of bug covered console output only; file writes still used the legacy Windows code page. The backend now runs in Python UTF-8 mode, and profile/session files are written as UTF-8 explicitly. Indexing errors also name the file and line they came from, so future reports can be traced.
+- **Scope filtering by Collection now filters correctly** (#75): selecting a collection matched any collection whose name merely *contained* it, so picking "NLP" also pulled in everything filed under "NLP Interpretability" — 19 items instead of 4 on a test library. Collections and tags are now matched as whole entries.
+- **Scope filtering by Tag no longer returns zero items** (#75): the item counter used a second, case-sensitive copy of the filter logic, so a tag that matched fine during a search reported "0 items in scope". The duplicate has been removed.
+- **Corrected the advertised macOS requirement**: the app declared macOS 11 as its minimum but has shipped an Electron runtime requiring macOS 12 since v0.5.0, so it could be installed on macOS 11 and then fail to launch. The installer now states macOS 12 correctly. No macOS 12+ user is affected.
+- **The Scope panel no longer shows a stale count**: when a count request failed it kept the previous number on screen, making a broken filter look identical to no filter at all. It now reports the error, and explains when a filter matches nothing because the tag or collection was changed in Zotero after indexing.
+
+### Security
+- Cleared 39 of 41 outstanding dependency advisories, including 3 critical and 17 high. Removed `electron-icon-builder`, an unused build dependency that accounted for 9 of them — several with no fixed version available upstream.
+- Updated electron-builder to 26, electron-updater to 6.8.9, axios, js-yaml, sharp, react-router, postcss, vite and pyasn1.
+- Two advisories remain, both requiring an Electron major upgrade, which is deferred to a future release. `transformers` and `chromadb` are held back deliberately; the reasoning is recorded in `requirements.txt`.
+
 ## [0.5.1] - 2026-07-28
 
 ### Added
