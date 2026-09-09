@@ -170,6 +170,14 @@ This shouldn't happen with the automated workflow, but if it does:
 - Check the workflow file for correct dependency installation
 - Verify `requirements.txt` and `package.json` are up to date
 
+### winget PR not created
+
+The `publish-winget` job can fail while the rest of the release succeeds. The
+GitHub release, auto-updates and Homebrew are unaffected — only winget users
+stay on the previous version. Do **not** re-tag; see
+[WINGET_SUBMISSION.md](WINGET_SUBMISSION.md) for diagnosis and the manual
+submission steps, which take about a minute.
+
 ### Release not created automatically
 
 - Verify the `create-release` job completed in the workflow

@@ -21,6 +21,7 @@ Documentation for RAG Assistant for Zotero.
 
 - [RELEASE_PROCESS.md](RELEASE_PROCESS.md) — cutting a release
 - [PACKAGE_MANAGER_DISTRIBUTION.md](PACKAGE_MANAGER_DISTRIBUTION.md) — Homebrew + winget automation
+- [WINGET_SUBMISSION.md](WINGET_SUBMISSION.md) — how winget manifests are published, manual fallback, and the unresolved 2026-09 `CreateRef` failure
 - [AUTO_UPDATES.md](AUTO_UPDATES.md) — electron-updater system
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — contributing
 
