@@ -91,7 +91,7 @@ safetensors==0.6.2
 scikit-learn==1.7.2
 scipy==1.16.3
 semanticscholar==0.11.0
-sentence-transformers==5.1.2
+sentence-transformers==5.6.0
 setuptools==83.0.0
 shellingham==1.5.4
 six==1.17.0
