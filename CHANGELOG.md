@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-10
+
 ### Fixed
 - **Large libraries no longer exhaust memory** (#86): several operations loaded every chunk of the vector store into Python at once, which on a 2.6-million-chunk library grew the backend to 58 GB and got it killed. The keyword (BM25) index now lives on disk in SQLite FTS5 and is updated as items are added or removed, so there is no rebuild at the end of indexing and nothing to load on the first search. Item inventories, filter counts, deletes and the metadata migration page through the store instead of fetching it whole.
 - **Long books index again** (#86): an item whose chunks exceeded ChromaDB's maximum batch size failed with "Batch size ... is greater than max batch size". Adds are now split to the limit the database reports.
