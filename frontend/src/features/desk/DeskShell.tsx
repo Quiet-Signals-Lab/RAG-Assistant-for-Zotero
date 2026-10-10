@@ -7,11 +7,10 @@ import Bibliography from "./Bibliography";
 import { useDesk, type Pane, type Room } from "./DeskContext";
 import Evidence from "./Evidence";
 import QueryDesk from "./QueryDesk";
-import "../../styles/desk.css";
+import RoomHeader from "../../components/layout/RoomHeader";
 
 type IndexStats = { indexed_items: number; total_chunks: number; current_embedding_model: string };
 
-const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
 const REPO = "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero";
 
 const icons: Record<Room, React.ReactNode> = {
@@ -78,12 +77,8 @@ const DeskShell: React.FC = () => {
   }, [desk.room]);
 
   return (
-    <div className={`desk${IS_MAC ? " desk--mac" : ""}`} data-pane={desk.pane}>
-      <header className="desk__header">
-        <div className="desk__brand">
-          <span className="desk__brand-mark" aria-hidden="true" />
-          <span className="desk__brand-name">Reference desk</span>
-        </div>
+    <div className="desk" data-pane={desk.pane}>
+      <RoomHeader title="Reference desk">
         <nav className="desk__panes" aria-label="Panes">
           {PANES.map((p) => (
             <button key={p.id} type="button" aria-pressed={desk.pane === p.id} onClick={() => desk.setPane(p.id)}>
@@ -91,7 +86,7 @@ const DeskShell: React.FC = () => {
             </button>
           ))}
         </nav>
-        <div className="desk__header-fill" />
+        <div className="room-header__fill" />
         {stats && (
           <span className="desk__index mono" title="What the desk can search">
             {stats.indexed_items.toLocaleString()} items · {stats.total_chunks.toLocaleString()} passages · {stats.current_embedding_model}
@@ -103,7 +98,7 @@ const DeskShell: React.FC = () => {
             <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
           </svg>
         </button>
-      </header>
+      </RoomHeader>
 
       <div className="desk__body">
         <nav className="desk__rail" aria-label="Rooms">

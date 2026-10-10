@@ -112,13 +112,11 @@ const ActiveModelPanel: React.FC = () => {
   });
 
   return (
-    <>
-      <header className="active-model-header">
-        <div>
-          <div className="active-model-title">Active Model</div>
-          <div className="active-model-subtitle">Provider and model for chat</div>
-        </div>
-      </header>
+    <div className="side-panel">
+      <div className="panel-head">
+        <h2 className="panel-head__title">Model</h2>
+        <span className="panel-head__hint">writes legacy chat answers</span>
+      </div>
       
       <main className="active-model-panel">
         <div className="active-model-note">
@@ -220,7 +218,7 @@ const ActiveModelPanel: React.FC = () => {
           )}
         </div>
       </main>
-    </>
+    </div>
   );
 };
 

@@ -5,6 +5,7 @@ import AppShell from "./components/layout/AppShell";
 import Settings from "./pages/Settings";
 import "./styles/globals.css";
 import "./styles/theme.css";
+import "./styles/desk.css";
 import { ChatProvider } from "./contexts/ChatContext";
 import { SessionsProvider } from "./contexts/SessionsContext";
 import { ResponseSelectionProvider } from "./contexts/ResponseSelectionContext";

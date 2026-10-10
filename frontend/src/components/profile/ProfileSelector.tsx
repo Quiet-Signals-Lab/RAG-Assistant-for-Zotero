@@ -95,7 +95,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ className = '' }) => 
   if (isLoading) {
     return (
       <div className={`profile-selector ${className}`}>
-        <span className="text-muted">Loading profiles...</span>
+        <span className="text-muted">Loading profiles…</span>
       </div>
     );
   }
@@ -104,7 +104,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ className = '' }) => 
     <div className={`profile-selector ${className}`}>
       <div className="profile-selector-header">
         <label htmlFor="profile-select" className="profile-label">
-          Profile:
+          Profile
         </label>
         <select
           id="profile-select"
@@ -125,15 +125,14 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ className = '' }) => 
         <Button
           onClick={() => setShowCreateForm(!showCreateForm)}
           variant="secondary"
-          className="btn-sm"
         >
-          {showCreateForm ? 'Cancel' : '+ New'}
+          {showCreateForm ? 'Cancel' : 'New profile'}
         </Button>
         {profiles.length > 1 && activeProfileId && (
           <Button
             onClick={handleDeleteProfile}
             variant="secondary"
-            className="btn-sm btn-danger"
+            className="btn--danger"
             disabled={isDeleting}
             title="Delete current profile"
           >
@@ -156,8 +155,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ className = '' }) => 
           <Button
             type="submit"
             disabled={isCreating || !newProfileName.trim()}
-            className="btn-sm"
-          >
+            >
             {isCreating ? 'Creating...' : 'Create'}
           </Button>
         </form>
@@ -171,82 +169,6 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ className = '' }) => 
         </div>
       )}
 
-      <style>{`
-        .profile-selector {
-          padding: 0.75rem;
-          background: var(--bg-secondary);
-          border-radius: 0.5rem;
-          border: 1px solid var(--border-color);
-        }
-
-        .profile-selector-header {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
-        .profile-label {
-          font-weight: 500;
-          font-size: 0.875rem;
-          color: var(--text-primary);
-        }
-
-        .profile-select {
-          flex: 1;
-          padding: 0.5rem;
-          border: 1px solid var(--border-color);
-          border-radius: 0.375rem;
-          background: var(--bg-primary);
-          color: var(--text-primary);
-          font-size: 0.875rem;
-          cursor: pointer;
-        }
-
-        .profile-select:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .profile-create-form {
-          display: flex;
-          gap: 0.5rem;
-          margin-top: 0.75rem;
-          padding-top: 0.75rem;
-          border-top: 1px solid var(--border-color);
-        }
-
-        .profile-input {
-          flex: 1;
-          padding: 0.5rem;
-          border: 1px solid var(--border-color);
-          border-radius: 0.375rem;
-          background: var(--bg-primary);
-          color: var(--text-primary);
-          font-size: 0.875rem;
-        }
-
-        .profile-input:focus {
-          outline: none;
-          border-color: var(--primary-color);
-        }
-
-        .profile-info {
-          margin-top: 0.5rem;
-        }
-
-        .text-muted {
-          color: var(--text-secondary);
-        }
-
-        .btn-danger {
-          color: #dc3545;
-        }
-
-        .btn-danger:hover {
-          background: rgba(220, 53, 69, 0.1);
-          border-color: #dc3545;
-        }
-      `}</style>
     </div>
   );
 };

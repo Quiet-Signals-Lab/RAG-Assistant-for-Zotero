@@ -1,61 +1,52 @@
-/* Sidebar Tabs Component */
+/* The legacy chat's side panel: the same rooms rail as the desk, then the panel. */
 .sidebar-tabs {
   display: flex;
   height: 100%;
-  background: var(--bg-panel);
+  min-height: 0;
+  background: var(--paper);
 }
 
 .sidebar-tabs__nav {
-  width: 48px;
+  width: 44px;
+  flex: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 4px;
-  border-right: 1px solid var(--border);
-  background: var(--bg-panel-alt);
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-right: 1px solid var(--rule);
 }
 
 .sidebar-tabs__nav-item {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  color: var(--ink);
   cursor: pointer;
-  color: var(--text-muted);
-  transition: all 0.2s ease;
-  position: relative;
 }
 
 .sidebar-tabs__nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-main);
+  border-color: var(--rule);
 }
 
 .sidebar-tabs__nav-item.active {
-  background: var(--bg-main);
-  color: var(--ink);
-  box-shadow: none;
+  background: var(--ink);
+  color: var(--paper);
 }
 
-.sidebar-tabs__nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 24px;
-  background: var(--ink);
-  border-radius: 0 2px 2px 0;
+.sidebar-tabs__nav-item svg {
+  width: 16px;
+  height: 16px;
 }
 
 .sidebar-tabs__content {
   flex: 1;
-  overflow: hidden;
+  min-width: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }

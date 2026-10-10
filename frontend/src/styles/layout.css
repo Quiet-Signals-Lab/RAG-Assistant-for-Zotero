@@ -1,139 +1,223 @@
 @import "./theme.css";
 
-:root {
-  --nav-height: 64px;
-  --titlebar-height: 28px; /* Reduced space for traffic lights */
+/* Legacy chat, in the Reading Room style: the shared room header, then full
+   panes divided by hairlines (side panel | conversation | sources). */
+
+.legacy {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
-.top-nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--nav-height);
+/* ---- Header --------------------------------------------------------------- */
+
+.legacy-header__tools {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px 8px 90px; /* Extra left padding for traffic lights */
-  background: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border-subtle);
-  z-index: 60;
-  -webkit-app-region: drag; /* Allow dragging from nav area */
+  gap: 6px;
 }
 
-.top-nav__left,
-.top-nav__center,
-.top-nav__right {
-  display: flex;
-  align-items: center;
-  -webkit-app-region: no-drag; /* But not from interactive elements */
-}
-
-.top-nav__center {
+.legacy-header__title {
   flex: 1;
+  min-width: 0;
+  display: flex;
   justify-content: center;
 }
 
-.top-nav__title {
-  font-family: var(--font-serif);
-  font-size: 1.05rem;
-  font-weight: 600;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+.legacy-header__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 16px/1.2 var(--font-serif);
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 4px 6px;
+  cursor: text;
 }
 
-.top-nav__title-input {
-  font-size: 1rem;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
+.legacy-header__name--quiet {
+  color: var(--ink-4);
+  cursor: default;
 }
+
+.legacy-header__edit {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: min(520px, 100%);
+}
+
+.legacy-header__input {
+  flex: 1;
+  min-width: 0;
+  font: 15px var(--font-serif);
+  color: var(--ink);
+  background: var(--page);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-button[aria-pressed="true"] {
+  border-color: var(--rule);
+}
+
+/* Sessions menu */
+.sessions {
+  position: relative;
+}
+
+.sessions__count {
+  color: var(--ink-4);
+  font-size: 11px;
+}
+
+.sessions__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 79;
+}
+
+.sessions__menu {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 80;
+  width: min(420px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 12px 14px 8px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+}
+
+.sessions__head {
+  align-items: center;
+}
+
+.sessions__empty {
+  margin: 8px 0;
+  color: var(--ink-3);
+}
+
+.sessions__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sessions__row {
+  display: flex;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sessions__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-3);
+}
+
+.sessions__row--current .sessions__open {
+  color: var(--ink);
+  box-shadow: inset 3px 0 0 var(--brass);
+  padding-left: 10px;
+}
+
+.sessions__title {
+  font: 14px/1.3 var(--font-serif);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessions__meta {
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
+.sessions__delete {
+  width: 28px;
+  background: none;
+  border: 0;
+  color: var(--ink-4);
+  cursor: pointer;
+}
+
+.sessions__delete:hover {
+  color: var(--error);
+}
+
+/* ---- Panes ---------------------------------------------------------------- */
 
 .app-shell {
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr) 340px;
-  grid-template-rows: 1fr;
-  gap: 12px;
-  padding: 12px;
-  padding-top: calc(var(--nav-height) + 8px); /* Minimal spacing after nav */
-  height: 100vh;
-  box-sizing: border-box;
-  overflow: hidden;
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr) minmax(300px, 360px);
+  min-height: 0;
 }
 
-/* Collapsed modifiers change column sizing - chat expands into freed space */
 .app-shell--left-collapsed {
-  grid-template-columns: 0 minmax(0, 1fr) 340px;
+  grid-template-columns: 0 minmax(0, 1fr) minmax(300px, 360px);
 }
 
 .app-shell--right-collapsed {
-  grid-template-columns: 360px minmax(0, 1fr) 0;
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr) 0;
 }
 
 .app-shell--left-collapsed.app-shell--right-collapsed {
   grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
-.app-shell--left-collapsed .app-shell__sidebar,
-.app-shell--right-collapsed .app-shell__sources {
-  width: 0;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  opacity: 0;
-}
-
-.app-shell--left-collapsed .app-shell__sidebar > *,
-.app-shell--right-collapsed .app-shell__sources > * {
-  display: none;
-}
-
-/* Smooth transitions for collapse/expand */
-.app-shell {
-  transition: grid-template-columns 300ms cubic-bezier(0.4, 0.0, 0.2, 1);
-}
-
-.app-shell__sidebar,
-.app-shell__sources {
-  transition: 
-    width 300ms cubic-bezier(0.4, 0.0, 0.2, 1),
-    opacity 250ms cubic-bezier(0.4, 0.0, 0.2, 1),
-    padding 250ms ease,
-    border 250ms ease;
-}
-
-/* Panels */
-
 .app-shell__sidebar,
 .app-shell__main,
 .app-shell__sources {
-  background-color: var(--paper);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--rule);
-  box-shadow: none;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 0;
 }
 
-.app-shell__sidebar header {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--rule);
+.app-shell__sidebar {
+  border-right: 1px solid var(--rule);
 }
-
-.app-shell__sidebar main {
-  padding: 12px 16px;
-  overflow: auto;
-}
-
-/* Main chat area */
 
 .app-shell__main {
-  background-color: var(--bg-panel-alt);
+  background: var(--page);
 }
+
+.app-shell__sources {
+  border-left: 1px solid var(--rule);
+  overflow-y: auto;
+  padding: 14px 18px 24px;
+}
+
+.app-shell--left-collapsed .app-shell__sidebar,
+.app-shell--right-collapsed .app-shell__sources {
+  visibility: hidden;
+  border: 0;
+  padding: 0;
+}
+
+/* ---- Conversation --------------------------------------------------------- */
 
 .chat-view {
   display: flex;
@@ -141,112 +225,71 @@
   height: 100%;
 }
 
-.app-shell__main {
-  min-height: 0;
-  overflow: hidden;
+.chat-view__error {
+  padding: 10px 24px 0;
 }
 
 .chat-view__messages {
   flex: 1;
-  padding: 0;
-  overflow: auto;
+  overflow-y: auto;
 }
-
-.chat-view__input {
-  padding: 16px 20px;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
-}
-
-/* Sources panel */
-
-.app-shell__sources header {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--rule);
-}
-
-.app-shell__sources main {
-  padding: 12px 16px;
-  overflow: auto;
-}
-
-/* Session header in main column */
-
-.session-header {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--rule);
-  background: transparent;
-}
-
-.session-header__title {
-  font-family: var(--font-serif);
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  color: var(--text-main);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-}
-
-.session-header__meta {
-  margin-top: 2px;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-/* Snippets list */
-
-.snippets-list > div {
-  margin-bottom: 12px;
-}
-
-.snippets-list .snippet {
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--rule);
-  background: var(--bg-panel-alt);
-}
-
-/* Message list container - message styles in globals.css */
 
 .message-list {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  padding: 0 24px;
 }
 
 .message-list__empty {
   flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
 }
 
-/* Chat input */
+.chat-view__input {
+  padding: 12px 24px 16px;
+  border-top: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+.chat-input__label {
+  display: block;
+  margin-bottom: 6px;
+  font: 600 11px/1.4 var(--font-sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
 
 .chat-input__wrapper {
   display: flex;
-  gap: var(--spacing-md);
+  align-items: flex-end;
+  gap: 10px;
 }
 
 .chat-input__textarea {
   flex: 1;
   resize: none;
-  padding: var(--spacing-md);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  font-family: var(--font-sans);
-  font-size: 0.95rem;
-  min-height: 60px;
-  max-height: 140px;
-  background: var(--bg-surface);
+  min-height: 52px;
+  max-height: 160px;
+  padding: 6px 0 8px;
+  font: 16px/1.4 var(--font-serif);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1.5px solid var(--ink);
+  border-radius: 0;
 }
 
-.chat-input__textarea:focus {
-  outline: 2px solid var(--ink);
-  border-color: var(--accent-focus);
-  box-shadow: none;
+.chat-input__textarea::placeholder {
+  color: var(--ink-4);
+}
+
+.chat-input__hint {
+  margin-top: 6px;
+  font: 11px var(--font-mono);
+  color: var(--ink-4);
 }
 
 /* Buttons: flat, hairline, sentence case */
@@ -299,82 +342,88 @@
   background: var(--bg-hover);
 }
 
-/* Sources strip */
-
-.sources-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-}
-
-.source-pill {
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--accent-soft);
-  background: var(--bg-panel-alt);
-  padding: 3px 10px;
-  font-size: 0.8rem;
-  color: var(--text-accent);
-}
-
-/* Error / status */
+/* Error line */
 
 .error-banner {
-  padding: 6px 10px;
-  margin-bottom: var(--spacing-sm);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--stamp);
-  background: transparent;
-  color: var(--stamp);
-  font-size: 0.85rem;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.error-banner::before {
+  content: "Problem · ";
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--error);
 }
 
 .status-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 0.78rem;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel-alt);
+  font: 11px var(--font-mono);
+  color: var(--ink-3);
 }
 
-/* Responsive */
+/* ---- Widths --------------------------------------------------------------- */
 
-@media (max-width: 1100px) {
-  .app-shell {
-    grid-template-columns: 220px minmax(0, 3fr);
-    grid-template-rows: auto 60vh 40vh;
-    grid-template-areas:
-      "sidebar sidebar"
-      "main main"
-      "sources sources";
+/* Narrower windows: the sources pane gives way first, then the side panel. */
+@media (max-width: 1099px) {
+  .app-shell,
+  .app-shell--right-collapsed {
+    grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) 0;
+  }
+
+  .app-shell--left-collapsed,
+  .app-shell--left-collapsed.app-shell--right-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr) 0;
+  }
+
+  .app-shell__sources {
+    visibility: hidden;
+    border: 0;
+    padding: 0;
+  }
+}
+
+@media (max-width: 759px) {
+  .app-shell,
+  .app-shell--left-collapsed,
+  .app-shell--right-collapsed,
+  .app-shell--left-collapsed.app-shell--right-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr) 0;
   }
 
   .app-shell__sidebar {
-    grid-area: sidebar;
-    flex-direction: row;
-    align-items: stretch;
+    visibility: hidden;
+    border: 0;
   }
 
-  .app-shell__main {
-    grid-area: main;
+  /* Both side panes are hidden here, so their toggles and the title make way for Sessions. */
+  .legacy .room-brand__name,
+  .legacy-header__title,
+  .legacy-header .icon-button[aria-pressed] {
+    display: none;
   }
 
-  .app-shell__sources {
-    grid-area: sources;
-  }
-}
-
-@media (max-width: 800px) {
-  .app-shell {
-    display: flex;
-    flex-direction: column;
-    padding: var(--spacing-lg);
+  .legacy-header__tools {
+    flex: 1;
   }
 
-  .app-shell__sidebar,
-  .app-shell__sources {
-    display: none; /* can replace with tabbed UI later */
+  .legacy-header__tools .icon-button,
+  .legacy-header .room-header__fill {
+    display: none;
+  }
+
+  .legacy-header {
+    gap: 8px;
+  }
+
+  .message-list,
+  .chat-view__input {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }

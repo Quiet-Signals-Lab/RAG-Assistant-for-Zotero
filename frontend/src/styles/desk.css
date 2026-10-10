@@ -15,44 +15,53 @@
   font-family: var(--font-mono);
 }
 
-/* ---- Header -------------------------------------------------------------- */
+/* ---- Room header: shared by the desk, Settings and legacy chat --------------- */
 
-.desk__header {
+.room-header {
+  height: 44px;
+  flex: none;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 0 12px 0 16px;
   border-bottom: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
   -webkit-app-region: drag;
   min-width: 0;
 }
 
-.desk--mac .desk__header {
+.room-header--mac {
   padding-left: 84px; /* clear of the macOS window buttons */
 }
 
-.desk__brand {
+.room-brand {
   display: flex;
   align-items: center;
   gap: 10px;
   white-space: nowrap;
 }
 
-.desk__brand-mark {
+.room-brand__mark {
   width: 26px;
   height: 11px;
   border: 1.5px solid var(--ink);
   border-top: 3px solid var(--brass);
 }
 
-.desk__brand-name {
+.room-brand__name {
   font: 500 11px/1 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
-.desk__header-fill {
+.room-header__fill {
   flex: 1;
+}
+
+.room-header .btn {
+  white-space: nowrap;
 }
 
 .desk__index {
@@ -136,6 +145,11 @@
 .desk__ask {
   padding: 14px 16px 24px;
   border-right: 1px solid var(--rule);
+}
+
+/* Panels shared with legacy chat bring their own padding; the desk's pane has it already. */
+.desk__ask > .side-panel {
+  padding: 0;
 }
 
 .desk__browse {
@@ -1012,7 +1026,7 @@ mark {
     display: flex;
   }
 
-  .desk__brand-name {
+  .desk .room-brand__name {
     display: none;
   }
 

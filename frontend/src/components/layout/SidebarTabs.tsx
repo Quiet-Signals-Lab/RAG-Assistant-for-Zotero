@@ -39,7 +39,7 @@ const SidebarTabs: React.FC<SidebarTabsProps> = ({
   return (
     <div className="sidebar-tabs">
       {/* Icon navigation on the left edge */}
-      <nav className="sidebar-tabs__nav">
+      <nav className="sidebar-tabs__nav" aria-label="Side panel">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -47,6 +47,7 @@ const SidebarTabs: React.FC<SidebarTabsProps> = ({
             onClick={() => handleTabClick(tab.id)}
             title={tab.label}
             aria-label={tab.label}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
           >
             {tab.icon}
           </button>

@@ -75,7 +75,7 @@ const LegacyChatShell: React.FC = () => {
   ];
 
   return (
-    <>
+    <div className="legacy">
       <TopNav />
       <div className={classes}>
         <aside className="app-shell__sidebar">
@@ -93,7 +93,7 @@ const LegacyChatShell: React.FC = () => {
           <SourcesPanel />
         </section>
       </div>
-    </>
+    </div>
   );
 };
 

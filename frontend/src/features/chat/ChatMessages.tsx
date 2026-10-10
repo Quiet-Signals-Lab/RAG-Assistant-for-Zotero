@@ -4,6 +4,8 @@ import type { ChatMessage } from "../../types/domain";
 import { Spinner } from "../../components/ui/Spinner";
 import { useResponseSelection } from "../../contexts/ResponseSelectionContext";
 import ReasoningSection from "../../components/ui/ReasoningSection";
+import { useSettings } from "../../contexts/SettingsContext";
+import { normaliseMarkdown } from "./markdown";
 
 interface Props {
   messages: ChatMessage[];
@@ -16,26 +18,7 @@ function formatMessageWithCitations(content: string | undefined): React.ReactNod
     return <span>No response available</span>;
   }
   
-  // Pre-process content to fix markdown formatting issues
-  let processedContent = content;
-  
-  // Fix broken bold tags split across lines: "**Title\n\n**" -> "**Title**"
-  processedContent = processedContent.replace(/\*\*([^\n*]+)\n+\*\*/g, '**$1**');
-  
-  // Fix bold tags with only newlines between: "**\n\nTitle\n\n**" -> "**Title**"
-  processedContent = processedContent.replace(/\*\*\s*\n+\s*([^\n*]+?)\s*\n+\s*\*\*/g, '**$1**');
-  
-  // Fix orphaned opening bold tags at end of line followed by closing tag
-  processedContent = processedContent.replace(/\*\*\s*\n+([^*\n]+)\*\*/g, '**$1**');
-  processedContent = processedContent.replace(/\*\*([^*\n]+)\s*\n+\*\*/g, '**$1**');
-  
-  // Ensure proper spacing before AND after bold headings
-  // Before: Add double newline before bold text (but not at start of message)
-  processedContent = processedContent.replace(/([^\n])\n(\*\*[^*]+\*\*)/g, '$1\n\n$2');
-  processedContent = processedContent.replace(/^([^\n*])(\*\*[^*]+\*\*)/gm, '$1\n\n$2');
-  
-  // After: Add double newline after bold text (but not if already followed by newlines)
-  processedContent = processedContent.replace(/(\*\*[^*]+\*\*)([^\n])/g, '$1\n\n$2');
+  const processedContent = normaliseMarkdown(content);
   
   // Custom renderer that handles citations inline without breaking flow
   const renderContentWithCitations = (text: string) => {
@@ -154,6 +137,7 @@ const ChatMessages: React.FC<Props> = ({ messages, loading }) => {
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
   const { selectedResponseId, setSelectedResponseId } = useResponseSelection();
+  const { updateSettings } = useSettings();
 
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -174,98 +158,71 @@ const ChatMessages: React.FC<Props> = ({ messages, loading }) => {
       <div className="message-list">
         {messages.length === 0 && !loading && (
           <div className="message-list__empty">
-            <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)" }}>
-              <div style={{ fontSize: "18px", fontWeight: 600, marginBottom: "8px" }}>Welcome to RAG Assistant for Zotero</div>
-              <div>Ask questions about your research library to get started.</div>
+            <div className="desk-intro">
+              <h2>Legacy chat.</h2>
+              <p>
+                Ask a question and a model writes an answer from passages in your library, with numbered citations.
+                Check every claim against the evidence and sources beside it: the answer is the model's, not your sources'.
+              </p>
+              <p>The reference desk returns the sources themselves, ranked, with no model in between.</p>
+              <button type="button" className="btn" onClick={() => updateSettings({ interfaceMode: "desk" })}>
+                Switch to the reference desk
+              </button>
             </div>
           </div>
         )}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`message message--${m.role === "user" ? "user" : "assistant"}`}
-            data-response-id={m.role === "assistant" ? m.id : undefined}
-            onClick={() => {
-              if (m.role === "assistant") {
-                setSelectedResponseId(m.id);
-              }
-            }}
-            style={{
-              cursor: m.role === "assistant" ? "pointer" : "default",
-              background: m.role === "assistant" && selectedResponseId === m.id ? "var(--bg-selected, #f0f8ff)" : undefined,
-              borderLeft: m.role === "assistant" && selectedResponseId === m.id ? "3px solid var(--accent)" : undefined,
-              transition: "background 0.2s ease, border-left 0.2s ease"
-            }}
-          >
-            <div className="message__avatar">
-              {m.role === "user" ? (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              ) : (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </div>
-            <div className="message__content">
+        {messages.map((m) => {
+          const isAnswer = m.role === "assistant";
+          const selected = isAnswer && selectedResponseId === m.id;
+          return (
+            <article
+              key={m.id}
+              className={["message", isAnswer ? "message--assistant" : "message--user", selected ? "message--selected" : ""].filter(Boolean).join(" ")}
+              data-response-id={isAnswer ? m.id : undefined}
+              onClick={isAnswer ? () => setSelectedResponseId(m.id) : undefined}
+            >
               <div className="message__role">
-                {m.role === "user" ? "You" : "Assistant"}
+                {isAnswer ? (
+                  <>
+                    <span>Answer</span>
+                    <span className="message__note"> · written by the model</span>
+                  </>
+                ) : (
+                  "Your question"
+                )}
               </div>
               <div className="message__body">{formatMessageWithCitations(m.content)}</div>
-              {m.role === "assistant" && m.reasoning && (
-                <ReasoningSection reasoning={m.reasoning} messageId={m.id} />
-              )}
-              {m.role === "assistant" && (
-                <button
-                  className="btn"
-                  onClick={() => handleCopy(m.content, m.id)}
-                  style={{
-                    marginTop: "8px",
-                    padding: "4px 10px",
-                    fontSize: "11px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px"
-                  }}
-                  title="Copy answer"
-                >
-                  {copiedId === m.id ? (
-                    <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      Copy
-                    </>
+              {isAnswer && m.reasoning && <ReasoningSection reasoning={m.reasoning} messageId={m.id} />}
+              {isAnswer && (
+                <div className="message__actions">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopy(m.content, m.id);
+                    }}
+                  >
+                    {copiedId === m.id ? "Copied" : "Copy answer"}
+                  </button>
+                  {!selected && (
+                    <button type="button" className="btn" onClick={() => setSelectedResponseId(m.id)}>
+                      Show its evidence
+                    </button>
                   )}
-                </button>
+                </div>
               )}
-            </div>
-          </div>
-        ))}
+            </article>
+          );
+        })}
         {loading && (
-          <div className="message message--assistant">
-            <div className="message__avatar">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+          <article className="message message--assistant" aria-busy="true">
+            <div className="message__role">Answer</div>
+            <div className="message__body message__body--working">
+              <Spinner size="sm" />
+              <span>Reading your library and writing an answer…</span>
             </div>
-            <div className="message__content">
-              <div className="message__role">Assistant</div>
-              <div className="message__body" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Spinner size="sm" />
-                <span>Analyzing your library...</span>
-              </div>
-            </div>
-          </div>
+          </article>
         )}
         <div ref={messagesEndRef} />
       </div>

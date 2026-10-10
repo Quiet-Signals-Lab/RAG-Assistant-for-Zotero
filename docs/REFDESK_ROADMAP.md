@@ -39,6 +39,8 @@ Pure, testable desk logic lives in a new `backend/desk.py`. The class keeps orch
 - [x] **2.7 Evidence (right).** Passages for the selected item with stem-match highlighting, page, band, pin, open in Zotero at page; reading list of pins.
 - [x] **2.8 Keyboard and responsive.** ↑/↓ rows, → evidence, `p` pin, `o` open, `/` query. Three panes ≥ 1100 px; evidence as an overlay 760–1099 px; one pane with Ask · Browse · Verify under 760 px.
 
+- [x] **2.9 Settings and legacy chat in the Reading Room style.** Shared room header for all three rooms. Settings: section index, ledger rows (what the setting is | its controls), save bar; legacy-only settings say so. Legacy chat: full panes divided by hairlines, the desk's rail, mono turn labels ("Answer · written by the model"), sources and evidence as desk rows. Also fixed on the way: legacy evidence inserted PDF text as raw HTML; legacy sources showed an invented relevance percentage and loaded favicons from Google; the markdown repair split inline bold into paragraphs; Settings named the wrong licence (the project is GPL-3.0).
+
 ### Found by running Stages 1–2 on a real library (2026-10-11)
 
 A throwaway index of 599 items built from Zotero abstracts, real reranker, real Zotero database:

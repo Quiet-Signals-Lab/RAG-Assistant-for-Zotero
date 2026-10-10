@@ -312,20 +312,11 @@ const LibraryManagementPanel: React.FC = () => {
   };
 
   return (
-    <>
-      <header>
-        <div style={{
-          fontFamily: "var(--font-serif)",
-          fontSize: "20px",
-          fontWeight: 600,
-          color: "var(--text-main)",
-          letterSpacing: "0.02em",
-          marginBottom: "4px"
-        }}>
-          Library
-        </div>
-        <div className="muted">Manage indexing and metadata for your Zotero library</div>
-      </header>
+    <div className="side-panel">
+      <div className="panel-head">
+        <h2 className="panel-head__title">Library</h2>
+        <span className="panel-head__hint">index and exclusions</span>
+      </div>
 
       <main className="lib-panel">
 
@@ -364,8 +355,9 @@ const LibraryManagementPanel: React.FC = () => {
           )}
 
           {indexStats && (
-            <div className="model-info">
-              <strong>Embedding Model:</strong> {indexStats.current_embedding_model}
+            <div className="stat-card model-info">
+              <div className="stat-value">{indexStats.current_embedding_model}</div>
+              <div className="stat-label">Embedding model</div>
             </div>
           )}
         </section>
@@ -432,36 +424,17 @@ const LibraryManagementPanel: React.FC = () => {
           </p>
 
           {/* Axis selector */}
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+          <div className="toggle-group toggle-group--three" role="group" aria-label="Exclude by">
             {exclusionAxes.map(axis => (
               <button
                 key={axis.key}
                 type="button"
+                className={`toggle-btn ${activeAxis === axis.key ? 'active' : ''}`}
+                aria-pressed={activeAxis === axis.key}
                 onClick={() => { setActiveAxis(axis.key); setExclSearch(''); }}
-                style={{
-                  flex: 1,
-                  padding: '7px 10px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer',
-                  border: '1px solid var(--rule)',
-                  background: activeAxis === axis.key ? 'var(--ink)' : 'transparent',
-                  color: activeAxis === axis.key ? 'var(--paper)' : 'var(--text-main)',
-                }}
               >
                 {axis.label}
-                {axis.selected.length > 0 && (
-                  <span style={{
-                    marginLeft: '6px',
-                    fontSize: '11px',
-                    padding: '1px 6px',
-                    borderRadius: '10px',
-                    background: 'transparent',
-                  }}>
-                    {axis.selected.length}
-                  </span>
-                )}
+                {axis.selected.length > 0 && <span className="toggle-btn__count"> {axis.selected.length}</span>}
               </button>
             ))}
           </div>
@@ -772,7 +745,7 @@ const LibraryManagementPanel: React.FC = () => {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

@@ -216,20 +216,11 @@ const PromptScaffoldingPanel: React.FC = () => {
   }, [selectedTags, selectedCollections, yearStart, yearEnd, titleFilter, authorFilter, itemTypeFilter, isMetadataAware, isManualMode]);
   
   return (
-    <>
-      <header>
-        <div style={{ 
-          fontFamily: "var(--font-serif)", 
-          fontSize: "20px", 
-          fontWeight: 600,
-          color: "var(--text-main)",
-          letterSpacing: "0.02em",
-          marginBottom: "4px"
-        }}>
-          Scope
-        </div>
-        <div className="muted">Filter library for targeted queries</div>
-      </header>
+    <div className="side-panel">
+      <div className="panel-head">
+        <h2 className="panel-head__title">Scope</h2>
+        <span className="panel-head__hint">which items chat searches</span>
+      </div>
       
       <main className="scope-panel">
         {/* Search Engine Mode Toggle */}
@@ -665,7 +656,7 @@ const PromptScaffoldingPanel: React.FC = () => {
           )}
         </div>
       </main>
-    </>
+    </div>
   );
 };
 

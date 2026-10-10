@@ -10,7 +10,7 @@ const ChatView: React.FC = () => {
   return (
     <div className="chat-view">
       {error && (
-        <div style={{ padding: "6px 16px" }}>
+        <div className="chat-view__error">
           <ErrorBanner message={error} />
         </div>
       )}
