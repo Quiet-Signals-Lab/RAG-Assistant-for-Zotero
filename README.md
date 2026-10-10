@@ -13,7 +13,7 @@ The application can run entirely on your local machine. Your documents and queri
 
 ## Quick Installation
 
-The app is available on **macOS** (Apple Silicon only), **Windows**, and **Linux**. You can always download the latest installer from [Releases](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases).
+The app is available on **macOS** (Apple Silicon, macOS 13 or later), **Windows**, and **Linux**. You can always download the latest installer from [Releases](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases).
 
 Or install it from a package manager:
 

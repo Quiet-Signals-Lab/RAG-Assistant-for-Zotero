@@ -57,7 +57,7 @@ Not necessary for Ollama.
 SYSTEM REQUIREMENTS
 -------------------
 
-- macOS 11.0 (Big Sur) or later
+- macOS 13.0 (Ventura) or later
 - 8GB RAM minimum (16GB recommended)
 - 2GB free disk space for vector database
 
