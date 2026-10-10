@@ -10,6 +10,8 @@
 
 See the main [README.md](../README.md) for setup and [BUILD_CHECKLIST.md](BUILD_CHECKLIST.md) for building.
 
+Since Electron 42 the `electron` npm package no longer downloads its binary during `npm install`; the first `npm run dev` (or `npx electron`) fetches it, about 100 MB, into `~/.cache/electron`. Packaging is unaffected: electron-builder downloads its own copy of the runtime. If you run Electron from a shell inside VS Code, clear `ELECTRON_RUN_AS_NODE` first (`env -u ELECTRON_RUN_AS_NODE npm run dev`), otherwise the binary starts as plain Node.
+
 ## Architecture Overview
 npm run package:win    # Windows: NSIS + ZIP
 npm run package:linux  # Linux: AppImage + DEB

@@ -50,9 +50,8 @@ npm run build
 npm run package:mac
 ```
 **Verify output:**
-- [ ] `release/RAG-Assistant-*-mac-arm64.dmg`
-- [ ] `release/RAG-Assistant-*-mac-x64.dmg`
-- [ ] `release/*.zip` files (both architectures)
+- [ ] `release/RAG-Assistant-*-mac-arm64.dmg` (Apple Silicon only; macOS 13 or later)
+- [ ] `release/*.zip` (used by the auto-updater)
 - [ ] `release/*.blockmap` files
 - [ ] `release/latest-mac.yml` ← Critical for auto-updates!
 

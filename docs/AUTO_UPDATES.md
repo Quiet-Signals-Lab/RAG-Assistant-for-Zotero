@@ -6,24 +6,11 @@ This document describes the automatic update system implemented in RAG Assistant
 
 The application uses Electron's `electron-updater` module to provide seamless automatic updates from GitHub Releases. Users can check for updates, download them, and install them directly from the Settings page.
 
-## Multi-Architecture Support (macOS)
+## macOS builds
 
-For macOS, the app supports both Intel (x64) and Apple Silicon (arm64) architectures:
-- Each architecture has its own PyInstaller backend bundle
-- GitHub Actions builds both architectures separately on `macos-13` (Intel) and `macos-14` (ARM)
-- The workflow merges update manifests to ensure electron-updater can find the correct architecture
-- Users automatically receive updates matching their system architecture
+The macOS build is Apple Silicon (arm64) only, produced on a `macos-14` runner, and requires macOS 13 (Ventura) or later since Electron 44. `latest-mac.yml` carries `minimumSystemVersion: 22.0.0` (the Darwin kernel version of macOS 13); electron-updater compares it with `os.release()` and skips the update on an older Mac rather than installing a build that cannot launch. electron-builder does not write that key itself, so the release workflow appends it after packaging.
 
-### How It Works
-
-1. **Separate Builds**: Each architecture is built on its native runner to ensure correct binary architecture
-2. **Manifest Merging**: After builds complete, `scripts/merge-mac-yml.js` combines both `latest-mac.yml` files
-3. **Smart Downloads**: electron-updater reads the merged manifest and downloads the appropriate architecture based on `process.arch`
-
-This ensures that:
-- Intel Mac users get x64 binaries (no "error -86" spawn failures)
-- Apple Silicon users get native arm64 binaries (optimal performance)
-- Auto-updates work correctly for both architectures
+`scripts/merge-mac-yml.js` dates from the period when Intel and Apple Silicon builds were merged into one manifest. Nothing runs it any more.
 
 ## Architecture
 
