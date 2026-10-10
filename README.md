@@ -1,6 +1,12 @@
 
 # RAG Assistant for Zotero
 
+[![Latest version](https://img.shields.io/github/v/release/Quiet-Signals-Lab/RAG-Assistant-for-Zotero?label=version)](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/latest)
+[![Downloads](https://img.shields.io/badge/downloads-2%2C000%2B-blue)](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases)
+[![License: GPL-3.0](https://img.shields.io/github/license/Quiet-Signals-Lab/RAG-Assistant-for-Zotero)](LICENSE)
+
+<a href="https://buymeacoffee.com/aahepburn"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
+
 An open‑source desktop RAG application that enables semantic search across your Zotero library. Easily discover conceptually related papers and ideas within your PDF collection using local or cloud‑based LLMs. The app provides source attribution, metadata filtering, and seamless integration with Zotero.
 
 ## What It Does
