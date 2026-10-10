@@ -1,30 +1,43 @@
 #!/bin/bash
-# Shell wrapper to fully detach Python backend from Electron process tree
-# This avoids Chromium sandbox restrictions that can kill child Python processes
+# Shell wrapper to fully detach the Python backend from the Electron process tree.
+# This avoids Chromium sandbox restrictions that can kill child Python processes.
+#
+# Logs go to $RAG_LOG_DIR (Electron passes its user data "logs" folder) so they
+# survive reboots and are not overwritten on every launch. /tmp is the fallback
+# when the wrapper is run by hand.
 
-# Log file for debugging
-LOG="/tmp/backend-shell-wrapper.log"
+LOG_DIR="${RAG_LOG_DIR:-/tmp}"
+mkdir -p "$LOG_DIR"
+BACKEND_LOG="$LOG_DIR/backend.log"
+LOG="$LOG_DIR/backend-shell-wrapper.log"
+
+# Keep one previous generation once the log passes 10 MB.
+if [ -f "$BACKEND_LOG" ] && [ "$(stat -c %s "$BACKEND_LOG" 2>/dev/null || echo 0)" -gt 10485760 ]; then
+    mv -f "$BACKEND_LOG" "$BACKEND_LOG.1"
+fi
 
 {
-    echo "=== Shell wrapper started ===" 
+    echo "=== Shell wrapper started ==="
     echo "PID: $$"
     echo "PPID: $PPID"
     echo "Args: $@"
     date
-    
-    # Fully detach using setsid and nohup
-    # This creates a new session and process group completely independent of Electron
-    setsid nohup "$@" > /tmp/backend-stdout.log 2> /tmp/backend-stderr.log &
+
+    echo "" >> "$BACKEND_LOG"
+    echo "[wrapper] backend starting at $(date -Is)" >> "$BACKEND_LOG"
+
+    # Fully detach using setsid and nohup: a new session and process group
+    # completely independent of Electron. stdout and stderr share one file so
+    # tracebacks stay in order with the lines around them.
+    setsid nohup "$@" >> "$BACKEND_LOG" 2>&1 &
     BACKEND_PID=$!
-    
+
     echo "Backend launched with PID: $BACKEND_PID"
-    echo "Check logs:"
-    echo "  /tmp/backend-stdout.log"
-    echo "  /tmp/backend-stderr.log"
-    
-    # Write PID file so Electron can track it
-    echo "$BACKEND_PID" > /tmp/backend.pid
-    
+    echo "Backend log: $BACKEND_LOG"
+
+    # PID file so Electron can track it
+    echo "$BACKEND_PID" > "$LOG_DIR/backend.pid"
+
 } >> "$LOG" 2>&1
 
 # Exit immediately - backend is fully detached

@@ -110,7 +110,7 @@ class OllamaProvider(BaseProvider):
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
-                # 2025 best practices for academic RAG:
+                # Generation settings for academic RAG:
                 # - top_p: 0.9 prevents low-probability hallucinations via nucleus sampling
                 # - top_k: 50 provides vocab diversity for technical language
                 # - repeat_penalty: 1.15 prevents citation/concept repetition

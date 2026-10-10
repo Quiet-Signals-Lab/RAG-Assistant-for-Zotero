@@ -3,9 +3,12 @@
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import numpy as np
 import os
+import logging
 import threading
 from typing import Optional
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Set persistent cache directory for sentence-transformers models
 # This prevents re-downloading models on every startup
@@ -137,15 +140,25 @@ def load_embedding_model(model_id: Optional[str] = None) -> SentenceTransformer:
 
     # Load new model with explicit cache directory
     config = get_model_config(target_model_id)
-    print(f"Loading embedding model: {config['name']} ({config['description']})")
+    logger.info("Loading embedding model: %s (%s)", config['name'], config['description'])
     _current_model = SentenceTransformer(config['name'], cache_folder=MODELS_CACHE_DIR)
     _current_model_id = target_model_id
 
     return _current_model
 
-# Cross-encoder for re-ranking retrieved passages
-# This is much more accurate than cosine similarity for relevance scoring
-reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', cache_folder=MODELS_CACHE_DIR)
+# Cross-encoder for re-ranking retrieved passages. Loaded on first use so
+# importing this module (and anything that imports it, such as the API) has
+# no network or model-loading side effects.
+_reranker: Optional[CrossEncoder] = None
+_reranker_lock = threading.Lock()
+
+
+def _get_reranker() -> CrossEncoder:
+    global _reranker
+    with _reranker_lock:
+        if _reranker is None:
+            _reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', cache_folder=MODELS_CACHE_DIR)
+        return _reranker
 
 
 def get_embeddings_batch(texts: list[str], model_id: Optional[str] = None) -> list[np.ndarray]:
@@ -241,7 +254,7 @@ def rerank_passages(query: str, passages: list[str], top_k: Optional[int] = None
     pairs = [[query, passage] for passage in passages]
     
     # Get relevance scores
-    scores = reranker.predict(pairs)
+    scores = _get_reranker().predict(pairs)
     
     # Sort by score (descending) and return indices with scores
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)

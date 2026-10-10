@@ -11,7 +11,7 @@ const IconPanel = ({ children }: { children: React.ReactNode }) => (
 
 const TopNav: React.FC = () => {
   const navigate = useNavigate();
-  const { sessions, currentSessionId, getSession, updateSessionTitle, leftCollapsed, rightCollapsed, toggleLeft, toggleRight, createSession, setCurrentSession, deleteSession } = useSessions();
+  const { sessions, currentSessionId, getSession, updateSessionTitle, leftCollapsed, rightCollapsed, toggleLeft, toggleRight, setCurrentSession, deleteSession } = useSessions();
   const session = currentSessionId ? getSession(currentSessionId) : null;
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(session?.title ?? "RAG Assistant for Zotero");

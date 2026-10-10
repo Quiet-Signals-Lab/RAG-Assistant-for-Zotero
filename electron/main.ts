@@ -27,7 +27,6 @@ const FRONTEND_DEV_URL = 'http://localhost:5173';
 // Global references
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
-let authToken: string | null = null;
 let isInitializing = true; // Prevent premature quit during startup
 let isShuttingDown = false; // FIX: Prevent duplicate shutdown attempts
 let updateDownloaded = false;
@@ -103,10 +102,32 @@ if (process.platform === 'linux') {
 }
 
 /**
- * Generate a random authentication token for backend communication
+ * Directory for backend logs. Lives under the user data folder so it survives
+ * reboots and lets a crash be diagnosed after the fact (issue #86).
  */
-function generateAuthToken(): string {
-  return require('crypto').randomBytes(32).toString('hex');
+function logDir(): string {
+  const dir = path.join(app.getPath('userData'), 'logs');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * Open backend.log for appending. One previous generation is kept once the
+ * file passes 10 MB, so a long-running install never fills the disk.
+ */
+function openBackendLog(): fs.WriteStream {
+  const file = path.join(logDir(), 'backend.log');
+  try {
+    if (fs.existsSync(file) && fs.statSync(file).size > 10 * 1024 * 1024) {
+      fs.renameSync(file, `${file}.1`);
+    }
+  } catch (e) {
+    console.warn('Could not rotate backend log:', e);
+  }
+  const stream = fs.createWriteStream(file, { flags: 'a' });
+  stream.write(`\n[electron] backend starting at ${new Date().toISOString()} (app ${app.getVersion()})\n`);
+  console.log(`Backend log: ${file}`);
+  return stream;
 }
 
 /**
@@ -768,18 +789,6 @@ async function getBackendPath(): Promise<{ command: string; args: string[]; cwd:
         };
       }
       
-      // TEMPORARY DEBUG: Use wrapper script to diagnose spawn issues
-      const debugWrapperPath = path.join(resourcesPath, 'uvicorn_wrapper.py');
-      if (fs.existsSync(debugWrapperPath)) {
-        console.log(`🔍 DEBUG: Using wrapper script at ${debugWrapperPath}`);
-        return {
-          command: venvSetup.pythonPath,
-          args: [debugWrapperPath],
-          cwd: resourcesPath,
-          pythonInfo: { version: 'venv', source: 'linux-venv' }
-        };
-      }
-      
       return {
         command: venvSetup.pythonPath,
         args: ['-m', 'uvicorn', 'backend.main:app', '--port', BACKEND_PORT.toString()],
@@ -1097,12 +1106,13 @@ async function startBackend(): Promise<boolean> {
       ...((!IS_DEV && process.platform === 'darwin') ? {
         DYLD_LIBRARY_PATH: path.join(process.resourcesPath, 'python', 'lib')
       } : {}),
-      // CRITICAL FIX: Unset Electron sandbox variables that get inherited by child processes
+      // Unset Electron sandbox variables that get inherited by child processes
       // This prevents the Python backend from being killed by Electron's sandbox
       ELECTRON_RUN_AS_NODE: undefined,
       ELECTRON_NO_ASAR: undefined,
-      // Pass auth token to backend if needed in future
-      // AUTH_TOKEN: authToken
+      // Linux launches through start-backend.sh, which writes the backend's
+      // stdout/stderr here instead of /tmp (issue #86).
+      RAG_LOG_DIR: logDir(),
     };
     
     console.log('Backend environment:');
@@ -1114,10 +1124,10 @@ async function startBackend(): Promise<boolean> {
     }
     console.log('Spawning process...');
     
-    // Spawn in a new process group so we can kill all child processes
-    // EXPERIMENTAL FIX: Try different stdio configuration for Linux production
-    // Piped stdio might be failing when Electron runs from asar
+    // Packaged Linux builds launch through a detached shell wrapper that owns
+    // the backend's stdio; everywhere else we pipe it and write the log file here.
     const useLogFiles = process.platform === 'linux' && app.isPackaged;
+    const backendLog = useLogFiles ? null : openBackendLog();
     
     const spawnOptions: any = {
       cwd,
@@ -1181,6 +1191,7 @@ async function startBackend(): Promise<boolean> {
       backendProcess.stdout?.on('data', (data) => {
         const output = data.toString().trim();
         backendOutput.push(output);
+        backendLog?.write(data);
         const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
         console.log(`[Backend ${timestamp}] ${output}`);
       });
@@ -1188,6 +1199,7 @@ async function startBackend(): Promise<boolean> {
       backendProcess.stderr?.on('data', (data) => {
         const output = data.toString().trim();
         backendErrors.push(output);
+        backendLog?.write(data);
         const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
         
         // Parse model download progress (tqdm format: "filename: XX%|####...")
@@ -1244,6 +1256,7 @@ async function startBackend(): Promise<boolean> {
     
     backendProcess.on('exit', (code, signal) => {
       const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+      backendLog?.end(`[electron] backend exited code=${code} signal=${signal} at ${new Date().toISOString()}\n`);
       console.log('================================================================================');
       console.log(`[Backend ${timestamp}] Process exited`);
       console.log(`  Exit code: ${code}`);
@@ -1618,7 +1631,7 @@ function createWindow(): void {
   // Load the frontend
   if (IS_DEV) {
     // Development: load from Vite dev server
-    mainWindow.loadURL(FRONTEND_DEV_URL);
+    mainWindow.loadURL(`${FRONTEND_DEV_URL}/?backendUrl=${encodeURIComponent(BACKEND_URL)}`);
     // Only open DevTools in development (and only if not explicitly disabled)
     if (process.env.DISABLE_DEVTOOLS !== 'true') {
       mainWindow.webContents.openDevTools();
@@ -1677,7 +1690,7 @@ function createWindow(): void {
     }
     
     console.log('✓ Frontend validation passed, loading window...');
-    mainWindow.loadFile(indexPath);
+    mainWindow.loadFile(indexPath, { query: { backendUrl: BACKEND_URL } });
   }
   
   mainWindow.on('closed', () => {
@@ -1785,10 +1798,7 @@ function createWindow(): void {
 function setupIpcHandlers(): void {
   // Send backend configuration to renderer
   ipcMain.handle('get-backend-config', () => {
-    return {
-      backendUrl: BACKEND_URL,
-      authToken: authToken
-    };
+    return { backendUrl: BACKEND_URL };
   });
   
   // Check if backend is healthy
@@ -2055,9 +2065,6 @@ app.on('ready', async () => {
       });
     }
   );
-  
-  // Generate auth token
-  authToken = generateAuthToken();
   
   // Setup IPC handlers
   setupIpcHandlers();

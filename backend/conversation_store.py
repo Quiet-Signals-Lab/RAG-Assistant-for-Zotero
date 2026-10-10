@@ -11,6 +11,9 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass
 from backend.model_providers import Message
 from backend.academic_prompts import AcademicPrompts
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -129,10 +132,10 @@ class ConversationStore:
         
         # If already within limits, return as-is
         total_chars = sum(len(m.content) for m in messages)
-        print(f"[ConversationStore] trim_messages: input={len(messages)} msgs, {total_chars} chars")
-        print(f"[ConversationStore] limits: max_messages={max_messages}, max_chars={max_chars}")
+        logger.info(f"[ConversationStore] trim_messages: input={len(messages)} msgs, {total_chars} chars")
+        logger.info(f"[ConversationStore] limits: max_messages={max_messages}, max_chars={max_chars}")
         if len(conversation_messages) <= max_messages and total_chars <= max_chars:
-            print(f"[ConversationStore] Within limits, returning all {len(messages)} messages")
+            logger.info(f"[ConversationStore] Within limits, returning all {len(messages)} messages")
             return messages
         
         # STRATEGY: Pinned anchor + sliding tail
@@ -172,7 +175,7 @@ class ConversationStore:
                 tail_kept.insert(0, msg)
                 char_count += msg_chars
             else:
-                print(f"[ConversationStore] Dropped middle message to preserve anchor + recency")
+                logger.info(f"[ConversationStore] Dropped middle message to preserve anchor + recency")
                 # Do NOT break — continue scanning so the loop finishes cleanly
                 # (We must not use 'break' here: there may be smaller messages
                 # further back that could still fit, but sliding-tail correctness
@@ -187,7 +190,7 @@ class ConversationStore:
             result.append(system_message)
         result.extend(kept_messages)
         
-        print(f"[ConversationStore] Trimmed: anchor={len(anchor_messages)}, "
+        logger.info(f"[ConversationStore] Trimmed: anchor={len(anchor_messages)}, "
               f"tail={len(tail_kept)}, total={len(result)} msgs, {char_count} chars")
         
         return result

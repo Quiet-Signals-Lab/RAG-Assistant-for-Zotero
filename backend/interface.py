@@ -4,7 +4,7 @@ from backend.zotero_dbase import ZoteroLibrary
 from backend.zoteroitem import ZoteroItem
 from backend.pdf import PDF
 from backend.vector_db import ChromaClient
-from backend.embed_utils import get_embedding, get_embeddings_batch, rerank_passages
+from backend.embed_utils import get_embeddings_batch, get_embedding_dimension, rerank_passages
 from backend.model_providers import ProviderManager, Message
 from backend.model_providers.base import (
     ResponseValidator, 
@@ -24,8 +24,11 @@ import threading
 import time
 import logging
 
-# Initialize logger for this module
 logger = logging.getLogger(__name__)
+
+
+class _SkipItem(Exception):
+    """Raised inside _index_one with the reason an item could not be indexed."""
 
 class ZoteroChatbot:
     def __init__(
@@ -266,7 +269,7 @@ class ZoteroChatbot:
             msg = f"Exclusions: skipping {len(excluded_ids)} item(s) matching exclusion rules"
             if purged:
                 msg += f", purged {purged} previously-indexed chunk(s)"
-            print(msg)
+            logger.debug(msg)
         return kept
 
     def purge_excluded_items(self, excluded_collections=None, excluded_tags=None, excluded_item_types=None):
@@ -288,420 +291,154 @@ class ZoteroChatbot:
                 purged_chunks += self.chroma.delete_item(iid)
                 purged_items += 1
         if purged_items:
-            print(f"Exclusions: purged {purged_items} item(s) / {purged_chunks} chunk(s) from the index")
+            logger.info(f"Exclusions: purged {purged_items} item(s) / {purged_chunks} chunk(s) from the index")
         return {"purged_items": purged_items, "purged_chunks": purged_chunks}
 
-    def _index_library_worker(self):
+    def _chunk_metadata(self, item, chunks_with_pages):
+        """Per-chunk metadata: primitives only, no None (ChromaDB rejects it)."""
+        meta_src = item.metadata
+        year = 0  # 0 means unknown
+        year_str = meta_src.get("date") or ""
+        if year_str:
+            match = re.search(r'\b(19|20)\d{2}\b', year_str)
+            if match:
+                year = int(match.group(0))
+        base = {
+            "item_id": str(meta_src.get('item_id')),
+            "title": meta_src.get("title") or "",
+            "authors": meta_src.get("authors") or "",
+            "tags": meta_src.get("tags") or "",
+            "collections": meta_src.get("collections") or "",
+            "item_type": meta_src.get("item_type") or "",
+            "year": year,
+            "pdf_path": meta_src.get("pdf_path") or "",
+        }
+        return [
+            {**base, "chunk_idx": int(i), "page": chunk_info.get('page') or 0}
+            for i, chunk_info in enumerate(chunks_with_pages)
+        ]
+
+    def _index_one(self, item) -> int:
+        """Extract, chunk, embed and store one Zotero item. Returns the chunk
+        count, or raises _SkipItem with the reason it could not be indexed."""
+        item_id = str(item['item_id'])
+        if not (item.filepath and os.path.exists(item.filepath)):
+            raise _SkipItem(f"PDF not found at {item.filepath}")
         try:
-            start_time = time.time()
-            self.index_progress["start_time"] = start_time
-            
-            # Validate database access before starting
+            pages_data = PDF(item.filepath).extract_text_with_pages()
+        except Exception as e:
+            raise _SkipItem(f"PDF extraction failed - {e}")
+        if not pages_data:
+            raise _SkipItem("PDF has no extractable text (scanned image without OCR?)")
+        chunks_with_pages = self.chunk_text_with_pages(pages_data)
+        if not chunks_with_pages:
+            raise _SkipItem("No chunks created from pages data")
+        chunks = [c['text'] for c in chunks_with_pages]
+        try:
+            vectors = get_embeddings_batch(chunks, self.embedding_model_id)
+        except Exception as e:
+            raise _SkipItem(f"Embedding generation failed - {e}")
+        expected_dim = get_embedding_dimension(self.embedding_model_id)
+        if vectors and len(vectors[0]) != expected_dim:
+            raise _SkipItem(f"Unexpected embedding dimension {len(vectors[0])}, expected {expected_dim}")
+        try:
+            self.chroma.add_chunks(
+                ids=[f"{item_id}:{i}" for i in range(len(chunks))],
+                documents=chunks,
+                metadatas=self._chunk_metadata(item, chunks_with_pages),
+                embeddings=vectors,
+            )
+        except Exception as e:
+            raise _SkipItem(f"Failed to add to ChromaDB - {e}")
+        return len(chunks)
+
+    def _index_library_worker(self, incremental: bool):
+        """Background indexing. Every item is counted exactly once in
+        processed_items, whether it was indexed or skipped, so progress
+        always reaches total_items."""
+        progress = self.index_progress
+        try:
+            progress["start_time"] = time.time()
             try:
                 raw_items = self.zlib.search_parent_items_with_pdfs()
             except Exception as e:
-                error_str = str(e)
-                if "database is locked" in error_str.lower():
-                    error_msg = "Database is locked — please close Zotero completely before syncing."
-                else:
-                    error_msg = f"Failed to access Zotero database: {error_str}"
-                print(f"FATAL ERROR: {error_msg}")
-                self.index_progress["error"] = error_msg
+                msg = str(e)
+                progress["error"] = (
+                    "Database is locked — please close Zotero completely before syncing."
+                    if "database is locked" in msg.lower()
+                    else f"Failed to access Zotero database: {msg}"
+                )
+                logger.error(progress["error"])
                 return
 
             raw_items = self._apply_exclusions(raw_items)
+            if incremental:
+                indexed_ids = self.chroma.get_indexed_item_ids()
+                progress["skipped_items"] = len(indexed_ids)
+                raw_items = [it for it in raw_items if str(it['item_id']) not in indexed_ids]
 
-            self.index_progress["total_items"] = len(raw_items)
-            self.index_progress["processed_items"] = 0
-
-            if len(raw_items) == 0:
-                self.index_progress["error"] = "No items with PDFs found in Zotero library"
-                print("WARNING: No items with PDFs found")
+            progress["total_items"] = len(raw_items)
+            progress["processed_items"] = 0
+            if not raw_items:
+                if incremental:
+                    logger.info("No new items to index.")
+                else:
+                    progress["error"] = "No items with PDFs found in Zotero library"
+                    logger.warning(progress["error"])
                 return
-            
-            items = [ZoteroItem(filepath=it['pdf_path'], metadata=it) for it in raw_items]
+            logger.info("Indexing %d items (%s mode)", len(raw_items), progress.get("mode"))
 
-            # Extract text for each item using PDF logic with page numbers
-            for item in items:
+            for item in raw_items:
                 if self._cancel_indexing:
                     break
-                if not (item.filepath and os.path.exists(item.filepath)):
-                    skip_reason = f"Item {item.metadata.get('item_id')}: PDF not found at {item.filepath}"
-                    print(f"SKIPPED: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    continue
-                pdf = PDF(item.filepath)
-                # Use page-aware extraction
+                item_id = str(item['item_id'])
                 try:
-                    pages_data = pdf.extract_text_with_pages()
-                    item.metadata['pages_data'] = pages_data
-                    text = "\\n\\n".join([p['text'] for p in pages_data])
-                    item.metadata['text'] = text if text else ""
-                    if not text:
-                        print(f"WARNING: Item {item.metadata.get('item_id')} PDF extracted but no text found")
-                except Exception as e:
-                    skip_reason = f"Item {item.metadata.get('item_id')}: PDF extraction failed - {str(e)}"
-                    print(f"ERROR: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    item.metadata['pages_data'] = []
+                    if not incremental:
+                        # A full reindex replaces the item, so chunks from an older
+                        # chunking of the same PDF must not survive.
+                        self.chroma.delete_item(item_id)
+                    n = self._index_one(item)
+                    logger.info("Indexed item %s with %d chunks", item_id, n)
+                except _SkipItem as skip:
+                    reason = f"Item {item_id}: {skip}"
+                    logger.warning("Skipped %s", reason)
+                    progress["skip_reasons"].append(reason)
+                progress["processed_items"] += 1
+                elapsed = time.time() - progress["start_time"]
+                progress["elapsed_seconds"] = int(elapsed)
+                done, total = progress["processed_items"], progress["total_items"]
+                progress["eta_seconds"] = int(elapsed / done * (total - done))
 
-            # Vectorize each item's text (chunk/embedding logic with page tracking)
-            for item in items:
-                if self._cancel_indexing:
-                    break
-                pages_data = item.metadata.get('pages_data') or []
-                if not pages_data:
-                    # Item was already marked as failed in PDF extraction phase
-                    # Skip silently without incrementing progress again
-                    continue
-                
-                # Chunk with page awareness
-                chunks_with_pages = self.chunk_text_with_pages(pages_data)
-                if not chunks_with_pages:
-                    skip_reason = f"Item {item.metadata.get('item_id')}: No chunks created from pages data"
-                    print(f"SKIPPED: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    continue
-                
-                chunks = [c['text'] for c in chunks_with_pages]
-                try:
-                    vectors = get_embeddings_batch(chunks, self.embedding_model_id)
-                except Exception as e:
-                    skip_reason = f"Item {item.metadata.get('item_id')}: Embedding generation failed - {str(e)}"
-                    print(f"ERROR: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    continue
-
-                # Validate embedding dimensions
-                from backend.embed_utils import get_embedding_dimension
-                expected_dim = get_embedding_dimension(self.embedding_model_id)
-                if vectors and len(vectors[0]) != expected_dim:
-                    skip_reason = f"Item {item.metadata.get('item_id')}: Unexpected embedding dimension {len(vectors[0])}, expected {expected_dim}"
-                    print(f"ERROR: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    continue
-
-                # Generate unique chunk IDs
-                item_id = str(item.metadata.get('item_id'))
-                chunk_ids = [f"{item_id}:{i}" for i in range(len(chunks))]
-
-                # Sanitize metadata per chunk to primitives, no None
-                meta_src = item.metadata
-                title = meta_src.get("title") or ""
-                authors = meta_src.get("authors") or ""
-                tags = meta_src.get("tags") or ""
-                collections = meta_src.get("collections") or ""
-                item_type = meta_src.get("item_type") or ""
-                
-                # Parse year as integer (supports format like "2020-01-15" or just "2020")
-                year_str = meta_src.get("date") or ""
-                year = 0  # Default to 0 instead of None (ChromaDB doesn't accept None)
-                if year_str:
-                    match = re.search(r'\b(19|20)\d{2}\b', year_str)
-                    if match:
-                        year = int(match.group(0))
-                
-                pdf_path = meta_src.get("pdf_path") or ""
-
-                metas = []
-                for i, chunk_info in enumerate(chunks_with_pages):
-                    metas.append({
-                        "item_id": item_id,
-                        "chunk_idx": int(i),
-                        "title": title,
-                        "authors": authors,
-                        "tags": tags,
-                        "collections": collections,
-                        "item_type": item_type,
-                        "year": year,  # Integer (0 if unknown)
-                        "pdf_path": pdf_path,
-                        "page": chunk_info.get('page', 0),  # Use 0 if page is None
-                    })
-
-                try:
-                    self.chroma.add_chunks(
-                        ids=chunk_ids,
-                        documents=chunks,
-                        metadatas=metas,
-                        embeddings=vectors
-                    )
-                    print(f"SUCCESS: Indexed item {item_id} with {len(chunks)} chunks")
-                except Exception as e:
-                    skip_reason = f"Item {item_id}: Failed to add to ChromaDB - {str(e)}"
-                    print(f"ERROR: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                
-                # Update progress after processing this item
-                self.index_progress["processed_items"] += 1
-                
-                # Calculate time estimates
-                elapsed = time.time() - self.index_progress["start_time"]
-                self.index_progress["elapsed_seconds"] = int(elapsed)
-                
-                processed = self.index_progress["processed_items"]
-                total = self.index_progress["total_items"]
-                if processed > 0 and total > 0:
-                    avg_time_per_item = elapsed / processed
-                    remaining_items = total - processed
-                    self.index_progress["eta_seconds"] = int(avg_time_per_item * remaining_items)
-                
-                # small sleep to allow cancellation to be checked promptly in CPU-bound loops
-                time.sleep(0)
-            
-            # Build BM25 index after adding all chunks
-            successful_items = self.index_progress["processed_items"] - len(self.index_progress.get("skip_reasons", []))
-            if successful_items > 0:
-                print(f"Building BM25 index for sparse retrieval after indexing {successful_items} items...")
+            successful = progress["processed_items"] - len(progress["skip_reasons"])
+            if successful > 0:
                 self.chroma.build_bm25_index()
-            
-            # Print summary
-            print(f"\\n=== Full Indexing Summary ===")
-            print(f"Total items attempted: {self.index_progress['total_items']}")
-            print(f"Successfully indexed: {successful_items}")
-            print(f"Skipped/Failed: {len(self.index_progress.get('skip_reasons', []))}")
-            
-            # Check if ALL items failed
-            if successful_items == 0 and self.index_progress['total_items'] > 0:
-                error_msg = f"All {self.index_progress['total_items']} items failed to index. Common causes: PDFs not found (check storage path), network drive issues, or file permissions."
-                print(f"FATAL ERROR: {error_msg}")
-                self.index_progress["error"] = error_msg
-            
-            if self.index_progress.get('skip_reasons'):
-                print(f"\\nSkip reasons:")
-                for reason in self.index_progress['skip_reasons'][:10]:  # Show first 10
-                    print(f"  - {reason}")
-                if len(self.index_progress['skip_reasons']) > 10:
-                    print(f"  ... and {len(self.index_progress['skip_reasons']) - 10} more")
-            print(f"=============================\\n")
+
+            logger.info("=== Indexing summary (%s) ===", progress.get("mode"))
+            logger.info("Total items attempted: %d", progress["total_items"])
+            logger.info("Successfully indexed: %d", successful)
+            logger.info("Skipped/Failed: %d", len(progress["skip_reasons"]))
+            if successful == 0 and progress["total_items"] > 0:
+                progress["error"] = (
+                    f"All {progress['total_items']} items failed to index. Common causes: "
+                    "PDFs not found (check storage path), network drive issues, or file permissions."
+                )
+                logger.error(progress["error"])
+            for reason in progress["skip_reasons"][:10]:
+                logger.info("  - %s", reason)
+            if len(progress["skip_reasons"]) > 10:
+                logger.info("  ... and %d more", len(progress["skip_reasons"]) - 10)
         except Exception as e:
-            # Catch any unexpected exceptions at thread level
-            import traceback
             # Name the failing frame in the user-visible error: crash reports that
             # only carry str(e) (e.g. issue #79) can't be located without it.
+            import traceback
             tb_last = traceback.extract_tb(e.__traceback__)[-1] if e.__traceback__ else None
             where = f" [{os.path.basename(tb_last.filename)}:{tb_last.lineno}]" if tb_last else ""
-            error_msg = f"Indexing crashed: {str(e)}{where}"
-            traceback_str = traceback.format_exc()
-            print(f"FATAL ERROR: {error_msg}")
-            print(f"Traceback:\\n{traceback_str}")
-            self.index_progress["error"] = error_msg
+            progress["error"] = f"Indexing crashed: {e}{where}"
+            logger.exception(progress["error"])
         finally:
             self.is_indexing = False
             self._cancel_indexing = False
 
-    def _index_library_incremental_worker(self):
-        """Index only new items that aren't already in the database."""
-        try:
-            start_time = time.time()
-            self.index_progress["start_time"] = start_time
-            
-            # Validate database access before starting
-            try:
-                raw_items = self.zlib.search_parent_items_with_pdfs()
-            except Exception as e:
-                error_str = str(e)
-                if "database is locked" in error_str.lower():
-                    error_msg = "Database is locked — please close Zotero completely before syncing."
-                else:
-                    error_msg = f"Failed to access Zotero database: {error_str}"
-                print(f"FATAL ERROR: {error_msg}")
-                self.index_progress["error"] = error_msg
-                return
-
-            raw_items = self._apply_exclusions(raw_items)
-
-            all_item_ids = {str(it['item_id']) for it in raw_items}
-            
-            # Get already indexed item IDs
-            indexed_ids = self.chroma.get_indexed_item_ids()
-            
-            # Find new items
-            new_item_ids = all_item_ids - indexed_ids
-            
-            # Filter to only new items
-            new_items_data = [it for it in raw_items if str(it['item_id']) in new_item_ids]
-            
-            self.index_progress["total_items"] = len(new_items_data)
-            self.index_progress["processed_items"] = 0
-            self.index_progress["skipped_items"] = len(indexed_ids)
-            
-            if len(new_items_data) == 0:
-                print("No new items to index.")
-                return
-            
-            print(f"Found {len(new_items_data)} new items to index (skipping {len(indexed_ids)} already indexed)")
-            
-            items = [ZoteroItem(filepath=it['pdf_path'], metadata=it) for it in new_items_data]
-
-            # Extract text for each new item
-            for item in items:
-                if self._cancel_indexing:
-                    break
-                if not (item.filepath and os.path.exists(item.filepath)):
-                    skip_reason = f"Item {item.metadata.get('item_id')}: PDF not found at {item.filepath}"
-                    print(f"SKIPPED: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    continue
-                pdf = PDF(item.filepath)
-                try:
-                    pages_data = pdf.extract_text_with_pages()
-                    item.metadata['pages_data'] = pages_data
-                    text = "\n\n".join([p['text'] for p in pages_data])
-                    item.metadata['text'] = text if text else ""
-                    if not text:
-                        print(f"WARNING: Item {item.metadata.get('item_id')} PDF extracted but no text found")
-                except Exception as e:
-                    skip_reason = f"Item {item.metadata.get('item_id')}: PDF extraction failed - {str(e)}"
-                    print(f"ERROR: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    item.metadata['pages_data'] = []
-
-            # Vectorize each new item
-            for item in items:
-                if self._cancel_indexing:
-                    break
-                pages_data = item.metadata.get('pages_data') or []
-                if not pages_data:
-                    # Item was already marked as failed in PDF extraction phase
-                    # Skip silently without incrementing progress again
-                    continue
-                
-                chunks_with_pages = self.chunk_text_with_pages(pages_data)
-                if not chunks_with_pages:
-                    self.index_progress["processed_items"] += 1
-                    continue
-                
-                chunks = [c['text'] for c in chunks_with_pages]
-                try:
-                    vectors = get_embeddings_batch(chunks, self.embedding_model_id)
-                except Exception as e:
-                    skip_reason = f"Item {item.metadata.get('item_id')}: Embedding generation failed - {str(e)}"
-                    print(f"ERROR: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    continue
-
-                from backend.embed_utils import get_embedding_dimension
-                expected_dim = get_embedding_dimension(self.embedding_model_id)
-                if vectors and len(vectors[0]) != expected_dim:
-                    skip_reason = f"Item {item.metadata.get('item_id')}: Unexpected embedding dimension {len(vectors[0])}, expected {expected_dim}"
-                    print(f"ERROR: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                    self.index_progress["processed_items"] += 1
-                    continue
-
-                item_id = str(item.metadata.get('item_id'))
-                chunk_ids = [f"{item_id}:{i}" for i in range(len(chunks))]
-
-                meta_src = item.metadata
-                title = meta_src.get("title") or ""
-                authors = meta_src.get("authors") or ""
-                tags = meta_src.get("tags") or ""
-                collections = meta_src.get("collections") or ""
-                item_type = meta_src.get("item_type") or ""
-                
-                # Parse year as integer (supports format like "2020-01-15" or just "2020")
-                year_str = meta_src.get("date") or ""
-                year = 0  # Default to 0 instead of None (ChromaDB doesn't accept None)
-                if year_str:
-                    match = re.search(r'\b(19|20)\d{2}\b', year_str)
-                    if match:
-                        year = int(match.group(0))
-                
-                pdf_path = meta_src.get("pdf_path") or ""
-
-                metas = []
-                for i, chunk_info in enumerate(chunks_with_pages):
-                    metas.append({
-                        "item_id": item_id,
-                        "chunk_idx": int(i),
-                        "title": title,
-                        "authors": authors,
-                        "tags": tags,
-                        "collections": collections,
-                        "item_type": item_type,
-                        "year": year,  # Integer (0 if unknown)
-                        "pdf_path": pdf_path,
-                        "page": chunk_info.get('page', 0),  # Use 0 if page is None
-                    })
-
-                try:
-                    self.chroma.add_chunks(
-                        ids=chunk_ids,
-                        documents=chunks,
-                        metadatas=metas,
-                        embeddings=vectors
-                    )
-                    print(f"SUCCESS: Indexed item {item_id} with {len(chunks)} chunks")
-                except Exception as e:
-                    skip_reason = f"Item {item_id}: Failed to add to ChromaDB - {str(e)}"
-                    print(f"ERROR: {skip_reason}")
-                    self.index_progress["skip_reasons"].append(skip_reason)
-                
-                # Update progress after processing this item (success or failure)
-                self.index_progress["processed_items"] += 1
-                
-                # Calculate time estimates
-                elapsed = time.time() - self.index_progress["start_time"]
-                self.index_progress["elapsed_seconds"] = int(elapsed)
-                
-                processed = self.index_progress["processed_items"]
-                total = self.index_progress["total_items"]
-                if processed > 0 and total > 0:
-                    avg_time_per_item = elapsed / processed
-                    remaining_items = total - processed
-                    self.index_progress["eta_seconds"] = int(avg_time_per_item * remaining_items)
-                
-                time.sleep(0)
-            
-            # Rebuild BM25 index after adding new chunks
-            successful_items = self.index_progress["processed_items"] - len(self.index_progress.get("skip_reasons", []))
-            if successful_items > 0:
-                print(f"Rebuilding BM25 index after indexing {successful_items} items...")
-                self.chroma.build_bm25_index()
-            
-            # Print summary
-            print(f"\n=== Indexing Summary ===")
-            print(f"Total items attempted: {self.index_progress['total_items']}")
-            print(f"Successfully indexed: {successful_items}")
-            print(f"Skipped/Failed: {len(self.index_progress.get('skip_reasons', []))}")
-            
-            # Check if ALL new items failed
-            if successful_items == 0 and self.index_progress['total_items'] > 0:
-                error_msg = f"All {self.index_progress['total_items']} new items failed to index. Common causes: PDFs not found (check storage path), network drive issues, or file permissions."
-                print(f"FATAL ERROR: {error_msg}")
-                self.index_progress["error"] = error_msg
-            
-            if self.index_progress.get('skip_reasons'):
-                print(f"\nSkip reasons:")
-                for reason in self.index_progress['skip_reasons'][:10]:  # Show first 10
-                    print(f"  - {reason}")
-                if len(self.index_progress['skip_reasons']) > 10:
-                    print(f"  ... and {len(self.index_progress['skip_reasons']) - 10} more")
-            print(f"========================\n")
-        except Exception as e:
-            # Catch any unexpected exceptions at thread level
-            import traceback
-            # Name the failing frame in the user-visible error: crash reports that
-            # only carry str(e) (e.g. issue #79) can't be located without it.
-            tb_last = traceback.extract_tb(e.__traceback__)[-1] if e.__traceback__ else None
-            where = f" [{os.path.basename(tb_last.filename)}:{tb_last.lineno}]" if tb_last else ""
-            error_msg = f"Indexing crashed: {str(e)}{where}"
-            traceback_str = traceback.format_exc()
-            print(f"FATAL ERROR: {error_msg}")
-            print(f"Traceback:\n{traceback_str}")
-            self.index_progress["error"] = error_msg
-        finally:
-            self.is_indexing = False
-            self._cancel_indexing = False
-    
     def start_indexing(self, incremental: bool = True, excluded_collections=None,
                        excluded_tags=None, excluded_item_types=None):
         """Start indexing in a background thread. No-op if already indexing.
@@ -733,9 +470,7 @@ class ZoteroChatbot:
             "error": None,  # Clear any previous errors
         }
         
-        # Choose worker based on mode
-        worker = self._index_library_incremental_worker if incremental else self._index_library_worker
-        t = threading.Thread(target=worker, daemon=True)
+        t = threading.Thread(target=self._index_library_worker, args=(incremental,), daemon=True)
         self._index_thread = t
         t.start()
 
@@ -745,48 +480,6 @@ class ZoteroChatbot:
             return
         self._cancel_indexing = True
 
-    def chunk_text(self, text, chunk_size=800, overlap=200):
-        """Improved chunking with semantic boundary awareness.
-        
-        Best practices for academic documents:
-        - Larger chunks (600-1000 tokens) preserve context better for research papers
-        - Higher overlap (150-250 tokens) ensures key concepts aren't split
-        - Try to break at sentence boundaries when possible
-        """
-        if not text:
-            return []
-        
-        # Split into sentences first (naive approach)
-        import re
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        
-        chunks = []
-        current_chunk = ""
-        
-        for sentence in sentences:
-            # If adding this sentence keeps us under chunk_size, add it
-            if len(current_chunk) + len(sentence) <= chunk_size:
-                current_chunk += sentence + " "
-            else:
-                # Save current chunk if it's not empty
-                if current_chunk.strip():
-                    chunks.append(current_chunk.strip())
-                
-                # Start new chunk
-                # Include overlap from previous chunk
-                if chunks and overlap > 0:
-                    prev_words = current_chunk.split()
-                    overlap_words = prev_words[-overlap//5:]  # rough word-based overlap
-                    current_chunk = " ".join(overlap_words) + " " + sentence + " "
-                else:
-                    current_chunk = sentence + " "
-        
-        # Add final chunk
-        if current_chunk.strip():
-            chunks.append(current_chunk.strip())
-        
-        return chunks
-    
     def chunk_text_with_pages(self, pages_data, chunk_size=800, overlap=200):
         """Chunk text while preserving page number information.
         
@@ -857,7 +550,6 @@ class ZoteroChatbot:
         """
         Build an optimized prompt for academic question answering.
         
-        Uses 2025 best practices for citation-aware RAG prompting.
         Delegates to AcademicPrompts module for consistent formatting.
         """
         return AcademicPrompts.build_answer_prompt(
@@ -905,9 +597,9 @@ class ZoteroChatbot:
         is_new_session = False
         user_turns = 0
         
-        print("\n" + "="*80)
-        print(f"CHAT TURN START: query='{query[:80]}...'")
-        print("="*80)
+        logger.debug("\n" + "="*80)
+        logger.debug(f"CHAT TURN START: query='{query[:80]}...'")
+        logger.debug("="*80)
         
         if session_id:
             conversation_history = self.conversation_store.get_messages(
@@ -916,25 +608,24 @@ class ZoteroChatbot:
             )
             user_turns = len([m for m in conversation_history if m.role == "user"])
             is_new_session = (user_turns == 0)
-            print(f"Session {session_id}: user_turns={user_turns}, is_new={is_new_session}")
-            print(f"History has {len(conversation_history)} messages total")
+            logger.debug(f"Session {session_id}: user_turns={user_turns}, is_new={is_new_session}")
+            logger.debug(f"History has {len(conversation_history)} messages total")
         
         # STEP 2: CONDENSE query if it's a follow-up
-        # This is the critical step missing from your original implementation!
         retrieval_query = query  # Default to original
         
         if session_id and self.query_condenser.should_condense(query, conversation_history):
-            print("\nCONDENSATION: Detected follow-up question")
+            logger.debug("\nCONDENSATION: Detected follow-up question")
             retrieval_query = self.query_condenser.condense_query(
                 query=query,
                 conversation_history=conversation_history,
                 max_history_chars=1500
             )
-            print(f"   Original query: '{query}'")
-            print(f"   Condensed query: '{retrieval_query}'")
+            logger.debug(f"   Original query: '{query}'")
+            logger.debug(f"   Condensed query: '{retrieval_query}'")
         else:
-            print(f"\nCONDENSATION: Skipped (is_new_session={is_new_session}, turns={user_turns})")
-            print(f"   Using original query: '{query}'")
+            logger.debug(f"\nCONDENSATION: Skipped (is_new_session={is_new_session}, turns={user_turns})")
+            logger.debug(f"   Using original query: '{query}'")
         
         # STEP 3: RETRIEVE using the standalone/condensed query
         # Build metadata filter if enabled
@@ -956,7 +647,7 @@ class ZoteroChatbot:
                         author=extracted.get("author"),
                         item_types=extracted.get("item_types"),
                     )
-                    print(f"\nMETADATA FILTERS (extracted): {extracted}")
+                    logger.debug(f"\nMETADATA FILTERS (extracted): {extracted}")
             
             # Apply manual filters if provided
             if manual_filters:
@@ -970,7 +661,7 @@ class ZoteroChatbot:
                     item_types=manual_filters.get("item_types"),
                 )
                 metadata_where = merge_where_clauses(metadata_where, manual_where)
-                print(f"\nMETADATA FILTERS (manual): {manual_filters}")
+                logger.debug(f"\nMETADATA FILTERS (manual): {manual_filters}")
         
         # Combine with item_id filter
         item_id_where = {"item_id": {"$in": filter_item_ids}} if filter_item_ids else None
@@ -978,7 +669,7 @@ class ZoteroChatbot:
         db_filter = merge_where_clauses(item_id_where, metadata_where)
         
         if db_filter:
-            print(f"\nFINAL WHERE CLAUSE: {db_filter}")
+            logger.debug(f"\nFINAL WHERE CLAUSE: {db_filter}")
         
         # Use hybrid search (dense + sparse) for best results
         search_prompt = self.build_search_prompt(retrieval_query)  # Use condensed query!
@@ -1014,7 +705,7 @@ class ZoteroChatbot:
         # Fallback: if auto-extracted filter produced zero results, retry without it.
         # Manual filters are intentional, so we don't fall back for those.
         if not docs and db_filter is not None and use_metadata_filters and not manual_filters:
-            print(f"\nFALLBACK: auto-extracted filter returned 0 results — retrying unfiltered")
+            logger.debug(f"\nFALLBACK: auto-extracted filter returned 0 results — retrying unfiltered")
             fallback_fn = self.chroma.query_hybrid_rrf if use_rrf else self.chroma.query_hybrid
             fallback_results = fallback_fn(
                 query=search_prompt,
@@ -1104,7 +795,7 @@ class ZoteroChatbot:
         # Critical: For follow-ups, append ONLY the question (no embedded RAG context)
         # The conversation history already contains the system prompt and prior context
         
-        print(f"\nMESSAGE CONSTRUCTION: is_new_session={is_new_session}, snippets={len(snippets)}")
+        logger.debug(f"\nMESSAGE CONSTRUCTION: is_new_session={is_new_session}, snippets={len(snippets)}")
         
         if session_id:
             # Determine message type based on turn number and snippet availability
@@ -1112,11 +803,11 @@ class ZoteroChatbot:
                 # First turn: include full RAG context in user message
                 if snippets:
                     user_message = self._build_first_turn_message(query, snippets)
-                    print(f"   Building FIRST turn message with {len(snippets)} snippets embedded")
-                    print(f"   Message length: {len(user_message)} chars")
+                    logger.debug(f"   Building FIRST turn message with {len(snippets)} snippets embedded")
+                    logger.debug(f"   Message length: {len(user_message)} chars")
                 else:
                     user_message = query
-                    print("   Building FIRST turn message (no snippets)")
+                    logger.debug("   Building FIRST turn message (no snippets)")
             else:
                 # Follow-up turn: inject fresh evidence so the model can satisfy
                 # its grounding instruction ("use only the provided context").
@@ -1130,12 +821,12 @@ class ZoteroChatbot:
                 # for a follow-up, not as a fresh first-turn RAG query.
                 if snippets:
                     user_message = AcademicPrompts.build_hybrid_user_message(query, snippets)
-                    print(f"   Building FOLLOW-UP turn #{user_turns + 1} with {len(snippets)} snippets embedded")
-                    print(f"   Message length: {len(user_message)} chars")
+                    logger.debug(f"   Building FOLLOW-UP turn #{user_turns + 1} with {len(snippets)} snippets embedded")
+                    logger.debug(f"   Message length: {len(user_message)} chars")
                 else:
                     user_message = AcademicPrompts.build_plain_user_message(query)
-                    print(f"   Building FOLLOW-UP turn #{user_turns + 1} (no snippets, answering from history)")
-                    print(f"   Message length: {len(user_message)} chars")
+                    logger.debug(f"   Building FOLLOW-UP turn #{user_turns + 1} (no snippets, answering from history)")
+                    logger.debug(f"   Message length: {len(user_message)} chars")
             
             # Append user message to history
             self.conversation_store.append_message(session_id, "user", user_message)
@@ -1145,10 +836,10 @@ class ZoteroChatbot:
                 session_id,
                 provider_id=self.provider_manager.active_provider_id
             )
-            print(f"\nFULL HISTORY before trim: {len(full_history)} messages")
+            logger.debug(f"\nFULL HISTORY before trim: {len(full_history)} messages")
             for i, msg in enumerate(full_history):
                 preview = msg.content[:100].replace('\n', ' ')
-                print(f"   [{i}] {msg.role:10s}: {preview}...")
+                logger.debug(f"   [{i}] {msg.role:10s}: {preview}...")
             
             messages = self.conversation_store.trim_messages_for_context(
                 full_history, 
@@ -1157,20 +848,20 @@ class ZoteroChatbot:
             )
             
             # Log the actual messages being sent to LLM
-            print(f"\nMESSAGES TO LLM: {len(messages)} messages")
+            logger.debug(f"\nMESSAGES TO LLM: {len(messages)} messages")
             for i, msg in enumerate(messages):
                 content_preview = msg.content[:150].replace('\n', ' ') + ('...' if len(msg.content) > 150 else '')
-                print(f"   [{i}] {msg.role:10s}: {content_preview}")
+                logger.debug(f"   [{i}] {msg.role:10s}: {content_preview}")
         else:
             # Fallback: single-turn conversation (backward compatibility)
-            print("   Building SINGLE-TURN message (no session)")
+            logger.debug("   Building SINGLE-TURN message (no session)")
             prompt = self.build_answer_prompt(query, snippets)
             messages = [Message(role="user", content=prompt)]
         
         # STEP 5: GENERATE answer using LLM
         gen_params = AcademicGenerationParams.get_params("standard")
         
-        print(f"\nLLM GENERATION: Calling provider with temp={gen_params['temperature']}")
+        logger.debug(f"\nLLM GENERATION: Calling provider with temp={gen_params['temperature']}")
         
         reasoning_content = None
         
@@ -1195,13 +886,13 @@ class ZoteroChatbot:
                 reasoning_content = '\n\n'.join(think_matches).strip()
                 # Remove the <think> tags from the main response
                 summary = re.sub(think_pattern, '', raw_content, flags=re.DOTALL).strip()
-                print(f"\nEXTRACTED REASONING: ({len(reasoning_content)} chars)")
-                print(f"   First 200 chars: {reasoning_content[:200].replace(chr(10), ' ')}...")
+                logger.debug(f"\nEXTRACTED REASONING: ({len(reasoning_content)} chars)")
+                logger.debug(f"   First 200 chars: {reasoning_content[:200].replace(chr(10), ' ')}...")
             else:
                 summary = raw_content
             
-            print(f"\nLLM RESPONSE received ({len(summary)} chars)")
-            print(f"   First 200 chars: {summary[:200].replace(chr(10), ' ')}...")
+            logger.debug(f"\nLLM RESPONSE received ({len(summary)} chars)")
+            logger.debug(f"   First 200 chars: {summary[:200].replace(chr(10), ' ')}...")
             
             # Validate response for common failure patterns
             is_valid, issues = ResponseValidator.validate_chat_response(
@@ -1213,9 +904,9 @@ class ZoteroChatbot:
                 logger.warning(
                     f"Provider {self.provider_manager.active_provider_id} failed validation: {issues}"
                 )
-                print(f"\nWARNING: Response validation failed with {len(issues)} issues:")
+                logger.debug(f"\nWARNING: Response validation failed with {len(issues)} issues:")
                 for issue in issues:
-                    print(f"   - {issue}")
+                    logger.debug(f"   - {issue}")
                 
                 # Log specific patterns for debugging
                 if "Meta-response detected" in issues:
@@ -1223,29 +914,29 @@ class ZoteroChatbot:
                         f"Meta-response detected for provider {self.provider_manager.active_provider_id}. "
                         "Instructions may have been embedded in user message."
                     )
-                    print("    This indicates instructions were embedded in the user message.")
-                    print("    The model acknowledged instructions instead of answering.")
+                    logger.debug("    This indicates instructions were embedded in the user message.")
+                    logger.debug("    The model acknowledged instructions instead of answering.")
                 
                 if "Raw citations detected" in issues:
                     logger.warning(
                         f"Raw citations detected for provider {self.provider_manager.active_provider_id}. "
                         "Web search may have been activated instead of using provided context."
                     )
-                    print("    Perplexity returned search results instead of answer.")
-                    print("    This may indicate web search mode was activated instead of using provided context.")
-                    print("    Consider switching to a different model provider for RAG over private documents.")
+                    logger.debug("    Perplexity returned search results instead of answer.")
+                    logger.debug("    This may indicate web search mode was activated instead of using provided context.")
+                    logger.debug("    Consider switching to a different model provider for RAG over private documents.")
             
             # Save assistant response to conversation history
             if session_id:
                 self.conversation_store.append_message(session_id, "assistant", summary)
         except ProviderRateLimitError as e:
             # Specific handling for rate limit errors
-            print(f"\n{'='*80}")
-            print(f"RATE LIMIT ERROR")
-            print(f"{'='*80}")
-            print(f"Provider: {self.provider_manager.active_provider_id}")
-            print(f"Error message: {str(e)}")
-            print(f"{'='*80}\n")
+            logger.debug(f"\n{'='*80}")
+            logger.debug(f"RATE LIMIT ERROR")
+            logger.debug(f"{'='*80}")
+            logger.debug(f"Provider: {self.provider_manager.active_provider_id}")
+            logger.error(f"Error message: {str(e)}")
+            logger.debug(f"{'='*80}\n")
             
             # Return user-friendly error message
             provider_name = self.provider_manager.active_provider_id.title()
@@ -1260,12 +951,12 @@ class ZoteroChatbot:
             )
         except ProviderAuthenticationError as e:
             # Specific handling for authentication errors
-            print(f"\n{'='*80}")
-            print(f"AUTHENTICATION ERROR")
-            print(f"{'='*80}")
-            print(f"Provider: {self.provider_manager.active_provider_id}")
-            print(f"Error message: {str(e)}")
-            print(f"{'='*80}\n")
+            logger.debug(f"\n{'='*80}")
+            logger.debug(f"AUTHENTICATION ERROR")
+            logger.debug(f"{'='*80}")
+            logger.debug(f"Provider: {self.provider_manager.active_provider_id}")
+            logger.error(f"Error message: {str(e)}")
+            logger.debug(f"{'='*80}\n")
             
             provider_name = self.provider_manager.active_provider_id.title()
             summary = (
@@ -1275,13 +966,13 @@ class ZoteroChatbot:
             )
         except ProviderContextError as e:
             # Specific handling for context length errors
-            print(f"\n{'='*80}")
-            print(f"CONTEXT LENGTH ERROR")
-            print(f"{'='*80}")
-            print(f"Provider: {self.provider_manager.active_provider_id}")
-            print(f"Model: {self.provider_manager.get_active_model()}")
-            print(f"Error message: {str(e)}")
-            print(f"{'='*80}\n")
+            logger.debug(f"\n{'='*80}")
+            logger.debug(f"CONTEXT LENGTH ERROR")
+            logger.debug(f"{'='*80}")
+            logger.debug(f"Provider: {self.provider_manager.active_provider_id}")
+            logger.debug(f"Model: {self.provider_manager.get_active_model()}")
+            logger.error(f"Error message: {str(e)}")
+            logger.debug(f"{'='*80}\n")
             
             model_name = self.provider_manager.get_active_model()
             summary = (
@@ -1291,14 +982,14 @@ class ZoteroChatbot:
                 f"context window."
             )
         except Exception as e:
-            print(f"\n{'='*80}")
-            print(f"LLM GENERATION ERROR")
-            print(f"{'='*80}")
-            print(f"Error type: {type(e).__name__}")
-            print(f"Error message: {str(e)}")
+            logger.debug(f"\n{'='*80}")
+            logger.debug(f"LLM GENERATION ERROR")
+            logger.debug(f"{'='*80}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
             import traceback
-            print(f"Traceback:\n{traceback.format_exc()}")
-            print(f"{'='*80}\n")
+            logger.debug(f"Traceback:\n{traceback.format_exc()}")
+            logger.debug(f"{'='*80}\n")
             
             # Return helpful error message instead of snippet fallback
             provider_name = self.provider_manager.active_provider_id.title()
@@ -1320,13 +1011,13 @@ class ZoteroChatbot:
         generated_title = None
         if session_id and is_new_session:
             generated_title = self.generate_session_title(query, summary)
-            print(f"Generated session title: {generated_title}")
+            logger.debug(f"Generated session title: {generated_title}")
 
-        print("\n" + "="*80)
-        print(f"CHAT TURN COMPLETE")
-        print(f"   Citations: {len(citations)}, Snippets: {len(snippets)}")
-        print(f"   Reasoning: {'Yes' if reasoning_content else 'No'}")
-        print("="*80 + "\n")
+        logger.debug("\n" + "="*80)
+        logger.debug(f"CHAT TURN COMPLETE")
+        logger.debug(f"   Citations: {len(citations)}, Snippets: {len(snippets)}")
+        logger.debug(f"   Reasoning: {'Yes' if reasoning_content else 'No'}")
+        logger.debug("="*80 + "\n")
 
         result = {
             "summary": summary,
@@ -1369,43 +1060,6 @@ class ZoteroChatbot:
 
 {context}"""
     
-    def _build_new_evidence_note(self, snippets: list[dict]) -> str:
-        """Build a note about new evidence for follow-up turns."""
-        if not snippets:
-            return ""
-        
-        # Compact format: just show what's new
-        items = []
-        for s in snippets[:4]:  # Top 4 snippets only
-            cid = s.get("citation_id", "?")
-            title = s.get("title", "Untitled")
-            year = s.get("year", "")
-            text = s.get("snippet", "")[:200]  # Truncate
-            items.append(f"[{cid}] {title} ({year}): {text}...")
-        
-        return f"""Additional evidence retrieved:
-
-{chr(10).join(items)}"""
-    
-    def build_contextual_user_message(self, question: str, snippets: list[dict]) -> str:
-        """
-        Build a user message that combines the question with RAG context.
-        
-        Uses 2025 best practices for embedding context in conversational flow.
-        Delegates to AcademicPrompts module for consistent formatting.
-        
-        Args:
-            question: The user's raw question
-            snippets: Retrieved snippets from the library
-            
-        Returns:
-            Formatted message with question and context
-        """
-        return AcademicPrompts.build_contextual_user_message(
-            question=question,
-            snippets=snippets
-        )
-    
     def generate_session_title(self, user_question: str, assistant_response: str) -> str:
         """
         Generate a concise title for a chat session based on the first interaction.
@@ -1420,7 +1074,7 @@ class ZoteroChatbot:
             A concise title (3-8 words) summarizing the session topic
         """
         try:
-            print(f"Generating title for question: {user_question[:100]}")
+            logger.debug(f"Generating title for question: {user_question[:100]}")
             
             # Use academic prompt template for title generation
             prompt = AcademicPrompts.build_session_title_prompt(
@@ -1443,17 +1097,17 @@ class ZoteroChatbot:
             
             # Clean up the generated title
             title = response.content.strip()
-            print(f"Raw title from LLM: '{title}'")
+            logger.debug(f"Raw title from LLM: '{title}'")
             # Remove quotes if present
             title = title.strip('"').strip("'")
             # Limit length
             if len(title) > 80:
                 title = title[:77] + "..."
             
-            print(f"Cleaned title: '{title}'")
+            logger.debug(f"Cleaned title: '{title}'")
             return title if title else user_question[:50]
         except Exception as e:
-            print(f"Title generation error: {e}")
+            logger.debug(f"Title generation error: {e}")
             import traceback
             traceback.print_exc()
             # Fallback to first few words of question

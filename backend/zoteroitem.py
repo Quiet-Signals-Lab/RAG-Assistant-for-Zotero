@@ -1,6 +1,9 @@
 #zotero_item.py
 import fitz
 from backend.external_api_utils import fetch_google_book_reviews, fetch_semantic_scholar_data
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ZoteroItem:
     def __init__(self, filepath, metadata=None):
@@ -30,7 +33,7 @@ class ZoteroItem:
             if title and title.strip():
                 return title.strip()
         except Exception as e:
-            print(f"Metadata extraction error (title): {e}")
+            logger.info(f"Metadata extraction error (title): {e}")
         return "Untitled"
 
     def get_author(self):
@@ -49,7 +52,7 @@ class ZoteroItem:
             if author and author.strip():
                 return author.strip()
         except Exception as e:
-            print(f"Metadata extraction error (author): {e}")
+            logger.info(f"Metadata extraction error (author): {e}")
         return "Unknown author"
 
     def get_reviews(self):

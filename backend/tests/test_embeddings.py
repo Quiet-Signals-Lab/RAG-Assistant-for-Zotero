@@ -71,11 +71,11 @@ def test_chromadb_consistency():
         query = "What is deep learning?"
         print(f"Querying: '{query}'")
         
-        results = client.query_db(query=query, k=2)
+        results = client.query_hybrid_rrf(query=query, k=2, embedding_model_id=get_current_model_id())
         
         assert results is not None, "Query returned None"
         assert 'documents' in results, "Query missing 'documents' key"
-        assert len(results['documents']) > 0, "Query returned no results"
+        assert len(results['documents'][0]) > 0, "Query returned no results"
         
         print(f"✓ Query returned {len(results['documents'][0])} results")
         print(f"  Top result: {results['documents'][0][0][:80]}...")
@@ -101,13 +101,13 @@ def test_query_methods():
     import inspect
     from backend.vector_db import ChromaClient
     
-    # Check query_db source
-    query_db_source = inspect.getsource(ChromaClient.query_db)
-    assert 'query_embeddings' in query_db_source, \
-        "query_db should use query_embeddings, not query_texts!"
-    assert 'query_texts' not in query_db_source or 'not query_texts' in query_db_source, \
-        "query_db should NOT use query_texts parameter!"
-    print("✓ query_db uses manual embeddings")
+    # Check query_hybrid_rrf source
+    rrf_source = inspect.getsource(ChromaClient.query_hybrid_rrf)
+    assert 'query_embeddings' in rrf_source, \
+        "query_hybrid_rrf should use query_embeddings, not query_texts!"
+    assert 'query_texts' not in rrf_source or 'not query_texts' in rrf_source, \
+        "query_hybrid_rrf should NOT use query_texts parameter!"
+    print("✓ query_hybrid_rrf uses manual embeddings")
     
     # Check query_hybrid source
     query_hybrid_source = inspect.getsource(ChromaClient.query_hybrid)

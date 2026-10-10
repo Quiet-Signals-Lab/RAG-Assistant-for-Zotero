@@ -154,7 +154,7 @@ npm run package:mac  # or :win, :linux
 
 #### Backend Debug
 - Backend logs appear in the terminal running `dev:backend`
-- Or in Electron's console (stdout is captured)
+- In a packaged app they are appended to `logs/backend.log` under the user data folder
 - Check FastAPI docs at http://localhost:8000/docs
 
 #### Electron Main Process Debug

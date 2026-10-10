@@ -15,6 +15,9 @@ from .base import (
     ProviderRateLimitError, ProviderContextError,
     MessageAdapter, ParameterMapper
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -116,14 +119,14 @@ class OpenAIProvider(BaseProvider):
         """
         try:
             client = self._get_client(credentials)
-            print(f"[OpenAI Provider] Fetching dynamic models via client.models.list()...")
+            logger.info(f"[OpenAI Provider] Fetching dynamic models via client.models.list()...")
 
             try:
                 models_response = client.models.list()
                 raw_models = list(models_response.data)
             except (AttributeError, TypeError):
                 # Custom endpoint returned a plain list — fall back to raw HTTP
-                print(f"[OpenAI Provider] SDK parse failed, falling back to raw HTTP model fetch")
+                logger.info(f"[OpenAI Provider] SDK parse failed, falling back to raw HTTP model fetch")
                 raw_items = self._list_models_raw(credentials)
                 raw_models = [_ModelStub(id=m.get("id", m) if isinstance(m, dict) else m) for m in raw_items]
 
@@ -188,7 +191,7 @@ class OpenAIProvider(BaseProvider):
 
                 # Warn if no models found
                 if not models:
-                    print(f"[OpenAI Provider] WARNING: Custom endpoint returned 0 models")
+                    logger.info(f"[OpenAI Provider] WARNING: Custom endpoint returned 0 models")
             else:
                 # For official OpenAI API, use curated list
                 models = [info for model_id, info in curated_models.items() if model_id in available_model_ids]
@@ -208,12 +211,12 @@ class OpenAIProvider(BaseProvider):
                     
                     # Warn if still no models found
                     if not models:
-                        print(f"[OpenAI Provider] WARNING: No GPT or o1 models found in API response")
+                        logger.info(f"[OpenAI Provider] WARNING: No GPT or o1 models found in API response")
             
             for model in models:
-                print(f"[OpenAI Provider]   Found: {model.id}")
+                logger.info(f"[OpenAI Provider]   Found: {model.id}")
             
-            print(f"[OpenAI Provider] Successfully discovered {len(models)} models")
+            logger.info(f"[OpenAI Provider] Successfully discovered {len(models)} models")
             
             return {
                 "valid": True,
@@ -251,7 +254,7 @@ class OpenAIProvider(BaseProvider):
                 models_response = client.models.list()
                 raw_models = list(models_response.data)
             except (AttributeError, TypeError):
-                print(f"[OpenAI Provider] SDK parse failed, falling back to raw HTTP model fetch")
+                logger.info(f"[OpenAI Provider] SDK parse failed, falling back to raw HTTP model fetch")
                 raw_items = self._list_models_raw(credentials)
                 raw_models = [_ModelStub(id=m.get("id", m) if isinstance(m, dict) else m) for m in raw_items]
 
@@ -302,7 +305,7 @@ class OpenAIProvider(BaseProvider):
 
                 # Warn if no models found from custom endpoint
                 if not result:
-                    print(f"[OpenAI Provider] WARNING: Custom endpoint at {base_url} returned 0 models")
+                    logger.info(f"[OpenAI Provider] WARNING: Custom endpoint at {base_url} returned 0 models")
 
                 return result
             else:
@@ -332,7 +335,7 @@ class OpenAIProvider(BaseProvider):
                     
                     # Warn if still no models found
                     if not fallback:
-                        print(f"[OpenAI Provider] WARNING: No GPT models found in official OpenAI API response")
+                        logger.info(f"[OpenAI Provider] WARNING: No GPT models found in official OpenAI API response")
                     
                     return fallback
                 
@@ -358,7 +361,7 @@ class OpenAIProvider(BaseProvider):
             # Map standard parameters to OpenAI equivalents
             mapped_params = ParameterMapper.map_params(kwargs, self.id)
             
-            # Make the API call with 2025 best practices for academic RAG
+            # Make the API call with the generation settings used for academic RAG
             # top_p: 0.9 for nucleus sampling (prevents low-prob hallucinations)
             # frequency_penalty: 0.3 reduces citation/concept repetition
             response = client.chat.completions.create(

@@ -8,7 +8,7 @@ The application implements a multi-stage retrieval pipeline designed for academi
 
 **Query Processing.** For multi-turn conversations, the system rewrites follow-up questions into standalone queries before retrieval. This ensures that questions containing pronouns or contextual references can be properly matched against the document corpus without relying on conversation history.
 
-**Hybrid Search.** The system combines dense vector search (using sentence transformer embeddings) with sparse BM25 keyword search. Both result sets are merged using Reciprocal Rank Fusion, which scores each document based on its rankings from both retrieval methods. This approach captures both semantic similarity and exact keyword matches, improving recall for queries that contain specific terminology or proper nouns.
+**Hybrid Search.** The system combines dense vector search (using sentence transformer embeddings) with sparse BM25 keyword search. The keyword index is a SQLite FTS5 table stored next to the ChromaDB database, one per embedding model; it is updated as items are indexed or removed and reconciled against ChromaDB if the two ever disagree, so no in-memory index is built or loaded regardless of library size. Both result sets are merged using Reciprocal Rank Fusion, which scores each document based on its rankings from both retrieval methods. This approach captures both semantic similarity and exact keyword matches, improving recall for queries that contain specific terminology or proper nouns.
 
 **Cross-Encoder Reranking.** After initial retrieval, candidates are reranked using a cross-encoder model that processes the query and each document together. This provides more accurate relevance scoring than the initial bi-encoder embeddings, which encode queries and documents independently.
 
@@ -39,6 +39,10 @@ PDFs are extracted with page-level granularity, preserving page numbers througho
 ## Implementation Notes
 
 The system implements provider-aware dynamic retrieval limits that automatically scale based on the active model's context window. Models with larger contexts retrieve more evidence: Gemini 1.5 Pro (2M tokens) retrieves 30-50 snippets, Claude Opus (200k tokens) retrieves 24-40 snippets, while local models without known context limits use conservative defaults (6-10 snippets). The scaling uses five tiers (1.0x, 2.0x, 3.0x, 4.0x, 5.0x) and preserves the broad/focused mode distinction for diversity control.
+
+**Memory:** No operation loads the whole vector store into memory. Item inventories, filter counts, deletes and the metadata migration page through ChromaDB, and adds are split to the batch size the database reports, so libraries of millions of chunks index and query within a bounded footprint.
+
+**Logging:** The backend writes to standard output through Python's logging module. The desktop app appends that output to `logs/backend.log` under its user data folder (`~/Library/Application Support/RAG Assistant` on macOS, `%APPDATA%\RAG Assistant` on Windows, `~/.config/rag-assistant` on Linux), keeping one previous generation once the file passes 10 MB. API failures are returned as HTTP 4xx/5xx responses with a `detail` message.
 
 **Privacy:**
 Indexing and retrieval happen on your device — your PDFs are indexed by your CPU on first launch and stored in a local database. With a local model (LM Studio or Ollama) the app runs fully offline. If you opt for a cloud provider, the only data shared is your query, the retrieved text chunks, and earlier responses from the same session — your full library never leaves your machine. To shield specific material entirely, you can exclude Zotero collections and tags from the index so they are never sent to a third party.

@@ -330,7 +330,8 @@ sudo lsof -i :8000 && kill -9 <PID>
 
 **Seeing detailed errors** — launch from a terminal (`rag-assistant` or the
 AppImage path) to see stdout/stderr, or press `Ctrl+Shift+I` → Console and look
-for `[Backend Error]`. Logs: `~/.config/rag-assistant/logs/*.log`.
+for `[Backend Error]`. The backend's own output is appended to
+`~/.config/rag-assistant/logs/backend.log` (previous generation in `backend.log.1`).
 
 **Running the bundled backend manually** (advanced):
 

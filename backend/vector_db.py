@@ -1,21 +1,23 @@
 #vector_db.py
 import chromadb
 from chromadb.config import Settings
+import logging
 import os
 import re
-from typing import List, Dict, Any, Iterable, Optional
-from rank_bm25 import BM25Okapi
-import json
-import numpy as np
+import sqlite3
+from contextlib import contextmanager
+from typing import Any, Dict, Iterable, Iterator, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# BM25 tokenizer — handles both Latin and CJK scripts
+# Keyword tokenizer — handles both Latin and CJK scripts
 # ---------------------------------------------------------------------------
 # CJK scripts (Chinese, Japanese, Korean) have no whitespace between words.
-# Inserting spaces around each CJK character before splitting allows
-# BM25Okapi to treat individual characters as tokens, which is the standard
-# character-level approach used by many CJK IR systems and works correctly
-# with bag-of-words models.  No additional NLP dependency is required.
+# Inserting spaces around each CJK character before splitting makes the
+# keyword index treat individual characters as tokens, which is the standard
+# character-level approach used by many CJK IR systems.  No additional NLP
+# dependency is required.
 #
 # Ranges covered:
 #   U+2E80-U+2EFF  CJK Radicals Supplement
@@ -28,39 +30,60 @@ import numpy as np
 #   U+F900-U+FAFF  CJK Compatibility Ideographs
 #   U+FE30-U+FE4F  CJK Compatibility Forms
 _CJK_RE = re.compile(
-    r'[\u2e80-\u2eff\u2f00-\u2fdf\u3040-\u309f\u30a0-\u30ff'
-    r'\u3100-\u312f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\ufe30-\ufe4f]'
+    r'[⺀-⻿⼀-⿟぀-ゟ゠-ヿ'
+    r'㄀-ㄯ㐀-䶿一-鿿豈-﫿︰-﹏]'
 )
 
 
 def _tokenize_for_bm25(text: str) -> list:
-    """Tokenize text for BM25 indexing and querying.
+    """Tokenize text for keyword indexing and querying.
 
-    For Latin/Western scripts: lowercases and splits on whitespace (existing
-    behaviour, unchanged).
-
-    For CJK scripts: inserts a space before and after every CJK character so
-    that the subsequent whitespace split produces individual character tokens.
-    Character-level tokenization is correct for BM25 on CJK text and requires
-    no external dependency (e.g. jieba).
-
-    Mixed text (e.g. an English abstract followed by Chinese keywords) is
-    handled correctly: the regex only expands CJK characters, leaving Latin
-    words intact.
+    Latin/Western scripts: lowercased and split on whitespace.
+    CJK scripts: a space is inserted before and after every CJK character so
+    the whitespace split produces individual character tokens. Mixed text is
+    handled correctly because only CJK characters are expanded.
     """
     return _CJK_RE.sub(r' \g<0> ', text.lower()).split()
+
+
+def _fts_match_expression(query: str) -> Optional[str]:
+    """Build an FTS5 MATCH expression that ORs every query token.
+
+    Every token is quoted so FTS5 never interprets it as an operator
+    (AND/OR/NOT, parentheses, column filters, prefix stars).
+    """
+    tokens = [t for t in _tokenize_for_bm25(query) if t.strip('"')]
+    if not tokens:
+        return None
+    return " OR ".join('"' + t.replace('"', '""') + '"' for t in tokens)
+
+
+def _item_id_from_chunk_id(chunk_id: str) -> str:
+    """Chunk IDs are '<item_id>:<chunk_idx>'; IDs without a colon are their own item."""
+    return chunk_id.rsplit(":", 1)[0]
+
+
+# Page sizes for walking the collection. Chroma's get() with offset is a
+# SQL LIMIT/OFFSET, so fewer, larger pages are cheaper for ids-only reads.
+_ID_PAGE = 50_000
+_META_PAGE = 10_000
 
 
 class ChromaClient:
     """
     Administers user interactions with the Chroma vector database for Zotero library items.
-    Supports persistent per-library DB, bulk chunk addition, semantic querying, and sync with Zotero snapshot.
-    
-    IMPORTANT: This class expects pre-computed embeddings and does NOT use ChromaDB's 
-    default embedding function. All embeddings must be generated using get_embedding() 
+    Supports persistent per-library DB, bulk chunk addition, semantic querying, and
+    hybrid (dense + keyword) retrieval.
+
+    IMPORTANT: This class expects pre-computed embeddings and does NOT use ChromaDB's
+    default embedding function. All embeddings must be generated using get_embedding()
     from embed_utils.py to ensure consistent dimensional vectors.
-    
-    Each embedding model gets its own collection to prevent dimension mismatch errors.
+
+    Each embedding model gets its own collection to prevent dimension mismatch errors,
+    and its own on-disk keyword index (SQLite FTS5) next to the Chroma database.
+
+    Memory contract: no method loads the whole collection into memory. Every
+    whole-collection operation pages through Chroma (issue #86).
     """
 
     def __init__(self, db_path: str, collection_name: str = "zotero_lib", embedding_model_id: str = "bge-base"):
@@ -73,7 +96,7 @@ class ChromaClient:
         self.collection_name = f"{collection_name}_{safe_model_id}"
         os.makedirs(self.db_path, exist_ok=True)
         self.chroma_client = chromadb.PersistentClient(path=self.db_path, settings=Settings())
-        
+
         # Create collection WITHOUT an embedding function (we provide embeddings manually)
         # This prevents ChromaDB from using its default all-MiniLM-L6-v2 (384 dims)
         self.collection = self.chroma_client.get_or_create_collection(
@@ -83,13 +106,177 @@ class ChromaClient:
                 "embedding_model": embedding_model_id  # Track which model created this collection
             }
         )
-        
-        # BM25 index for sparse retrieval (loaded lazily)
-        # Each embedding model has its own BM25 index
-        self.bm25_index = None
-        self.bm25_corpus = None
-        self.bm25_ids = None
-        self.bm25_path = os.path.join(self.db_path, f"bm25_index_{safe_model_id}.json")
+
+        # Keyword index (SQLite FTS5) for sparse retrieval. Lives on disk, is
+        # written incrementally by add_chunks/delete_item, and is reconciled
+        # against Chroma by build_bm25_index(). Replaces the in-memory
+        # rank_bm25 index + JSON corpus that could not fit large libraries.
+        self.fts_path = os.path.join(self.db_path, f"fts_{safe_model_id}.sqlite3")
+        self._legacy_bm25_path = os.path.join(self.db_path, f"bm25_index_{safe_model_id}.json")
+        self._init_fts()
+
+    # ------------------------------------------------------------------
+    # Keyword index (FTS5)
+    # ------------------------------------------------------------------
+
+    @contextmanager
+    def _fts(self) -> Iterator[sqlite3.Connection]:
+        """One short-lived connection per call: safe across threads, and WAL
+        mode lets a chat query read while the indexing thread writes."""
+        conn = sqlite3.connect(self.fts_path)
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _init_fts(self) -> None:
+        try:
+            with self._fts() as conn:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(body, tokenize='unicode61')"
+                )
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS chunk_map ("
+                    " id TEXT PRIMARY KEY, item_id TEXT NOT NULL, fts_rowid INTEGER NOT NULL)"
+                )
+                conn.execute("CREATE INDEX IF NOT EXISTS chunk_map_item ON chunk_map(item_id)")
+        except sqlite3.OperationalError as e:
+            raise RuntimeError(
+                "This Python's SQLite lacks the FTS5 extension, which the keyword index needs. "
+                f"({e})"
+            ) from e
+        # The pre-0.6 JSON corpus is no longer read; free the disk it used.
+        if os.path.exists(self._legacy_bm25_path):
+            try:
+                os.remove(self._legacy_bm25_path)
+            except OSError as e:
+                logger.warning("Could not remove legacy BM25 index %s: %s", self._legacy_bm25_path, e)
+
+    def _fts_add(self, conn: sqlite3.Connection, ids: List[str], documents: List[str]) -> None:
+        for chunk_id, doc in zip(ids, documents):
+            body = " ".join(_tokenize_for_bm25(doc or ""))
+            # Re-adding an id (full reindex of an item) replaces its row.
+            old = conn.execute("SELECT fts_rowid FROM chunk_map WHERE id = ?", (chunk_id,)).fetchone()
+            if old:
+                conn.execute("DELETE FROM chunks WHERE rowid = ?", (old[0],))
+            cur = conn.execute("INSERT INTO chunks(body) VALUES (?)", (body,))
+            conn.execute(
+                "INSERT OR REPLACE INTO chunk_map(id, item_id, fts_rowid) VALUES (?, ?, ?)",
+                (chunk_id, _item_id_from_chunk_id(chunk_id), cur.lastrowid),
+            )
+
+    def _fts_delete_item(self, conn: sqlite3.Connection, item_id: str) -> None:
+        conn.execute(
+            "DELETE FROM chunks WHERE rowid IN (SELECT fts_rowid FROM chunk_map WHERE item_id = ?)",
+            (item_id,),
+        )
+        conn.execute("DELETE FROM chunk_map WHERE item_id = ?", (item_id,))
+
+    def _fts_count(self) -> int:
+        with self._fts() as conn:
+            return conn.execute("SELECT COUNT(*) FROM chunk_map").fetchone()[0]
+
+    def build_bm25_index(self) -> None:
+        """Reconcile the keyword index with Chroma.
+
+        The index is maintained incrementally, so this is a no-op when the
+        two agree. When they do not (first run after upgrading from the JSON
+        index, or a crash between the two writes) it is rebuilt by paging
+        through Chroma, never holding more than one page in memory.
+        """
+        total = self.collection.count()
+        if self._fts_count() == total:
+            return
+        logger.info("Rebuilding keyword index for %d chunks", total)
+        with self._fts() as conn:
+            conn.execute("DELETE FROM chunks")
+            conn.execute("DELETE FROM chunk_map")
+            for ids, docs in self._iter_documents():
+                self._fts_add(conn, ids, docs)
+        logger.info("Keyword index rebuilt with %d chunks", total)
+
+    def query_bm25(self, query: str, k: int = 10) -> List[Dict[str, Any]]:
+        """Keyword (BM25) retrieval via FTS5.
+
+        Returns a list of dicts with 'id', 'score', 'document' and 'metadata',
+        best first. Only chunks matching at least one query token are returned.
+        """
+        match = _fts_match_expression(query)
+        if match is None:
+            return []
+        if self._fts_count() == 0 and self.collection.count() > 0:
+            self.build_bm25_index()
+        with self._fts() as conn:
+            rows = conn.execute(
+                "SELECT m.id, -bm25(chunks) AS score FROM chunks "
+                "JOIN chunk_map m ON m.fts_rowid = chunks.rowid "
+                "WHERE chunks MATCH ? ORDER BY bm25(chunks) LIMIT ?",
+                (match, int(k)),
+            ).fetchall()
+        if not rows:
+            return []
+        ids = [r[0] for r in rows]
+        scores = {r[0]: float(r[1]) for r in rows}
+        found = self.collection.get(ids=ids, include=['documents', 'metadatas'])
+        by_id = {
+            cid: (doc, meta)
+            for cid, doc, meta in zip(found['ids'], found['documents'], found['metadatas'])
+        }
+        return [
+            {'id': cid, 'score': scores[cid], 'document': by_id[cid][0], 'metadata': by_id[cid][1]}
+            for cid in ids if cid in by_id
+        ]
+
+    # ------------------------------------------------------------------
+    # Paging helpers
+    # ------------------------------------------------------------------
+
+    def _iter_ids(self, page: int = _ID_PAGE) -> Iterator[List[str]]:
+        offset = 0
+        while True:
+            got = self.collection.get(limit=page, offset=offset, include=[])
+            ids = got['ids']
+            if not ids:
+                return
+            yield ids
+            if len(ids) < page:
+                return
+            offset += len(ids)
+
+    def _iter_documents(self, page: int = _META_PAGE) -> Iterator[tuple]:
+        offset = 0
+        while True:
+            got = self.collection.get(limit=page, offset=offset, include=['documents'])
+            if not got['ids']:
+                return
+            yield got['ids'], got['documents']
+            if len(got['ids']) < page:
+                return
+            offset += len(got['ids'])
+
+    def _iter_metadatas(self, where: Optional[Dict[str, Any]] = None, page: int = _META_PAGE) -> Iterator[List[Dict]]:
+        offset = 0
+        while True:
+            got = self.collection.get(where=where, limit=page, offset=offset, include=['metadatas'])
+            metas = got['metadatas'] or []
+            if not metas:
+                return
+            yield metas
+            if len(metas) < page:
+                return
+            offset += len(metas)
+
+    # ------------------------------------------------------------------
+    # Writes
+    # ------------------------------------------------------------------
+
+    def _max_batch_size(self) -> int:
+        try:
+            return int(self.chroma_client.get_max_batch_size())
+        except Exception:
+            return 5000
 
     def add_chunks(self,
         ids: List[str],
@@ -98,126 +285,85 @@ class ChromaClient:
         embeddings: Optional[List[List[float]]] = None,
     ) -> None:
         """
-        Bulk-adds document chunks and their vectors to the Chroma collection.
+        Bulk-adds document chunks and their vectors to the Chroma collection and
+        the keyword index. Long books exceed Chroma's maximum batch size, so the
+        add is split into batches the client accepts (issue #86).
         """
-        self.collection.add(
-            ids=ids,
-            documents=documents,
-            metadatas=metadatas,
-            embeddings=embeddings,
-        )
+        step = self._max_batch_size()
+        for start in range(0, len(ids), step):
+            sl = slice(start, start + step)
+            self.collection.add(
+                ids=ids[sl],
+                documents=documents[sl],
+                metadatas=metadatas[sl] if metadatas is not None else None,
+                embeddings=embeddings[sl] if embeddings is not None else None,
+            )
+            with self._fts() as conn:
+                self._fts_add(conn, ids[sl], documents[sl])
 
-    def query_db(self,
-        query: str,
-        k: int = 5,
-        where: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+    def delete_item(self, item_id: str) -> int:
         """
-        Query the vector DB with a natural-language question.
-        Optionally filter by metadata keys (e.g. item_id).
-        
-        CRITICAL: Manually embeds the query using get_embedding() to ensure
-        consistent 768-dimensional embeddings. DO NOT use query_texts parameter
-        as it would trigger ChromaDB's default embedding function.
-        """
-        from backend.embed_utils import get_embedding
-        
-        # Manually embed query to ensure consistent dimensions
-        query_embedding = get_embedding(query)
-        
-        results = self.collection.query(
-            query_embeddings=[query_embedding.tolist()],  # Use query_embeddings, not query_texts!
-            n_results=k,
-            where=where,
-        )
-        return results
-    
-    def query_bm25(self, query: str, k: int = 10) -> List[Dict[str, Any]]:
-        """Query using BM25 sparse retrieval.
-        
-        Args:
-            query: Search query
-            k: Number of results to return
-            
+        Delete all chunks associated with an item from the database.
+
         Returns:
-            List of dicts with 'id', 'score', 'document', and 'metadata'
+            Number of chunks deleted
         """
-        if self.bm25_index is None:
-            self._load_bm25_index()
-        
-        if self.bm25_index is None:
-            return []  # No BM25 index available
-        
-        # Tokenize query — supports CJK character-level splitting
-        query_tokens = _tokenize_for_bm25(query)
-        
-        # Get BM25 scores
-        scores = self.bm25_index.get_scores(query_tokens)
-        
-        # Get top k indices
-        top_indices = np.argsort(scores)[::-1][:k]
-        
-        # Retrieve documents from ChromaDB
-        results = []
-        for idx in top_indices:
-            if scores[idx] > 0:  # Only include results with positive scores
-                doc_id = self.bm25_ids[idx]
-                # Get full document and metadata from ChromaDB
-                chroma_result = self.collection.get(ids=[doc_id])
-                if chroma_result['ids']:
-                    results.append({
-                        'id': doc_id,
-                        'score': float(scores[idx]),
-                        'document': chroma_result['documents'][0],
-                        'metadata': chroma_result['metadatas'][0]
-                    })
-        
-        return results
-    
+        item_id = str(item_id)
+        ids = self.collection.get(where={"item_id": item_id}, include=[])['ids']
+        if ids:
+            self.collection.delete(ids=ids)
+        with self._fts() as conn:
+            self._fts_delete_item(conn, item_id)
+        return len(ids)
+
+    # ------------------------------------------------------------------
+    # Dense + hybrid queries
+    # ------------------------------------------------------------------
+
     def query_hybrid(self, query: str, k: int = 10, where: Optional[Dict[str, Any]] = None, embedding_model_id: str = "bge-base") -> Dict[str, Any]:
-        """Hybrid search combining dense (semantic) and sparse (BM25) retrieval.
-        
-        Best practice from Reddit thread: Retrieve top-k from both methods,
-        create a union, then re-rank using cross-encoder.
-        
+        """Hybrid search combining dense (semantic) and sparse (keyword) retrieval.
+
+        Retrieves top-k from both methods and returns their union; the caller
+        re-ranks with a cross-encoder.
+
         Args:
             query: Search query
             k: Number of results from each method
             where: Optional metadata filter (may contain unsupported $contains)
             embedding_model_id: ID of the embedding model to use (default: "bge-base")
-            
+
         Returns:
             Combined results dict with documents, metadatas, and distances
         """
         from backend.embed_utils import get_embedding
         from backend.metadata_utils import separate_where_clauses, apply_client_side_filters
-        
+
         # Separate ChromaDB-compatible and client-side filters
         chroma_where, client_where = separate_where_clauses(where)
-        
+
         # Embed query using the configured embedding model
         query_embedding = get_embedding(query, model_id=embedding_model_id)
-        
+
         # Get dense retrieval results with ChromaDB-compatible filters only
         dense_results = self.collection.query(
             query_embeddings=[query_embedding.tolist()],  # Use query_embeddings, not query_texts!
             n_results=k * 2 if client_where else k,  # Get more if we'll filter client-side
             where=chroma_where,  # Only ChromaDB-compatible filters
         )
-        
+
         # Apply client-side filters ($contains) to dense results
         if client_where:
             dense_results = apply_client_side_filters(dense_results, client_where)
-        
+
         # Get sparse retrieval results
         bm25_results = self.query_bm25(query, k=k)
-        
+
         # Combine results (union of document IDs)
         seen_ids = set()
         combined_docs = []
         combined_metas = []
         combined_ids = []
-        
+
         # Add dense results
         if dense_results['ids'] and dense_results['ids'][0]:
             for i, doc_id in enumerate(dense_results['ids'][0]):
@@ -226,7 +372,7 @@ class ChromaClient:
                     combined_ids.append(doc_id)
                     combined_docs.append(dense_results['documents'][0][i])
                     combined_metas.append(dense_results['metadatas'][0][i])
-        
+
         # Add BM25 results not already included, with client-side filtering if needed
         for result in bm25_results:
             if result['id'] not in seen_ids:
@@ -237,7 +383,7 @@ class ChromaClient:
                 combined_ids.append(result['id'])
                 combined_docs.append(result['document'])
                 combined_metas.append(result['metadata'])
-        
+
         # Format as ChromaDB-style result
         return {
             'ids': [combined_ids],
@@ -245,7 +391,7 @@ class ChromaClient:
             'metadatas': [combined_metas],
             'distances': [[0.0] * len(combined_ids)]  # Placeholder, will be re-ranked
         }
-    
+
     def query_hybrid_rrf(
         self,
         query: str,
@@ -256,26 +402,26 @@ class ChromaClient:
     ) -> Dict[str, Any]:
         """
         Hybrid search with Reciprocal Rank Fusion (RRF).
-        
+
         RRF provides better fusion than simple union by considering rank positions.
         Formula: score(d) = Σ 1/(k + rank_i(d)) for each ranking system i
-        
+
         Args:
             query: Search query
             k: Number of results to return
             where: Optional metadata filter clause (may contain unsupported $contains)
             embedding_model_id: Embedding model ID
             rrf_k: RRF constant (typically 60, controls rank influence)
-        
+
         Returns:
             Combined results dict with RRF-scored documents
         """
         from backend.embed_utils import get_embedding
         from backend.metadata_utils import separate_where_clauses, apply_client_side_filters
-        
+
         # Separate ChromaDB-compatible and client-side filters
         chroma_where, client_where = separate_where_clauses(where)
-        
+
         # Get dense (semantic) results with ChromaDB-compatible filters only
         query_embedding = get_embedding(query, model_id=embedding_model_id)
         dense_results = self.collection.query(
@@ -283,38 +429,38 @@ class ChromaClient:
             n_results=k * 3 if client_where else k * 2,  # Retrieve more for better fusion and filtering
             where=chroma_where,  # Only ChromaDB-compatible filters
         )
-        
+
         # Apply client-side filters ($contains) to dense results
         if client_where:
             dense_results = apply_client_side_filters(dense_results, client_where)
-        
+
         # Get sparse (BM25) results
         bm25_results = self.query_bm25(query, k=k * 3 if client_where else k * 2)
-        
+
         # Apply metadata filter to BM25 results if specified
         if chroma_where:
             bm25_results = self._filter_bm25_results(bm25_results, chroma_where)
-        
+
         # Apply client-side filters to BM25 results
         if client_where:
             bm25_results = [r for r in bm25_results if self._matches_where_clause(r['metadata'], client_where)]
-        
+
         # Calculate RRF scores
         rrf_scores = {}
-        
+
         # Add dense rankings
         if dense_results['ids'] and dense_results['ids'][0]:
             for rank, doc_id in enumerate(dense_results['ids'][0]):
                 rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + 1 / (rrf_k + rank + 1)
-        
+
         # Add BM25 rankings
         for rank, result in enumerate(bm25_results):
             doc_id = result['id']
             rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + 1 / (rrf_k + rank + 1)
-        
+
         # Sort by RRF score (descending)
         sorted_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:k]
-        
+
         # Retrieve full documents for top-k IDs
         if not sorted_ids:
             return {
@@ -323,43 +469,36 @@ class ChromaClient:
                 'metadatas': [[]],
                 'distances': [[]]
             }
-        
+
         final_results = self.collection.get(
             ids=sorted_ids,
             include=['documents', 'metadatas']
         )
-        
+
         # Maintain RRF score order
         id_to_idx = {doc_id: i for i, doc_id in enumerate(final_results['ids'])}
         ordered_docs = []
         ordered_metas = []
         ordered_scores = []
-        
+
         for doc_id in sorted_ids:
             idx = id_to_idx.get(doc_id)
             if idx is not None:
                 ordered_docs.append(final_results['documents'][idx])
                 ordered_metas.append(final_results['metadatas'][idx])
                 ordered_scores.append(rrf_scores[doc_id])
-        
+
         return {
             'ids': [sorted_ids],
             'documents': [ordered_docs],
             'metadatas': [ordered_metas],
             'distances': [[1 - score for score in ordered_scores]]  # Convert to distance
         }
-    
+
     def _filter_bm25_results(self, results: List[Dict], where: Dict[str, Any]) -> List[Dict]:
         """Filter BM25 results by metadata constraints."""
-        filtered = []
-        
-        for result in results:
-            metadata = result.get('metadata', {})
-            if self._matches_where_clause(metadata, where):
-                filtered.append(result)
-        
-        return filtered
-    
+        return [r for r in results if self._matches_where_clause(r.get('metadata', {}), where)]
+
     def _matches_where_clause(self, metadata: Dict[str, Any], where: Dict[str, Any]) -> bool:
         """Check if metadata matches a where clause.
 
@@ -370,146 +509,10 @@ class ChromaClient:
         from backend.metadata_utils import _matches_where_clause
         return _matches_where_clause(metadata, where)
 
-    def _load_bm25_index(self):
-        """Load BM25 index from disk if it exists."""
-        if os.path.exists(self.bm25_path):
-            try:
-                with open(self.bm25_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self.bm25_corpus = data['corpus']
-                    self.bm25_ids = data['ids']
-                    self.bm25_index = BM25Okapi(self.bm25_corpus) if self.bm25_corpus else None
-            except Exception as e:
-                print(f"Error loading BM25 index: {e}")
-                self.bm25_index = None
-    
-    def _save_bm25_index(self):
-        """Save BM25 index to disk."""
-        if self.bm25_index is not None:
-            try:
-                with open(self.bm25_path, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        'corpus': self.bm25_corpus,
-                        'ids': self.bm25_ids,
-                    }, f)
-            except Exception as e:
-                print(f"Error saving BM25 index: {e}")
-    
-    def build_bm25_index(self):
-        """Build BM25 index from all documents in ChromaDB."""
-        # Get all documents from ChromaDB
-        total_count = self.collection.count()
-        
-        if total_count == 0:
-            print("No documents in collection to index")
-            return
-        
-        all_docs = self.collection.get(limit=total_count)
-        
-        if not all_docs['ids']:
-            print("No documents in collection to index")
-            return
-        
-        # Tokenize documents — supports CJK character-level splitting
-        corpus = []
-        for doc in all_docs['documents']:
-            tokens = _tokenize_for_bm25(doc)
-            corpus.append(tokens)
-        
-        # Build BM25 index
-        self.bm25_corpus = corpus
-        self.bm25_ids = all_docs['ids']
-        self.bm25_index = BM25Okapi(corpus)
-        
-        # Save index
-        self._save_bm25_index()
-        print(f"BM25 index built with {len(corpus)} documents")
+    # ------------------------------------------------------------------
+    # Inventory
+    # ------------------------------------------------------------------
 
-    def sync_db(self,
-        items: Iterable[Any],  
-        chunk_size: int = 1000,
-        chunk_overlap: int = 200,
-        embed_fn=None,
-    ) -> None:
-        """
-        Syncs the Chroma DB with the current ZoteroItem snapshot.
-        Indexes and chunks text, embeds with supplied function, and stores metadata.
-        """
-
-        def chunk_text(t: str, size: int, overlap: int) -> List[str]:
-            chunks = []
-            start = 0
-            n = len(t)
-            while start < n:
-                end = min(n, start + size)
-                chunks.append(t[start:end])
-                if end == n:
-                    break
-                start = end - overlap
-            return chunks
-
-        ids: List[str] = []
-        docs: List[str] = []
-        metas: List[Dict[str, Any]] = []
-        embeddings: List[List[float]] = []
-
-        for item in items:
-            text = getattr(item, "metadata", {}).get("text") or item.get("text") if isinstance(item, dict) else None
-            item_id = getattr(item, "metadata", {}).get("item_id") or item.get("item_id") if isinstance(item, dict) else None
-            if not text or not item_id:
-                continue
-            chunks = chunk_text(text, chunk_size, chunk_overlap)
-            meta_src = getattr(item, "metadata", {}) if hasattr(item, "metadata") else item
-            ids_batch = []
-            docs_batch = []
-            metas_batch = []
-            for idx, ch in enumerate(chunks):
-                doc_id = f"{str(item_id)}:{str(idx)}"
-                ids_batch.append(doc_id)
-                docs_batch.append(ch)
-
-                title = meta_src.get("title") or ""
-                authors = meta_src.get("authors") or ""
-                tags = meta_src.get("tags") or ""
-                collections = meta_src.get("collections") or ""
-                year = meta_src.get("date") or ""
-                pdf_path = meta_src.get("pdf_path") or ""
-
-                metas_batch.append({
-                    "item_id": str(item_id),
-                    "chunk_idx": int(idx),
-                    "title": title,
-                    "authors": authors,
-                    "tags": tags,
-                    "collections": collections,
-                    "year": year,
-                    "pdf_path": pdf_path,
-                })
-            ids += ids_batch
-            docs += docs_batch
-            metas += metas_batch
-            # ----- Embed batch -----
-            if embed_fn is not None and docs_batch:
-                embeddings += self.embed_chunks(docs_batch, embed_fn)
-        if ids:
-            print("ID types:", set(type(i) for i in ids))
-            self.add_chunks(
-                ids=[str(i) for i in ids],
-                documents=docs,
-                metadatas=metas,
-                embeddings=embeddings if embed_fn is not None else None
-            )
-
-    def get_or_create_db(self):
-        """
-        Ensures the collection exists and is initialized.
-        IMPORTANT: Creates collection without embedding function (manual embeddings only).
-        """
-        self.collection = self.chroma_client.get_or_create_collection(
-            name=self.collection_name,
-            metadata={"hnsw:space": "cosine"}
-        )
-    
     def count_items_matching_filters(
         self,
         year_min: Optional[int] = None,
@@ -522,24 +525,15 @@ class ChromaClient:
     ) -> Dict[str, int]:
         """
         Count how many unique items and chunks match the given filters.
-        
-        This is used for the Scope panel to show an estimate of filtered items.
-        
-        Args:
-            year_min: Minimum year filter
-            year_max: Maximum year filter
-            tags: List of tags to match
-            collections: List of collections to match
-            title: Title substring to match
-            author: Author substring to match
-            item_types: List of item types to match
-        
+
+        Used by the Scope panel to show an estimate of filtered items. Pages
+        through metadata so memory stays bounded on large libraries.
+
         Returns:
             Dict with 'unique_items' and 'total_chunks' counts
         """
         from backend.metadata_utils import build_metadata_where_clause, separate_where_clauses
-        
-        # Build where clause
+
         where = build_metadata_where_clause(
             year_min=year_min,
             year_max=year_max,
@@ -549,164 +543,82 @@ class ChromaClient:
             author=author,
             item_types=item_types,
         )
-        
+
         if where is None:
-            # No filters - count everything
-            total_count = self.collection.count()
-            all_results = self.collection.get(limit=total_count if total_count > 0 else 1, include=['metadatas'])
-            unique_items = len({str(m.get('item_id')) for m in all_results.get('metadatas', [])})
+            # No filters: ids alone carry the item id, no metadata needed.
             return {
-                'unique_items': unique_items,
-                'total_chunks': len(all_results.get('ids', []))
+                'unique_items': len(self.get_indexed_item_ids()),
+                'total_chunks': self.collection.count(),
             }
-        
-        # Separate ChromaDB-compatible and client-side filters
+
         chroma_where, client_where = separate_where_clauses(where)
-        
-        # Get total count to ensure we fetch all documents
-        total_count = self.collection.count()
-        
-        # Get all results matching ChromaDB filters (specify limit to get all)
-        if chroma_where:
-            results = self.collection.get(where=chroma_where, limit=total_count if total_count > 0 else 1, include=['metadatas'])
-        else:
-            # No ChromaDB filters, get everything
-            results = self.collection.get(limit=total_count if total_count > 0 else 1, include=['metadatas'])
-        
-        # Apply client-side filtering if needed
-        if client_where:
-            metadatas = results.get('metadatas', [])
-            filtered_metas = [m for m in metadatas if self._matches_where_clause(m, client_where)]
-        else:
-            filtered_metas = results.get('metadatas', [])
-        
-        # Count unique items
-        unique_items = len({str(m.get('item_id')) for m in filtered_metas if m.get('item_id')})
-        
-        return {
-            'unique_items': unique_items,
-            'total_chunks': len(filtered_metas)
-        }
-    
+        unique_items = set()
+        total_chunks = 0
+        for metas in self._iter_metadatas(where=chroma_where):
+            for m in metas:
+                if client_where and not self._matches_where_clause(m, client_where):
+                    continue
+                total_chunks += 1
+                if m.get('item_id'):
+                    unique_items.add(str(m['item_id']))
+        return {'unique_items': len(unique_items), 'total_chunks': total_chunks}
+
     def get_indexed_item_ids(self) -> set:
         """
         Get all unique item IDs that are currently indexed in the database.
-        
+
+        Chunk IDs are '<item_id>:<chunk_idx>', so only ids are read, never
+        metadata or documents.
+
         Returns:
             Set of item_id strings (always converted to strings for consistency)
         """
-        # Get total count first to ensure we fetch ALL documents
-        # ChromaDB's get() has a default limit, so we must specify a sufficient limit
-        total_count = self.collection.count()
-        
-        if total_count == 0:
-            return set()
-        
-        # Get all documents with their metadata (specify limit to get ALL docs)
-        all_data = self.collection.get(
-            limit=total_count,
-            include=['metadatas']
-        )
-        
-        if not all_data['metadatas']:
-            return set()
-        
-        # Extract unique item_ids from metadata
-        # IMPORTANT: Always convert to string for consistent comparison with Zotero IDs
         item_ids = set()
-        for metadata in all_data['metadatas']:
-            if metadata and 'item_id' in metadata:
-                item_ids.add(str(metadata['item_id']))
-        
+        for ids in self._iter_ids():
+            item_ids.update(_item_id_from_chunk_id(i) for i in ids)
         return item_ids
-    
+
     def item_exists(self, item_id: str) -> bool:
-        """
-        Check if an item is already indexed in the database.
-        
-        Args:
-            item_id: The Zotero item ID to check
-            
-        Returns:
-            True if item exists, False otherwise
-        """
-        # Query for any chunk with this item_id
+        """Check if an item is already indexed in the database."""
         results = self.collection.get(
             where={"item_id": str(item_id)},
-            limit=1
+            limit=1,
+            include=[],
         )
         return len(results['ids']) > 0
-    
+
+    def has_pdf_path(self, pdf_path: str) -> bool:
+        """True if some indexed chunk points at this PDF path."""
+        results = self.collection.get(where={"pdf_path": pdf_path}, limit=1, include=[])
+        return len(results['ids']) > 0
+
     def get_item_metadata(self, item_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get metadata for an indexed item.
-        
-        Args:
-            item_id: The Zotero item ID
-            
-        Returns:
-            Metadata dict or None if not found
-        """
+        """Get metadata for an indexed item, or None if not found."""
         results = self.collection.get(
             where={"item_id": str(item_id)},
             limit=1
         )
-        
+
         if results['metadatas']:
             return results['metadatas'][0]
         return None
-    
-    def delete_item(self, item_id: str) -> int:
-        """
-        Delete all chunks associated with an item from the database.
-        
-        Args:
-            item_id: The Zotero item ID to delete
-            
-        Returns:
-            Number of chunks deleted
-        """
-        # Get all chunk IDs for this item
-        # Use high limit to ensure we get all chunks for this item
-        total_count = self.collection.count()
-        results = self.collection.get(
-            where={"item_id": str(item_id)},
-            limit=total_count if total_count > 0 else 1
-        )
-        
-        if results['ids']:
-            self.collection.delete(ids=results['ids'])
-            return len(results['ids'])
-        return 0
 
-    def embed_chunks(self, chunks: List[str], embed_fn) -> List[List[float]]:
-        """
-        Passes a list of text chunks through the embedding function and returns their vectors.
-        """
-        embeddings = [embed_fn(chunk) for chunk in chunks]
-        return embeddings
-    
     def get_document_count(self) -> int:
-        """
-        Get total number of document chunks in the collection.
-        
-        Returns:
-            Number of chunks indexed
-        """
+        """Get total number of document chunks in the collection."""
         return self.collection.count()
-    
+
     def validate_embedding_dimension(self) -> Dict[str, Any]:
         """
         Validate that the database is configured correctly for the current embedding model.
-        
+
         Returns:
             Dict with validation results including expected vs actual dimensions
         """
         from backend.embed_utils import get_embedding, get_embedding_dimension, get_current_model_id
-        
+
         # Try to get a sample document to check dimensions
         sample = self.collection.get(limit=1)
-        
+
         if not sample['ids']:
             return {
                 "status": "empty",
@@ -714,10 +626,10 @@ class ChromaClient:
                 "expected_dimension": get_embedding_dimension(),
                 "model": get_current_model_id()
             }
-        
+
         # Test embedding a simple query
         test_embedding = get_embedding("test query")
-        
+
         return {
             "status": "ok",
             "message": "Database configuration is valid",

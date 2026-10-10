@@ -108,6 +108,20 @@ Tests for metadata migration from v1 to v2.
 pytest backend/tests/test_metadata_migration.py -v
 ```
 
+#### `test_vector_db.py`
+ChromaClient against a real on-disk Chroma + FTS5 index in a temp dir: batch
+splitting, id-only inventory, paged filter counts, delete, keyword ranking
+(including CJK), index reconciliation (issue #86).
+
+#### `test_indexing_worker.py`
+The background indexing worker with Zotero, PDF extraction, embeddings and
+Chroma mocked: progress accounting, incremental filtering, full-mode
+replacement, cancellation.
+
+#### `test_api.py`
+HTTP smoke tests through FastAPI's TestClient with the chatbot mocked: status
+codes, error `detail`, guards, PDF path validation, settings masking.
+
 ### Integration Tests
 
 #### `test_metadata_integration.py` (450+ lines, 35+ tests)

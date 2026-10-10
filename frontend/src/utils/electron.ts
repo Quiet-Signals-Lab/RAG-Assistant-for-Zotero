@@ -27,7 +27,7 @@ export interface UpdateStatus {
 
 export interface ElectronAPI {
   // Backend configuration
-  getBackendConfig: () => Promise<{ backendUrl: string; authToken: string | null }>;
+  getBackendConfig: () => Promise<{ backendUrl: string }>;
   checkBackendHealth: () => Promise<{ healthy: boolean; status?: number; error?: string }>;
   
   // App information

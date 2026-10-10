@@ -1,7 +1,7 @@
 """
 Academic prompting strategies for LLM-based research assistants.
 
-Based on 2025 best practices for academic RAG systems:
+Based on Design notes for academic RAG:
 - Citation-aware prompting with grounding requirements
 - Structured reasoning with chain-of-thought
 - Explicit factuality constraints
@@ -454,7 +454,7 @@ Requirements:
 **Title:**"""
 
 
-# Recommended generation parameters for academic RAG (2025 best practices)
+# Recommended generation parameters for academic RAG 
 class AcademicGenerationParams:
     """
     Generation presets for academic RAG responses.

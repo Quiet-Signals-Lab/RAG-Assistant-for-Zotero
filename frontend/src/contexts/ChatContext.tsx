@@ -78,7 +78,7 @@ function convertToResponseScopedSources(citations: any[], snippets: any[]): Sour
   return sources;
 }
 
-export const ChatProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
+export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { messages, loading, error, lastResponse, sendMessage: rawSendMessage, stopGeneration, loadThread, clearMessages } = useChatHook();
   const sessions = useSessions();
   const { setSelectedResponseId } = useResponseSelection();

@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import shutil
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ProfileManager:
@@ -35,18 +38,18 @@ class ProfileManager:
         self.BASE_DIR.mkdir(parents=True, exist_ok=True)
         self.PROFILES_DIR.mkdir(parents=True, exist_ok=True)
         
-        print(f"[ProfileManager] Initialized with BASE_DIR: {self.BASE_DIR}")
-        print(f"[ProfileManager] PROFILES_DIR: {self.PROFILES_DIR}")
-        print(f"[ProfileManager] ACTIVE_PROFILE_FILE: {self.ACTIVE_PROFILE_FILE}")
+        logger.info(f"[ProfileManager] Initialized with BASE_DIR: {self.BASE_DIR}")
+        logger.info(f"[ProfileManager] PROFILES_DIR: {self.PROFILES_DIR}")
+        logger.info(f"[ProfileManager] ACTIVE_PROFILE_FILE: {self.ACTIVE_PROFILE_FILE}")
         
         # Ensure default profile exists
         if not self.list_profiles():
-            print("[ProfileManager] No profiles found, creating default profile")
+            logger.info("[ProfileManager] No profiles found, creating default profile")
             self.create_profile("default", "Default Profile")
             self.set_active_profile("default")
         else:
             existing_profiles = self.list_profiles()
-            print(f"[ProfileManager] Found {len(existing_profiles)} existing profiles: {[p['id'] for p in existing_profiles]}")
+            logger.info(f"[ProfileManager] Found {len(existing_profiles)} existing profiles: {[p['id'] for p in existing_profiles]}")
     
     def get_profile_dir(self, profile_id: str) -> Path:
         """Get the directory path for a profile."""
@@ -120,7 +123,7 @@ class ProfileManager:
         with open(sessions_file, 'w', encoding='utf-8') as f:
             json.dump({"sessions": {}, "currentSessionId": None}, f, indent=2)
         
-        print(f"Created profile: {profile_id} ({name})")
+        logger.info(f"Created profile: {profile_id} ({name})")
         return metadata
     
     def list_profiles(self) -> List[Dict[str, Any]]:
@@ -146,7 +149,7 @@ class ProfileManager:
                         metadata = json.load(f)
                         profiles.append(metadata)
                 except Exception as e:
-                    print(f"Warning: Failed to load profile metadata for {profile_dir.name}: {e}")
+                    logger.warning(f"Warning: Failed to load profile metadata for {profile_dir.name}: {e}")
         
         # Sort by creation date (newest first)
         profiles.sort(key=lambda p: p.get('createdAt', ''), reverse=True)
@@ -171,7 +174,7 @@ class ProfileManager:
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error reading profile metadata: {e}")
+            logger.error(f"Error reading profile metadata: {e}")
             return None
     
     def update_profile(self, profile_id: str, name: Optional[str] = None, description: Optional[str] = None) -> bool:
@@ -203,7 +206,7 @@ class ProfileManager:
                 json.dump(metadata, f, indent=2)
             return True
         except Exception as e:
-            print(f"Error updating profile metadata: {e}")
+            logger.error(f"Error updating profile metadata: {e}")
             return False
     
     def delete_profile(self, profile_id: str, force: bool = False) -> bool:
@@ -232,7 +235,7 @@ class ProfileManager:
         
         try:
             shutil.rmtree(profile_dir)
-            print(f"Deleted profile: {profile_id}")
+            logger.info(f"Deleted profile: {profile_id}")
             
             # If this was the active profile, clear active profile
             active = self.get_active_profile()
@@ -241,7 +244,7 @@ class ProfileManager:
             
             return True
         except Exception as e:
-            print(f"Error deleting profile: {e}")
+            logger.error(f"Error deleting profile: {e}")
             return False
     
     def get_active_profile(self) -> Optional[Dict[str, Any]]:
@@ -252,14 +255,14 @@ class ProfileManager:
             Profile metadata dictionary or None if no active profile
         """
         if not self.ACTIVE_PROFILE_FILE.exists():
-            print(f"[ProfileManager] Active profile file not found at: {self.ACTIVE_PROFILE_FILE}")
+            logger.info(f"[ProfileManager] Active profile file not found at: {self.ACTIVE_PROFILE_FILE}")
             # Auto-select first available profile
             profiles = self.list_profiles()
             if profiles:
-                print(f"[ProfileManager] Auto-selecting first profile: {profiles[0]['id']}")
+                logger.info(f"[ProfileManager] Auto-selecting first profile: {profiles[0]['id']}")
                 self.set_active_profile(profiles[0]['id'])
                 return profiles[0]
-            print("[ProfileManager] No profiles available to auto-select")
+            logger.info("[ProfileManager] No profiles available to auto-select")
             return None
         
         try:
@@ -269,12 +272,12 @@ class ProfileManager:
                 if profile_id:
                     profile = self.get_profile(profile_id)
                     if profile:
-                        print(f"[ProfileManager] Active profile: {profile_id}")
+                        logger.info(f"[ProfileManager] Active profile: {profile_id}")
                         return profile
                     else:
-                        print(f"[ProfileManager] WARNING: Active profile '{profile_id}' not found")
+                        logger.info(f"[ProfileManager] WARNING: Active profile '{profile_id}' not found")
         except Exception as e:
-            print(f"[ProfileManager] Error reading active profile: {e}")
+            logger.info(f"[ProfileManager] Error reading active profile: {e}")
         
         return None
     
@@ -298,10 +301,10 @@ class ProfileManager:
                     "activeProfileId": profile_id,
                     "switchedAt": datetime.utcnow().isoformat() + "Z"
                 }, f, indent=2)
-            print(f"Switched to profile: {profile_id}")
+            logger.info(f"Switched to profile: {profile_id}")
             return True
         except Exception as e:
-            print(f"Error setting active profile: {e}")
+            logger.error(f"Error setting active profile: {e}")
             return False
     
     def load_profile_settings(self, profile_id: str) -> Dict[str, Any]:
@@ -316,23 +319,23 @@ class ProfileManager:
         """
         settings_file = self.get_profile_settings_file(profile_id)
         
-        print(f"[ProfileManager] Loading settings from: {settings_file}")
+        logger.info(f"[ProfileManager] Loading settings from: {settings_file}")
         
         if not settings_file.exists():
-            print(f"[ProfileManager] Settings file not found, returning empty dict")
+            logger.info(f"[ProfileManager] Settings file not found, returning empty dict")
             return {}
         
         try:
             with open(settings_file, 'r', encoding='utf-8') as f:
                 settings = json.load(f)
-                print(f"[ProfileManager] Loaded settings with keys: {list(settings.keys())}")
+                logger.info(f"[ProfileManager] Loaded settings with keys: {list(settings.keys())}")
                 if 'zoteroPath' in settings:
-                    print(f"[ProfileManager] Zotero path: {settings['zoteroPath']}")
+                    logger.info(f"[ProfileManager] Zotero path: {settings['zoteroPath']}")
                 if 'chromaPath' in settings:
-                    print(f"[ProfileManager] Chroma path: {settings['chromaPath']}")
+                    logger.info(f"[ProfileManager] Chroma path: {settings['chromaPath']}")
                 return settings
         except Exception as e:
-            print(f"[ProfileManager] Error loading profile settings: {e}")
+            logger.info(f"[ProfileManager] Error loading profile settings: {e}")
             return {}
     
     def save_profile_settings(self, profile_id: str, settings: Dict[str, Any]) -> bool:
@@ -362,7 +365,7 @@ class ProfileManager:
             
             return True
         except Exception as e:
-            print(f"Error saving profile settings: {e}")
+            logger.error(f"Error saving profile settings: {e}")
             return False
     
     def load_profile_sessions(self, profile_id: str) -> Dict[str, Any]:
@@ -384,7 +387,7 @@ class ProfileManager:
             with open(sessions_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error loading profile sessions: {e}")
+            logger.error(f"Error loading profile sessions: {e}")
             return {"sessions": {}, "currentSessionId": None}
     
     def save_profile_sessions(self, profile_id: str, sessions_data: Dict[str, Any]) -> bool:
@@ -414,7 +417,7 @@ class ProfileManager:
             
             return True
         except Exception as e:
-            print(f"Error saving profile sessions: {e}")
+            logger.error(f"Error saving profile sessions: {e}")
             return False
     
     def export_profile(self, profile_id: str, export_path: str) -> bool:
@@ -449,10 +452,10 @@ class ProfileManager:
                 if sessions_file.exists():
                     zipf.write(sessions_file, "sessions.json")
             
-            print(f"Exported profile to: {export_path}")
+            logger.info(f"Exported profile to: {export_path}")
             return True
         except Exception as e:
-            print(f"Error exporting profile: {e}")
+            logger.error(f"Error exporting profile: {e}")
             return False
     
     def import_profile(self, import_path: str, new_profile_id: Optional[str] = None) -> Optional[str]:
@@ -478,7 +481,7 @@ class ProfileManager:
                 # Read profile metadata
                 metadata_path = Path(temp_dir) / "profile.json"
                 if not metadata_path.exists():
-                    print("Error: Invalid profile export (missing profile.json)")
+                    logger.error("Error: Invalid profile export (missing profile.json)")
                     return None
                 
                 with open(metadata_path, 'r', encoding='utf-8') as f:
@@ -514,8 +517,8 @@ class ProfileManager:
                         sessions = json.load(f)
                     self.save_profile_sessions(new_profile_id, sessions)
                 
-                print(f"Imported profile as: {new_profile_id}")
+                logger.info(f"Imported profile as: {new_profile_id}")
                 return new_profile_id
         except Exception as e:
-            print(f"Error importing profile: {e}")
+            logger.error(f"Error importing profile: {e}")
             return None

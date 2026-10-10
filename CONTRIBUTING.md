@@ -46,14 +46,15 @@ cd frontend && npm run dev                                       # Terminal 2
 ## Testing
 
 ```bash
-# Backend
-pytest backend/tests/
+# Backend (unit tests; markers and paths are in pyproject.toml)
+python -m pytest
 
-# Frontend
-cd frontend && npm test
+# Frontend (type-check, lint, build)
+cd frontend && npm run typecheck && npm run lint && npm run build
 ```
 
-Add tests for new features when applicable.
+The same checks run in GitHub Actions on every push and pull request
+(`.github/workflows/ci.yml`). Add tests for new features when applicable.
 
 ## Security
 

@@ -12,8 +12,7 @@ const ChatInput: React.FC<Props> = ({ onSend, onStop, disabled }) => {
   useEffect(() => {
     function onInsert(e: Event) {
       try {
-        // @ts-ignore custom event detail
-        const text = (e as CustomEvent).detail?.text;
+        const text = (e as CustomEvent<{ text?: string }>).detail?.text;
         if (text) setValue((v) => (v ? v + "\n" + text : text));
       } catch (err) {
         // ignore

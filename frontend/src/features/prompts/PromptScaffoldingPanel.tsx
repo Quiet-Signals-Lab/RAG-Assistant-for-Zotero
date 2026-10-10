@@ -65,14 +65,10 @@ const PromptScaffoldingPanel: React.FC = () => {
       const response = await apiFetch('/api/library/tags');
       const data = await response.json();
       
-      if (data.tags) {
-        setAvailableTags(data.tags);
-      } else if (data.error) {
-        setTagError(data.error);
-      }
+      setAvailableTags(data.tags ?? []);
     } catch (err) {
       console.error('Failed to load tags:', err);
-      setTagError('Failed to load tags from library');
+      setTagError(err instanceof Error ? err.message : 'Failed to load tags from library');
     } finally {
       setLoadingTags(false);
     }

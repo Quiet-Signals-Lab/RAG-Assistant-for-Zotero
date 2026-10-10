@@ -19,6 +19,9 @@ from .base import (
     ProviderRateLimitError, ProviderContextError,
     MessageAdapter, ParameterMapper
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class MistralProvider(BaseProvider):
@@ -76,7 +79,7 @@ class MistralProvider(BaseProvider):
         """Validate credentials AND return available models dynamically."""
         try:
             client = self._get_client(credentials)
-            print(f"[Mistral Provider] Fetching dynamic models via client.models.list()...")
+            logger.info(f"[Mistral Provider] Fetching dynamic models via client.models.list()...")
             
             models_response = client.models.list()
             models = [
@@ -92,12 +95,12 @@ class MistralProvider(BaseProvider):
             
             # Warn if no models found
             if not models:
-                print(f"[Mistral Provider] WARNING: No models returned from endpoint")
+                logger.info(f"[Mistral Provider] WARNING: No models returned from endpoint")
             
             for model in models:
-                print(f"[Mistral Provider]   Found: {model.id}")
+                logger.info(f"[Mistral Provider]   Found: {model.id}")
             
-            print(f"[Mistral Provider] Successfully discovered {len(models)} models")
+            logger.info(f"[Mistral Provider] Successfully discovered {len(models)} models")
             
             return {
                 "valid": True,
@@ -251,8 +254,8 @@ class GoogleProvider(BaseProvider):
             raise ProviderAuthenticationError("Google API key is required")
         
         # Log SDK version for debugging
-        print(f"[Google Provider] Using google-generativeai version: {genai.__version__ if hasattr(genai, '__version__') else 'unknown'}")
-        print(f"[Google Provider] API key present: {bool(api_key)} (length: {len(api_key) if api_key else 0})")
+        logger.info(f"[Google Provider] Using google-generativeai version: {genai.__version__ if hasattr(genai, '__version__') else 'unknown'}")
+        logger.info(f"[Google Provider] API key present: {bool(api_key)} (length: {len(api_key) if api_key else 0})")
         
         genai.configure(api_key=api_key)
         return genai
@@ -285,7 +288,7 @@ class GoogleProvider(BaseProvider):
             
             # List all models accessible to this API key
             models = []
-            print(f"[Google Provider] Fetching dynamic models via genai.list_models()...")
+            logger.info(f"[Google Provider] Fetching dynamic models via genai.list_models()...")
             
             try:
                 # Attempt dynamic model discovery
@@ -316,15 +319,15 @@ class GoogleProvider(BaseProvider):
                             context_length=context_window
                         ))
                         
-                        print(f"[Google Provider]   Found: {model_id} (ctx: {context_window})")
+                        logger.info(f"[Google Provider]   Found: {model_id} (ctx: {context_window})")
                 
                 # Sort models by name for consistent UI display
                 if models:
                     models.sort(key=lambda m: m.name)
-                    print(f"[Google Provider] Successfully discovered {len(models)} models")
+                    logger.info(f"[Google Provider] Successfully discovered {len(models)} models")
                 else:
                     # No models found via API, use fallback
-                    print(f"[Google Provider] No models found via API, using fallback")
+                    logger.info(f"[Google Provider] No models found via API, using fallback")
                     raise Exception("No models returned from API")
                     
             except Exception as list_error:
@@ -338,7 +341,7 @@ class GoogleProvider(BaseProvider):
                     raise
 
                 # Transient failure — use static fallback
-                print(f"[Google Provider] Dynamic discovery failed ({error_type}), using static fallback")
+                logger.info(f"[Google Provider] Dynamic discovery failed ({error_type}), using static fallback")
                 models = self._get_fallback_models()
             
             return {
@@ -453,13 +456,13 @@ class GoogleProvider(BaseProvider):
             try:
                 result = self.validate_credentials_and_list_models(credentials)
                 if result["valid"] and result["models"]:
-                    print(f"[Google Provider] Using {len(result['models'])} dynamically discovered models")
+                    logger.info(f"[Google Provider] Using {len(result['models'])} dynamically discovered models")
                     return result["models"]
             except Exception as e:
-                print(f"[Google Provider] Dynamic model discovery failed: {e}, using static fallback")
+                logger.info(f"[Google Provider] Dynamic model discovery failed: {e}, using static fallback")
         
         # Fallback to static list if dynamic discovery fails or no credentials
-        print("[Google Provider] Using static fallback model list")
+        logger.info("[Google Provider] Using static fallback model list")
         return self._get_fallback_models()
     
     def chat(
@@ -476,13 +479,13 @@ class GoogleProvider(BaseProvider):
             genai = self._get_client(credentials)
             
             # Log the exact model being used
-            print(f"[Google Provider] chat() called with model='{model}'")
+            logger.info(f"[Google Provider] chat() called with model='{model}'")
             
             # Validate model name format - Gemini models should not have "models/" prefix here
             # The SDK will add it automatically
             if model.startswith("models/"):
                 model = model.replace("models/", "")
-                print(f"[Google Provider] Stripped 'models/' prefix, using: '{model}'")
+                logger.info(f"[Google Provider] Stripped 'models/' prefix, using: '{model}'")
             
             # Use MessageAdapter for Gemini-specific format
             system_instruction, gemini_history = MessageAdapter.to_gemini(messages)
@@ -511,16 +514,16 @@ class GoogleProvider(BaseProvider):
             ]
             
             # Create model instance with system instruction
-            print(f"[Google Provider] Creating GenerativeModel with model='{model}'")
-            print(f"[Google Provider] System instruction length: {len(system_instruction) if system_instruction else 0}")
-            print(f"[Google Provider] Number of history messages: {len(gemini_history)}")
-            print(f"[Google Provider] Temperature: {temperature}, Max tokens: {max_tokens}")
+            logger.info(f"[Google Provider] Creating GenerativeModel with model='{model}'")
+            logger.info(f"[Google Provider] System instruction length: {len(system_instruction) if system_instruction else 0}")
+            logger.info(f"[Google Provider] Number of history messages: {len(gemini_history)}")
+            logger.info(f"[Google Provider] Temperature: {temperature}, Max tokens: {max_tokens}")
             
             # Debug: Print first message preview
             if gemini_history:
                 first_msg = gemini_history[0]
                 preview = str(first_msg.get('parts', [''])[0])[:200] if first_msg.get('parts') else 'No parts'
-                print(f"[Google Provider] First message role: {first_msg.get('role')}, preview: {preview}...")
+                logger.info(f"[Google Provider] First message role: {first_msg.get('role')}, preview: {preview}...")
             
             try:
                 model_instance = genai.GenerativeModel(
@@ -528,20 +531,20 @@ class GoogleProvider(BaseProvider):
                     system_instruction=system_instruction,
                     safety_settings=safety_settings
                 )
-                print(f"[Google Provider] Model instance created successfully")
+                logger.info(f"[Google Provider] Model instance created successfully")
             except Exception as model_error:
-                print(f"[Google Provider] ERROR creating model: {type(model_error).__name__}: {model_error}")
+                logger.info(f"[Google Provider] ERROR creating model: {type(model_error).__name__}: {model_error}")
                 raise
             
             # Use adapted Gemini message format
             # Gemini expects alternating user/model turns in chat history
-            print(f"[Google Provider] Calling API with {len(gemini_history)} message(s)...")
+            logger.info(f"[Google Provider] Calling API with {len(gemini_history)} message(s)...")
             
             if len(gemini_history) == 1 and gemini_history[0]["role"] == "user":
                 # Single turn - use generate_content
-                print(f"[Google Provider] Using generate_content (single turn)")
+                logger.info(f"[Google Provider] Using generate_content (single turn)")
                 content_to_send = gemini_history[0]["parts"][0]
-                print(f"[Google Provider] Content length: {len(content_to_send)} chars")
+                logger.info(f"[Google Provider] Content length: {len(content_to_send)} chars")
                 
                 # Try to add request_options with timeout if available
                 request_kwargs = {}
@@ -549,9 +552,9 @@ class GoogleProvider(BaseProvider):
                     import google.ai.generativelanguage as glm
                     request_options = glm.types.RequestOptions(timeout=120)
                     request_kwargs['request_options'] = request_options
-                    print(f"[Google Provider] Using 120s timeout")
+                    logger.info(f"[Google Provider] Using 120s timeout")
                 except (ImportError, AttributeError) as to_err:
-                    print(f"[Google Provider] Could not set timeout: {to_err}")
+                    logger.info(f"[Google Provider] Could not set timeout: {to_err}")
                 
                 response = model_instance.generate_content(
                     content_to_send,
@@ -563,19 +566,19 @@ class GoogleProvider(BaseProvider):
                     },
                     **request_kwargs
                 )
-                print(f"[Google Provider] generate_content completed")
+                logger.info(f"[Google Provider] generate_content completed")
             else:
                 # Multi-turn - use chat with history
-                print(f"[Google Provider] Using start_chat (multi-turn)")
+                logger.info(f"[Google Provider] Using start_chat (multi-turn)")
                 
                 request_kwargs = {}
                 try:
                     import google.ai.generativelanguage as glm
                     request_options = glm.types.RequestOptions(timeout=120)
                     request_kwargs['request_options'] = request_options
-                    print(f"[Google Provider] Using 120s timeout")
+                    logger.info(f"[Google Provider] Using 120s timeout")
                 except (ImportError, AttributeError) as to_err:
-                    print(f"[Google Provider] Could not set timeout: {to_err}")
+                    logger.info(f"[Google Provider] Could not set timeout: {to_err}")
                 
                 chat = model_instance.start_chat(history=gemini_history[:-1])
                 response = chat.send_message(
@@ -588,42 +591,42 @@ class GoogleProvider(BaseProvider):
                     },
                     **request_kwargs
                 )
-                print(f"[Google Provider] send_message completed")
+                logger.info(f"[Google Provider] send_message completed")
             
             # Check if response was blocked by safety filters
             if hasattr(response, 'prompt_feedback'):
                 feedback = response.prompt_feedback
                 if hasattr(feedback, 'block_reason') and feedback.block_reason:
                     block_reason = str(feedback.block_reason)
-                    print(f"[Google Provider] WARNING: Response blocked by safety filter: {block_reason}")
+                    logger.info(f"[Google Provider] WARNING: Response blocked by safety filter: {block_reason}")
                     raise ProviderError(f"Google blocked the request: {block_reason}")
             
             # Extract text from response
-            print(f"[Google Provider] Extracting content from response...")
+            logger.info(f"[Google Provider] Extracting content from response...")
             content = ""
             if hasattr(response, 'text'):
                 content = response.text
-                print(f"[Google Provider] Got content via .text attribute ({len(content)} chars)")
+                logger.info(f"[Google Provider] Got content via .text attribute ({len(content)} chars)")
             elif hasattr(response, 'candidates') and response.candidates:
                 # Extract from candidates if text attribute not available
-                print(f"[Google Provider] Extracting from candidates ({len(response.candidates)} candidates)")
+                logger.info(f"[Google Provider] Extracting from candidates ({len(response.candidates)} candidates)")
                 candidate = response.candidates[0]
                 
                 # Check if candidate was blocked
                 if hasattr(candidate, 'finish_reason'):
                     finish_reason = str(candidate.finish_reason)
-                    print(f"[Google Provider] Finish reason: {finish_reason}")
+                    logger.info(f"[Google Provider] Finish reason: {finish_reason}")
                     if 'SAFETY' in finish_reason or 'BLOCKED' in finish_reason:
                         raise ProviderError(f"Google blocked the response: {finish_reason}")
                 
                 if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
                     content = "".join(part.text for part in candidate.content.parts if hasattr(part, 'text'))
-                    print(f"[Google Provider] Got content from candidate.content.parts ({len(content)} chars)")
+                    logger.info(f"[Google Provider] Got content from candidate.content.parts ({len(content)} chars)")
             
             if not content:
-                print(f"[Google Provider] ERROR: No content in response!")
-                print(f"[Google Provider] Response type: {type(response)}")
-                print(f"[Google Provider] Response attributes: {dir(response)}")
+                logger.info(f"[Google Provider] ERROR: No content in response!")
+                logger.info(f"[Google Provider] Response type: {type(response)}")
+                logger.info(f"[Google Provider] Response attributes: {dir(response)}")
                 raise ProviderError("No content in Google Gemini response")
             
             # Google usage metadata
@@ -646,7 +649,7 @@ class GoogleProvider(BaseProvider):
             error_msg = str(e)
             error_type = type(e).__name__
             
-            print(f"[Google Provider] ERROR: {error_type}: {error_msg}")
+            logger.info(f"[Google Provider] ERROR: {error_type}: {error_msg}")
             
             if hasattr(e, 'message'):
                 error_msg = e.message
@@ -724,7 +727,7 @@ class GroqProvider(BaseProvider):
         """Validate credentials AND return available models dynamically."""
         try:
             client = self._get_client(credentials)
-            print(f"[Groq Provider] Fetching dynamic models via client.models.list()...")
+            logger.info(f"[Groq Provider] Fetching dynamic models via client.models.list()...")
             
             models_response = client.models.list()
             models = [
@@ -740,12 +743,12 @@ class GroqProvider(BaseProvider):
             
             # Edge case: warn if no models returned
             if not models:
-                print(f"[Groq Provider] WARNING: No models returned from endpoint")
+                logger.info(f"[Groq Provider] WARNING: No models returned from endpoint")
             
             for model in models:
-                print(f"[Groq Provider]   Found: {model.id}")
+                logger.info(f"[Groq Provider]   Found: {model.id}")
             
-            print(f"[Groq Provider] Successfully discovered {len(models)} models")
+            logger.info(f"[Groq Provider] Successfully discovered {len(models)} models")
             
             return {
                 "valid": True,
@@ -821,7 +824,7 @@ class GroqProvider(BaseProvider):
             # Map standard parameters to Groq equivalents
             mapped_params = ParameterMapper.map_params(kwargs, self.id)
             
-            # 2025 best practices: top_p=0.9 for nucleus sampling, frequency_penalty for citation diversity
+            # top_p=0.9 for nucleus sampling, frequency_penalty for citation diversity
             response = client.chat.completions.create(
                 model=model,
                 messages=openai_messages,
@@ -913,7 +916,7 @@ class OpenRouterProvider(BaseProvider):
         """Validate credentials AND return available models dynamically."""
         try:
             client = self._get_client(credentials)
-            print(f"[OpenRouter Provider] Fetching dynamic models via client.models.list()...")
+            logger.info(f"[OpenRouter Provider] Fetching dynamic models via client.models.list()...")
             
             models_response = client.models.list()
             # OpenRouter has many models, return popular ones (limit to 30)
@@ -930,14 +933,14 @@ class OpenRouterProvider(BaseProvider):
             
             # Edge case: warn if no models returned
             if not models:
-                print(f"[OpenRouter Provider] WARNING: No models returned from endpoint")
+                logger.info(f"[OpenRouter Provider] WARNING: No models returned from endpoint")
             
             for model in models[:10]:  # Log first 10
-                print(f"[OpenRouter Provider]   Found: {model.id}")
+                logger.info(f"[OpenRouter Provider]   Found: {model.id}")
             if len(models) > 10:
-                print(f"[OpenRouter Provider]   ... and {len(models) - 10} more")
+                logger.info(f"[OpenRouter Provider]   ... and {len(models) - 10} more")
             
-            print(f"[OpenRouter Provider] Successfully discovered {len(models)} models")
+            logger.info(f"[OpenRouter Provider] Successfully discovered {len(models)} models")
             
             return {
                 "valid": True,
@@ -1019,7 +1022,7 @@ class OpenRouterProvider(BaseProvider):
             # Map standard parameters to OpenRouter equivalents
             mapped_params = ParameterMapper.map_params(kwargs, self.id)
             
-            # 2025 best practices: top_p=0.9 for nucleus sampling, frequency_penalty for citation diversity
+            # top_p=0.9 for nucleus sampling, frequency_penalty for citation diversity
             response = client.chat.completions.create(
                 model=model,
                 messages=openai_messages,

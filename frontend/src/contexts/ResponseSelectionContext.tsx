@@ -7,7 +7,7 @@ type ResponseSelectionShape = {
 
 const ResponseSelectionContext = createContext<ResponseSelectionShape | null>(null);
 
-export const ResponseSelectionProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
+export const ResponseSelectionProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [selectedResponseId, setSelectedResponseId] = useState<string | null>(null);
 
   return (

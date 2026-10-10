@@ -3,8 +3,6 @@ import type { Session, Snippet, Source, Message } from "../types/session";
 import { useProfile } from "./ProfileContext";
 import { apiFetch } from "../api/client";
 
-// Legacy type alias for backward compatibility
-type SourceRef = Source;
 
 type SessionsShape = {
   sessions: Record<string, Session>;
@@ -41,7 +39,7 @@ function nowISO() {
   return new Date().toISOString();
 }
 
-export const SessionsProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
+export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { activeProfileId, isLoading: profileLoading } = useProfile();
   const [sessions, setSessions] = useState<Record<string, Session>>({});
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);

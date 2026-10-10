@@ -25,15 +25,18 @@ class MetadataMigration:
             "items_processed": set(),
         }
     
+    # Chroma get() with offset is a SQL LIMIT/OFFSET; one page of metadata at a time.
+    PAGE_SIZE = 10_000
+
     def migrate_all_metadata(self, batch_size: int = 1000) -> Dict[str, Any]:
         """
         Migrate all metadata in ChromaDB to current format.
 
-        Metadata for each unique item is fetched from Zotero on demand and
-        cached so repeated chunks from the same item only incur one query.
+        The Zotero library is read once into a dict keyed by item id; Chroma is
+        paged so memory stays bounded on large libraries (issue #86).
 
         Args:
-            batch_size: Number of chunks to process per batch.
+            batch_size: Number of chunks to update per ChromaDB write.
 
         Returns:
             Migration summary with counts and errors.
@@ -41,49 +44,28 @@ class MetadataMigration:
         logger.info("Starting metadata migration...")
         self.progress["start_time"] = time.time()
 
-        # Get all chunks from ChromaDB
-        logger.info("Fetching chunks from ChromaDB...")
-        all_results = self.chroma.collection.get(
-            limit=100000,  # Adjust based on library size
-            include=['metadatas']
-        )
+        cache: Dict[str, Dict] = {}
+        offset = 0
+        while True:
+            page = self.chroma.collection.get(
+                limit=self.PAGE_SIZE, offset=offset, include=['metadatas']
+            )
+            chunk_ids = page.get('ids', [])
+            metadatas = page.get('metadatas', [])
+            if not chunk_ids:
+                break
+            self.progress["total_chunks"] += len(chunk_ids)
+            for i in range(0, len(chunk_ids), batch_size):
+                self._migrate_batch(chunk_ids[i:i + batch_size], metadatas[i:i + batch_size], cache)
+            logger.info("Migration progress: %d chunks processed", self.progress["processed_chunks"])
+            if len(chunk_ids) < self.PAGE_SIZE:
+                break
+            offset += len(chunk_ids)
 
-        chunk_ids = all_results.get('ids', [])
-        metadatas = all_results.get('metadatas', [])
-
-        self.progress["total_chunks"] = len(chunk_ids)
-        logger.info(f"Found {len(chunk_ids)} chunks to process")
-
-        if len(chunk_ids) == 0:
+        if self.progress["total_chunks"] == 0:
             logger.warning("No chunks found in collection!")
-            return {
-                "total_chunks": 0,
-                "updated_chunks": 0,
-                "failed_chunks": self.progress["failed_chunks"],
-                "unique_items": len(self.progress["items_processed"]),
-                "elapsed_seconds": 0,
-                "success": self.progress["failed_chunks"] == 0,
-            }
-
-        # Shared cache populated lazily in _migrate_batch via _fetch_updated_metadata
-        item_metadata_cache: Dict[str, Dict] = {}
-
-        # Process in batches
-        for i in range(0, len(chunk_ids), batch_size):
-            batch_ids = chunk_ids[i:i + batch_size]
-            batch_metas = metadatas[i:i + batch_size]
-
-            logger.info(f"Processing batch {i}-{i + len(batch_ids)}")
-            self._migrate_batch(batch_ids, batch_metas, item_metadata_cache)
-
-            # Log progress
-            if self.progress["total_chunks"] > 0:
-                progress_pct = (self.progress["processed_chunks"] / self.progress["total_chunks"]) * 100
-                logger.info(f"Migration progress: {progress_pct:.1f}% "
-                            f"({self.progress['processed_chunks']}/{self.progress['total_chunks']})")
 
         elapsed = time.time() - self.progress["start_time"]
-
         summary = {
             "total_chunks": self.progress["total_chunks"],
             "updated_chunks": self.progress["updated_chunks"],
@@ -92,23 +74,30 @@ class MetadataMigration:
             "elapsed_seconds": int(elapsed),
             "success": self.progress["failed_chunks"] == 0,
         }
-        
         logger.info(f"Migration complete: {summary}")
         return summary
-    
-    def _fetch_updated_metadata(self, item_id: str) -> Optional[Dict]:
-        """Fetch current metadata for a single item from Zotero.
 
-        Returns a normalised metadata dict (year as int or None) or None if
-        the item could not be found.
+    def _library_by_item_id(self) -> Dict[str, Any]:
+        """Read the Zotero library once and key it by item id.
+
+        The previous version re-read the whole library for every item and
+        then took the first row regardless of id, so "Sync Metadata" stamped
+        every chunk with the first item's title, authors and tags.
         """
+        if not hasattr(self, "_library"):
+            self._library = {
+                str(item.metadata.get("item_id")): item
+                for item in self.zlib.search_parent_items_with_pdfs()
+            }
+        return self._library
+
+    def _fetch_updated_metadata(self, item_id: str) -> Optional[Dict]:
+        """Current metadata for one item from Zotero, normalised (year as int
+        or None), or None if the item is not in the library."""
         try:
-            items = self.zlib.search_parent_items_with_pdfs()
-            if not items:
+            item = self._library_by_item_id().get(str(item_id))
+            if item is None:
                 return None
-            # Use the first returned item (the library searches by item_id when
-            # the Zotero DB supports it, or returns all items for a general scan).
-            item = items[0]
             year_str = item.metadata.get("date", "")
             year_int: Optional[int] = None
             if year_str:
@@ -206,11 +195,6 @@ class MetadataMigration:
         # Check if year format changed (string -> int or None)
         old_year = old_meta.get('year')
         new_year = new_meta.get('year')
-        
-        # Log first few comparisons for debugging
-        if self.progress["processed_chunks"] < 5:
-            print(f"Debug comparison - old_year: {repr(old_year)} (type: {type(old_year).__name__}), "
-                  f"new_year: {repr(new_year)} (type: {type(new_year).__name__ if new_year is not None else 'NoneType'})")
         
         # Year needs update if it's currently a string (including empty strings)
         # and needs to be an int or None

@@ -1,4 +1,4 @@
-import type { Citation, Snippet, ChatResponse } from "./api";
+import type { Citation, ChatResponse } from "./api";
 
 export type Role = "user" | "assistant";
 

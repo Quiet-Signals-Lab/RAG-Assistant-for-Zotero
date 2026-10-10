@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+markers = [
+    "integration: needs network or a real external service",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

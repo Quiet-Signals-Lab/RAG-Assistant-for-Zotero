@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSessions } from "../../contexts/SessionsContext";
 
 const SessionHeader: React.FC = () => {
-  const { currentSessionId, getSession, updateSessionTitle, leftCollapsed, rightCollapsed, toggleLeft, toggleRight } = useSessions();
+  const { currentSessionId, getSession, updateSessionTitle } = useSessions();
   const session = currentSessionId ? getSession(currentSessionId) : null;
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(session?.title ?? "");

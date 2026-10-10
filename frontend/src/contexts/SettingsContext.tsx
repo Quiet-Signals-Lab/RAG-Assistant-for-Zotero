@@ -190,8 +190,6 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         throw new Error('Failed to save settings');
       }
 
-      const result = await response.json();
-      
       // After saving, reload settings to get the masked versions
       const reloadResponse = await apiFetch('/api/settings');
       if (reloadResponse.ok) {

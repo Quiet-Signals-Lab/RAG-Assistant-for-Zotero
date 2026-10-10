@@ -20,60 +20,23 @@ os.environ['GRPC_VERBOSITY'] = 'ERROR'
 os.environ['GRPC_TRACE'] = ''
 os.environ['GRPC_ENABLE_FORK_SUPPORT'] = '0'
 
-# Custom stderr filter to suppress gRPC plugin_credentials errors
-class StderrFilter:
-    """Filter out known harmless gRPC errors from stderr."""
-    def __init__(self, original_stderr):
-        self.original_stderr = original_stderr
-        self.buffer = ""
-        # Keywords that indicate gRPC errors to suppress
-        self.suppress_keywords = [
-            'plugin_credentials.cc',
-            'validate_metadata_from_plugin',
-            'INTERNAL:Illegal header value',
-            'Plugin added invalid metadata',
-            'E0000 00:00:',  # gRPC error prefix format
-        ]
-        
-    def write(self, text):
-        # Accumulate text in buffer for multi-line error detection
-        self.buffer += text
-        
-        # Check if any line in buffer should be suppressed
-        lines = self.buffer.split('\n')
-        
-        # Keep the last incomplete line in buffer
-        self.buffer = lines[-1] if not text.endswith('\n') else ""
-        
-        # Process complete lines
-        for line in lines[:-1] if not text.endswith('\n') else lines:
-            # Check if this line should be suppressed
-            should_suppress = any(keyword in line for keyword in self.suppress_keywords)
-            
-            if not should_suppress and line:  # Don't print empty lines from suppressed content
-                self.original_stderr.write(line + '\n')
-        
-    def flush(self):
-        # Flush any remaining buffer content
-        if self.buffer and not any(keyword in self.buffer for keyword in self.suppress_keywords):
-            self.original_stderr.write(self.buffer)
-            self.buffer = ""
-        self.original_stderr.flush()
-
-# Install the stderr filter
-_original_stderr = sys.stderr
-sys.stderr = StderrFilter(_original_stderr)
-
-# Configure logging to filter gRPC errors
+# One logging configuration for the whole backend. Electron captures stdout
+# and writes it to the user data folder; uvicorn adds its own handlers for
+# its own loggers and leaves the root logger alone.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stdout,
+)
 logging.getLogger('grpc').setLevel(logging.CRITICAL)
 logging.getLogger('google.auth').setLevel(logging.WARNING)
 
-from fastapi import FastAPI, Query, Body, BackgroundTasks
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Query, Body, HTTPException
 from typing import Optional
 from backend.zoteroitem import ZoteroItem
-from backend.external_api_utils import fetch_google_book_reviews, fetch_semantic_scholar_data
+from backend.external_api_utils import fetch_semantic_scholar_data
 from backend.pdf import PDF
-from backend.zotero_dbase import ZoteroLibrary
 from fastapi.middleware.cors import CORSMiddleware
 from backend.interface import ZoteroChatbot
 from backend.vector_db import ChromaClient
@@ -81,8 +44,9 @@ from backend.embed_utils import get_embedding
 from backend.profile_manager import ProfileManager
 from backend.metadata_version import check_metadata_compatibility
 from backend.metadata_migration import MetadataMigration
-import os
-import json
+import datetime
+import platform
+import subprocess
 import warnings
 from pathlib import Path
 
@@ -92,28 +56,39 @@ logger = logging.getLogger(__name__)
 # These are harmless cleanup warnings from parallel processing in sentence-transformers
 warnings.filterwarnings("ignore", category=UserWarning, module="resource_tracker")
 
-app = FastAPI()
+# Set at startup (see lifespan) so importing this module has no side effects.
+profile_manager: ProfileManager = None  # type: ignore[assignment]
+chatbot: ZoteroChatbot = None  # type: ignore[assignment]
 
-# Initialize profile manager
-try:
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global profile_manager, chatbot
     profile_manager = ProfileManager()
-    print(f"ProfileManager initialized at: {profile_manager.BASE_DIR}")
-    
-    # Get active profile (will create default if none exists)
+    logger.info("ProfileManager initialized at: %s", profile_manager.BASE_DIR)
     active_profile = profile_manager.get_active_profile()
     if not active_profile:
-        print("WARNING: No active profile found, attempting to create default...")
-        active_profile = profile_manager.get_active_profile()  # Should auto-create
-    
-    if active_profile:
-        print(f"Active profile: {active_profile['id']} - {active_profile['name']}")
-    else:
         raise RuntimeError("Failed to initialize profile system")
-except Exception as e:
-    print(f"ERROR initializing profile system: {e}")
-    import traceback
-    traceback.print_exc()
-    raise 
+    logger.info("Active profile: %s - %s", active_profile['id'], active_profile['name'])
+    chatbot = initialize_chatbot()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+def _fail(e: Exception, status: int = 500) -> HTTPException:
+    """Log an endpoint failure and turn it into an HTTP error for the client.
+
+    Endpoints used to answer 200 with {"error": ...}; half the UI never
+    checked for it and treated failures as success.
+    """
+    if status >= 500:
+        logger.exception(str(e))
+    else:
+        logger.warning(str(e))
+    return HTTPException(status_code=status, detail=str(e))
+
 
 # CORS setup: matches your frontend HTML server (e.g., http://localhost:8080)
 app.add_middleware(
@@ -145,11 +120,11 @@ def load_settings(profile_id: str = None):
             raise RuntimeError("No active profile")
         profile_id = active['id']
     
-    print(f"[load_settings] Loading settings for profile: {profile_id}")
+    logger.debug(f"[load_settings] Loading settings for profile: {profile_id}")
     
     # Use profile-specific chroma path by default
     profile_chroma_path = profile_manager.get_profile_chroma_path(profile_id)
-    print(f"[load_settings] Profile chroma path: {profile_chroma_path}")
+    logger.debug(f"[load_settings] Profile chroma path: {profile_chroma_path}")
     
     default_settings = {
         "activeProviderId": "ollama",
@@ -264,14 +239,14 @@ def load_settings(profile_id: str = None):
                         if provider_id not in merged["providers"]:
                             merged["providers"][provider_id] = default_settings["providers"][provider_id]
                 
-                print(f"[load_settings] Merged settings - zoteroPath: {merged.get('zoteroPath')}, chromaPath: {merged.get('chromaPath')}, embeddingModel: {merged.get('embeddingModel')}")
+                logger.debug(f"[load_settings] Merged settings - zoteroPath: {merged.get('zoteroPath')}, chromaPath: {merged.get('chromaPath')}, embeddingModel: {merged.get('embeddingModel')}")
                 return merged
         except Exception as e:
-            print(f"[load_settings] Error loading settings: {e}")
-            print(f"[load_settings] Returning default settings - zoteroPath: {default_settings.get('zoteroPath')}, chromaPath: {default_settings.get('chromaPath')}")
+            logger.debug(f"[load_settings] Error loading settings: {e}")
+            logger.debug(f"[load_settings] Returning default settings - zoteroPath: {default_settings.get('zoteroPath')}, chromaPath: {default_settings.get('chromaPath')}")
             return default_settings
     else:
-        print(f"[load_settings] No saved settings, returning defaults - zoteroPath: {default_settings.get('zoteroPath')}, chromaPath: {default_settings.get('chromaPath')}")
+        logger.debug(f"[load_settings] No saved settings, returning defaults - zoteroPath: {default_settings.get('zoteroPath')}, chromaPath: {default_settings.get('chromaPath')}")
         return default_settings
 
 
@@ -314,7 +289,7 @@ def initialize_chatbot():
             (pid for pid, cfg in all_providers.items() if cfg.get("enabled", False)),
             "ollama"
         )
-        print(f"[initialize_chatbot] Active provider '{active_provider_id}' is disabled; switching to '{fallback}'")
+        logger.info(f"[initialize_chatbot] Active provider '{active_provider_id}' is disabled; switching to '{fallback}'")
         active_provider_id = fallback
 
     # Use profile-specific chroma path if not customized
@@ -340,17 +315,16 @@ def initialize_chatbot():
 
     return new_chatbot
 
-chatbot = initialize_chatbot()
-
 # ---------------------------------------------------------------------------
 # Security helpers
 # ---------------------------------------------------------------------------
 
 def _validate_profile_id(profile_id: str) -> None:
-    """Raise ValueError if profile_id contains characters outside [a-zA-Z0-9_-]."""
+    """Reject (400) a profile_id with characters outside [a-zA-Z0-9_-]."""
     if not profile_id or not all(c.isalnum() or c in '-_' for c in profile_id):
-        raise ValueError(
-            "Invalid profile ID: must contain only alphanumeric characters, hyphens, and underscores"
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid profile ID: must contain only alphanumeric characters, hyphens, and underscores",
         )
 
 
@@ -387,6 +361,10 @@ def _validate_pdf_path(filepath: str) -> Path:
             return resolved
         except ValueError:
             continue
+    # Linked attachments (e.g. ZotMoov) live outside the storage folder. They
+    # were accepted at indexing time, so a path the index knows is trusted too.
+    if chatbot.chroma.has_pdf_path(filepath) or chatbot.chroma.has_pdf_path(str(resolved)):
+        return resolved
     raise ValueError("Access denied: file is outside the Zotero storage directory")
 
 
@@ -414,7 +392,7 @@ def health_check():
     try:
         health_status = {
             "status": "healthy",
-            "timestamp": __import__("datetime").datetime.now().isoformat(),
+            "timestamp": datetime.datetime.now().isoformat(),
             "components": {}
         }
         
@@ -432,12 +410,13 @@ def health_check():
             }
             health_status["status"] = "degraded"
         
-        # Check database path
+        # Check the Zotero database the active profile is configured to use
         try:
-            db_exists = os.path.exists(DB_PATH)
+            db_path = load_settings().get("zoteroPath") or DB_PATH
+            db_exists = os.path.exists(db_path)
             health_status["components"]["database"] = {
                 "status": "ok" if db_exists else "warning",
-                "path": DB_PATH,
+                "path": db_path,
                 "exists": db_exists
             }
             if not db_exists:
@@ -455,7 +434,7 @@ def health_check():
         return {
             "status": "unhealthy",
             "error": str(e),
-            "timestamp": __import__("datetime").datetime.now().isoformat()
+            "timestamp": datetime.datetime.now().isoformat()
         }
 
 @app.post("/shutdown")
@@ -470,14 +449,14 @@ async def shutdown():
     def delayed_shutdown():
         """Shutdown after a brief delay to allow response to be sent"""
         import time
-        time.sleep(2.0)  # FIX: Increased from 0.5s for reliable response + uvicorn cleanup
+        time.sleep(2.0)  # long enough for the response to be sent and uvicorn to clean up
         os.kill(os.getpid(), signal.SIGTERM)
     
     # Start shutdown in background thread
     thread = threading.Thread(target=delayed_shutdown, daemon=True)
     thread.start()
     
-    return {"status": "shutting_down", "message": "Server will shutdown in 0.5 seconds"}
+    return {"status": "shutting_down", "message": "Server will shutdown in 2 seconds"}
 
 @app.get("/api/pdfsample")
 def pdf_sample(
@@ -491,9 +470,11 @@ def pdf_sample(
         text = pdf.extract_text(max_chars=max_chars)
         return {"sample": text}
     except ValueError as e:
-        return {"error": str(e)}
+        raise _fail(e, 400)
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 @app.get("/api/item_metadata")
 def get_item_metadata(
@@ -508,9 +489,11 @@ def get_item_metadata(
         return {"title": title,
                 "author": author}
     except ValueError as e:
-        return {"error": str(e)}
+        raise _fail(e, 400)
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 @app.get("/api/search_items")
 def search_items(
@@ -523,22 +506,12 @@ def search_items(
         authors_list = [a.strip() for a in authors.split(",") if a.strip()]
         titles_list = [t.strip() for t in titles.split(",") if t.strip()]
         dates_list = [d.strip() for d in dates.split(",") if d.strip()]
-        # Fix SQLite threading issue: check_same_thread=False inside ZoteroLibrary class!
-        zlib = ZoteroLibrary(DB_PATH)
-        results = zlib.search_parent_items(authors=authors_list, titles=titles_list, dates=dates_list)
+        results = chatbot.zlib.search_parent_items(authors=authors_list, titles=titles_list, dates=dates_list)
         return {"results": list(results)}  # Convert set to list for JSON serialization
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/api/get_gbook_reviews")
-def get_reviews(query: str):
-    """Makes a call to the Google Books API to retrieve reviews."""
-    try:
-        # query is expected to be ISBN
-        reviews = fetch_google_book_reviews(query, google_api_key)
-        return {"reviews": reviews}
-    except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 @app.post("/api/external/semantic_scholar")
 def lookup_semantic_scholar(payload: dict = Body(...)):
@@ -609,8 +582,10 @@ def index_library(payload: dict = Body(default={"incremental": True})):
         )
         mode = "incremental" if incremental else "full"
         return {"msg": f"Indexing started ({mode} mode)."}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/index_cancel")
@@ -619,8 +594,10 @@ def index_cancel():
     try:
         chatbot.cancel_indexing()
         return {"msg": "Cancellation signaled."}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/exclusions/purge")
@@ -636,10 +613,7 @@ def purge_exclusions():
         )
         return {"success": True, **result}
     except Exception as e:
-        logger.error("POST /api/exclusions/purge error", exc_info=True)
-        return {"error": str(e)}
-
-import traceback
+        raise _fail(e)
 
 @app.get("/api/chat")
 def chat(query: str, item_ids: Optional[str] = Query("", description="Comma separated Zotero item IDs to scope search")):
@@ -648,8 +622,7 @@ def chat(query: str, item_ids: Optional[str] = Query("", description="Comma sepa
         payload = chatbot.chat(query, filter_item_ids=filter_ids if filter_ids else None)
         return payload
     except Exception as e:
-        logger.error("GET /api/chat error", exc_info=True)
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/chat")
@@ -675,7 +648,7 @@ def chat_post(payload: dict = Body(...)):
     try:
         query = payload.get("query")
         if not query:
-            return {"error": "Missing 'query' in request body"}
+            raise HTTPException(status_code=400, detail="Missing 'query' in request body")
 
         item_ids = payload.get("item_ids") or []
         # Accept either a list of ids or a comma-separated string
@@ -705,23 +678,17 @@ def chat_post(payload: dict = Body(...)):
             use_rrf=use_rrf,
             max_sources=max_sources,
         )
-        print(f"Endpoint returning payload_out with generated_title: {payload_out.get('generated_title')}")
         return payload_out
+    except HTTPException:
+        raise
     except Exception as e:
-        error_msg = str(e)
-        logger.error("POST /api/chat error", exc_info=True)
-
-        # Provide helpful error messages for common issues
-        if "embedding with dimension" in error_msg.lower():
-            return {
-                "error": "Database configuration error: Embedding dimension mismatch detected. "
-                        "This usually means your database was created with a different embedding model. "
-                        "Please delete the vector database and re-index your library. "
-                        "Run: rm -rf <your_chroma_path> then use the Index Library button.",
-                "technical_details": error_msg,
-            }
-
-        return {"error": error_msg}
+        if "embedding with dimension" in str(e).lower():
+            raise _fail(RuntimeError(
+                "Database configuration error: embedding dimension mismatch. Your database was "
+                "created with a different embedding model. Delete the vector database and "
+                f"re-index your library. ({e})"
+            ))
+        raise _fail(e)
 
 
 @app.get("/api/index_status")
@@ -733,8 +700,10 @@ def index_status():
         status = "indexing" if getattr(chatbot, "is_indexing", False) else "idle"
         progress = getattr(chatbot, "index_progress", None) or {}
         return {"status": status, "progress": progress}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/db_health")
@@ -745,8 +714,10 @@ def db_health():
     try:
         validation = chatbot.chroma.validate_embedding_dimension()
         return validation
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/index_stats")
@@ -770,16 +741,6 @@ def index_stats():
         raw_items = chatbot.zlib.search_parent_items_with_pdfs()
         zotero_item_ids = {str(it['item_id']) for it in raw_items}
 
-        # Debug: log sample IDs from both sets to diagnose mismatch
-        sample_indexed = list(indexed_ids)[:5]
-        sample_zotero = list(zotero_item_ids)[:5]
-        overlap = indexed_ids & zotero_item_ids
-        print(f"[index_stats] indexed_ids({len(indexed_ids)}) samples: {sample_indexed} types: {[type(x) for x in sample_indexed]}")
-        print(f"[index_stats] zotero_ids({len(zotero_item_ids)}) samples: {sample_zotero} types: {[type(x) for x in sample_zotero]}")
-        print(f"[index_stats] overlap: {len(overlap)}")
-        if sample_indexed and sample_zotero:
-            print(f"[index_stats] repr comparison: indexed={[repr(x) for x in sample_indexed[:3]]} zotero={[repr(x) for x in sample_zotero[:3]]}")
-
         # Calculate new items
         new_item_ids = zotero_item_ids - indexed_ids
 
@@ -792,8 +753,10 @@ def index_stats():
             "current_embedding_model": chatbot.embedding_model_id,
             "collection_name": chatbot.chroma.collection_name
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/metadata/version")
@@ -808,8 +771,6 @@ def metadata_version():
     """
     try:
         from backend.metadata_version import MetadataVersionManager, CURRENT_METADATA_VERSION
-        import logging
-        logger = logging.getLogger(__name__)
         
         manager = MetadataVersionManager(chatbot.chroma)
         version = manager.detect_metadata_version()
@@ -827,9 +788,6 @@ def metadata_version():
                 'has_collections': 'collections' in meta,
             })
         
-        print(f"Metadata version check: version={version}, migration_needed={migration_needed}")
-        print(f"Sample metadata: {sample_meta}")
-        
         return {
             "version": version,
             "migration_needed": migration_needed,
@@ -839,14 +797,11 @@ def metadata_version():
             "total_chunks": len(sample_results.get('ids', []))
         }
     except Exception as e:
-        print(f"Error checking metadata version: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/metadata/count_filtered")
-async def count_filtered_items(body: dict):
+def count_filtered_items(body: dict):
     """
     Count how many items and chunks match the given filters.
     
@@ -886,18 +841,15 @@ async def count_filtered_items(body: dict):
         
         return counts
     except Exception as e:
-        import traceback
-        print(f"Error counting filtered items: {e}")
-        traceback.print_exc()
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/metadata/migrate")
-async def metadata_migrate(background_tasks: BackgroundTasks):
+def metadata_migrate():
     """Migrate metadata to current format.
     
-    Updates metadata in-place without re-embedding.
-    This runs as a background task.
+    Updates metadata in-place without re-embedding. Runs synchronously in a
+    worker thread; the response carries the summary.
     
     Returns:
         - status: "started", "completed", "not_needed", or "error"
@@ -920,7 +872,6 @@ async def metadata_migrate(background_tasks: BackgroundTasks):
                 "version": version
             }
         
-        # Run migration synchronously for now (can be backgrounded later)
         migration = MetadataMigration(chatbot.chroma, chatbot.zlib)
         summary = migration.migrate_all_metadata()
         
@@ -933,12 +884,11 @@ async def metadata_migrate(background_tasks: BackgroundTasks):
             "summary": summary
         }
     except Exception as e:
-        logger.error(f"Migration error: {e}")
-        return {"status": "error", "error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/metadata/sync")
-async def metadata_sync():
+def metadata_sync():
     """Sync metadata from Zotero without re-embedding.
     
     Fetches current metadata from Zotero database and updates ChromaDB
@@ -953,8 +903,6 @@ async def metadata_sync():
     """
     try:
         from backend.metadata_migration import MetadataMigration
-        import logging
-        logger = logging.getLogger(__name__)
         
         logger.info("[metadata_sync] Starting metadata sync from Zotero...")
         
@@ -970,10 +918,7 @@ async def metadata_sync():
             "summary": summary
         }
     except Exception as e:
-        logger.error(f"[metadata_sync] Sync error: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"status": "error", "error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/diagnose_unindexed")
@@ -1042,8 +987,7 @@ def diagnose_unindexed():
             "diagnostics": diagnostics
         }
     except Exception as e:
-        logger.error("GET /api/diagnose_unindexed error", exc_info=True)
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/embedding_collections")
@@ -1085,8 +1029,10 @@ def list_embedding_collections():
             "collections": embedding_collections,
             "current_embedding_model": chatbot.embedding_model_id
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/open_pdf")
@@ -1094,22 +1040,18 @@ def open_pdf(payload: dict = Body(...)):
     """Open a PDF file with the system's default viewer.
     Expects JSON body: {"pdf_path": "/path/to/file.pdf"}
     """
-    import subprocess
-    import platform
-    import os
-    
     try:
         pdf_path = payload.get("pdf_path")
         if not pdf_path:
-            return {"error": "Missing 'pdf_path' in request body"}
+            raise HTTPException(status_code=400, detail="Missing 'pdf_path' in request body")
 
         try:
             safe_path = _validate_pdf_path(pdf_path)
         except ValueError as e:
-            return {"error": str(e)}
+            raise _fail(e, 403)
 
         if not safe_path.exists():
-            return {"error": "PDF file not found"}
+            raise HTTPException(status_code=404, detail="PDF file not found")
 
         # Open the file with the system's default application
         system = platform.system()
@@ -1120,36 +1062,15 @@ def open_pdf(payload: dict = Body(...)):
         elif system == "Linux":
             subprocess.run(["xdg-open", str(safe_path)], check=True)
         else:
-            return {"error": f"Unsupported operating system: {system}"}
+            raise HTTPException(status_code=501, detail=f"Unsupported operating system: {system}")
 
         return {"success": True, "message": f"Opened {safe_path.name}"}
     except subprocess.CalledProcessError as e:
-        return {"error": f"Failed to open PDF: {str(e)}"}
+        raise _fail(RuntimeError(f"Failed to open PDF: {e}"))
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
-
-
-@app.get("/api/ollama_status")
-def ollama_status():
-    """Check if Ollama is running and responsive (deprecated - use /providers/ollama/status)."""
-    import requests
-    try:
-        resp = requests.get("http://localhost:11434/api/tags", timeout=2)
-        if resp.status_code == 200:
-            data = resp.json()
-            models = data.get("models", [])
-            return {
-                "status": "running",
-                "models": [m.get("name") for m in models] if models else []
-            }
-        else:
-            return {"status": "error", "message": "Ollama responded with error"}
-    except requests.exceptions.ConnectionError:
-        return {"status": "offline", "message": "Cannot connect to Ollama"}
-    except requests.exceptions.Timeout:
-        return {"status": "timeout", "message": "Ollama request timed out"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/embedding_models")
@@ -1167,8 +1088,10 @@ def list_embedding_models():
             for model_id, config in CLOUD_EMBEDDING_MODELS.items()
         ]
         return {"models": local_models + cloud_models}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/providers")
@@ -1178,8 +1101,10 @@ def list_providers():
     try:
         providers = get_provider_info()
         return {"providers": providers}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/providers/{provider_id}/models")
@@ -1189,7 +1114,7 @@ def list_provider_models(provider_id: str):
     try:
         provider = get_provider(provider_id)
         if not provider:
-            return {"error": f"Provider '{provider_id}' not found"}
+            raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found")
         
         settings = load_settings()
         provider_config = settings.get("providers", {}).get(provider_id, {})
@@ -1208,8 +1133,10 @@ def list_provider_models(provider_id: str):
                 for m in models
             ]
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/providers/{provider_id}/validate")
@@ -1223,7 +1150,7 @@ def validate_provider(provider_id: str, credentials: dict = Body(...)):
     try:
         provider = get_provider(provider_id)
         if not provider:
-            return {"error": f"Provider '{provider_id}' not found", "valid": False}
+            raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found")
         
         # Always load credentials from stored settings for validation
         # This ensures we test the actual saved configuration, not form data
@@ -1231,11 +1158,7 @@ def validate_provider(provider_id: str, credentials: dict = Body(...)):
         provider_config = settings.get("providers", {}).get(provider_id, {})
         creds = provider_config.get("credentials", {})
         
-        print(f"[Validation] Loading stored credentials for {provider_id}")
-        if creds.get("api_key"):
-            print(f"[Validation] Found API key (length: {len(creds['api_key'])})")
-        else:
-            print(f"[Validation] No API key found in settings")
+        logger.debug("[Validation] Loading stored credentials for %s", provider_id)
         
         # For providers with dynamic discovery, use enhanced validation
         providers_with_discovery = ["google", "openai", "mistral", "groq", "openrouter", "anthropic", "github_models"]
@@ -1323,8 +1246,10 @@ def provider_status(provider_id: str):
                 "provider": provider_id,
                 "message": str(validation_error)
             }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/library/tags")
@@ -1340,8 +1265,10 @@ def list_library_tags():
     try:
         tags = chatbot.zlib.get_all_tags()
         return {"tags": tags}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e), "tags": []}
+        raise _fail(e)
 
 
 @app.get("/api/library/collections")
@@ -1359,8 +1286,10 @@ def list_library_collections():
     try:
         collections = chatbot.zlib.get_all_collections()
         return {"collections": collections}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e), "collections": []}
+        raise _fail(e)
 
 
 @app.get("/api/library/item_types")
@@ -1379,8 +1308,10 @@ def list_library_item_types():
     try:
         item_types = chatbot.zlib.get_all_item_types()
         return {"item_types": item_types}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e), "item_types": []}
+        raise _fail(e)
 
 
 @app.get("/api/settings")
@@ -1409,8 +1340,10 @@ def get_settings():
             masked_settings["providers"] = masked_providers
         
         return masked_settings
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/detect_api_keys")
@@ -1421,8 +1354,6 @@ def detect_api_keys():
     This helps the UI show warnings when keys are coming from environment rather than 
     being explicitly configured.
     """
-    import os
-    
     # Map of provider IDs to their common environment variable names
     env_key_mapping = {
         "openai": ["OPENAI_API_KEY", "OPENAI_KEY"],
@@ -1458,8 +1389,10 @@ def list_profiles():
             "profiles": profiles,
             "activeProfileId": active['id'] if active else None
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/profiles")
@@ -1474,14 +1407,16 @@ def create_profile(payload: dict = Body(...)):
         description = payload.get("description", "")
         
         if not profile_id or not name:
-            return {"error": "Missing required fields: id, name"}
+            raise HTTPException(status_code=400, detail="Missing required fields: id, name")
         
         metadata = profile_manager.create_profile(profile_id, name, description)
         return {"success": True, "profile": metadata}
     except ValueError as e:
-        return {"error": str(e)}
+        raise _fail(e, 400)
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/profiles/{profile_id}")
@@ -1491,10 +1426,12 @@ def get_profile(profile_id: str):
         _validate_profile_id(profile_id)
         profile = profile_manager.get_profile(profile_id)
         if not profile:
-            return {"error": f"Profile '{profile_id}' not found"}
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
         return {"profile": profile}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.put("/api/profiles/{profile_id}")
@@ -1510,11 +1447,13 @@ def update_profile(profile_id: str, payload: dict = Body(...)):
         
         success = profile_manager.update_profile(profile_id, name, description)
         if not success:
-            return {"error": f"Profile '{profile_id}' not found"}
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
         
         return {"success": True, "profile": profile_manager.get_profile(profile_id)}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.delete("/api/profiles/{profile_id}")
@@ -1524,33 +1463,39 @@ def delete_profile(profile_id: str, force: bool = Query(False)):
         _validate_profile_id(profile_id)
         success = profile_manager.delete_profile(profile_id, force=force)
         if not success:
-            return {"error": f"Profile '{profile_id}' not found"}
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
         return {"success": True}
     except ValueError as e:
-        return {"error": str(e)}
+        raise _fail(e, 400)
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/profiles/{profile_id}/activate")
 def activate_profile(profile_id: str):
     """Set the active profile."""
+    global chatbot
     try:
         _validate_profile_id(profile_id)
+        if chatbot.is_indexing:
+            raise HTTPException(status_code=409, detail="Indexing is running. Wait for it to finish or stop it before switching profiles.")
         success = profile_manager.set_active_profile(profile_id)
         if not success:
-            return {"error": f"Profile '{profile_id}' not found"}
+            raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
         
         # Reinitialize chatbot with new profile
-        global chatbot
         chatbot = initialize_chatbot()
         
         return {
             "success": True,
             "activeProfile": profile_manager.get_active_profile()
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.get("/api/profiles/{profile_id}/sessions")
@@ -1560,8 +1505,10 @@ def get_profile_sessions(profile_id: str):
         _validate_profile_id(profile_id)
         sessions_data = profile_manager.load_profile_sessions(profile_id)
         return sessions_data
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/profiles/{profile_id}/sessions")
@@ -1571,17 +1518,22 @@ def save_profile_sessions(profile_id: str, sessions_data: dict = Body(...)):
         _validate_profile_id(profile_id)
         success = profile_manager.save_profile_sessions(profile_id, sessions_data)
         if not success:
-            return {"error": "Failed to save sessions"}
+            raise HTTPException(status_code=500, detail="Failed to save sessions")
         return {"success": True}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 
 @app.post("/api/settings")
 def update_settings(settings: dict = Body(...)):
     """Update application settings."""
+    global DB_PATH, chatbot
     try:
         current_settings = load_settings()
+        if chatbot.is_indexing and settings.get("embeddingModel") not in (None, chatbot.embedding_model_id):
+            raise HTTPException(status_code=409, detail="Indexing is running. Wait for it to finish or stop it before changing the embedding model.")
         
         # Deep copy to avoid mutation issues
         import copy
@@ -1631,13 +1583,12 @@ def update_settings(settings: dict = Body(...)):
                 _active_pid
             )
             if _fallback_pid != _active_pid:
-                print(f"[update_settings] Active provider '{_active_pid}' is disabled; switching to '{_fallback_pid}'")
+                logger.info(f"[update_settings] Active provider '{_active_pid}' is disabled; switching to '{_fallback_pid}'")
                 updated_settings["activeProviderId"] = _fallback_pid
                 updated_settings["activeModel"] = ""
 
         if save_settings(updated_settings):
             # Update global paths if they changed
-            global DB_PATH, chatbot
             if "zoteroPath" in settings:
                 DB_PATH = settings["zoteroPath"]
             
@@ -1667,8 +1618,8 @@ def update_settings(settings: dict = Body(...)):
                         new_embedding_model = updated_settings.get("embeddingModel", "bge-base")
                         old_embedding_model = chatbot.embedding_model_id
                         if new_embedding_model != old_embedding_model:
-                            print(f"Switching embedding model from {old_embedding_model} to {new_embedding_model}")
-                            print(f"Creating new ChromaClient with collection: zotero_lib_{new_embedding_model}")
+                            logger.info(f"Switching embedding model from {old_embedding_model} to {new_embedding_model}")
+                            logger.info(f"Creating new ChromaClient with collection: zotero_lib_{new_embedding_model}")
                             chatbot.embedding_model_id = new_embedding_model
                             # Reinitialize ChromaClient with new embedding model
                             # Use profile-specific path if chromaPath not customized
@@ -1677,14 +1628,16 @@ def update_settings(settings: dict = Body(...)):
                             chroma_path = updated_settings.get("chromaPath", profile_chroma_path)
                             chatbot.chroma = ChromaClient(chroma_path, embedding_model_id=new_embedding_model)
                         else:
-                            print(f"Embedding model unchanged: {chatbot.embedding_model_id}")
+                            logger.info(f"Embedding model unchanged: {chatbot.embedding_model_id}")
                 except Exception as e:
-                    print(f"Warning: Failed to update chatbot settings: {e}")
+                    logger.warning(f"Warning: Failed to update chatbot settings: {e}")
             
             return {"success": True, "message": "Settings saved successfully"}
         else:
-            return {"error": "Failed to save settings"}
+            raise HTTPException(status_code=500, detail="Failed to save settings")
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise _fail(e)
 
 

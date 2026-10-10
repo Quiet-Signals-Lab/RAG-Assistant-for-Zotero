@@ -87,18 +87,13 @@ export async function openLocalPdf(pdfPath: string): Promise<void> {
   }
   
   try {
-    const response = await apiFetch("/api/open_pdf", {
+    await apiFetch("/api/open_pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pdf_path: pdfPath }),
     });
-    
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(data.error);
-    }
-  } catch (e: any) {
+  } catch (e) {
     console.error("Failed to open PDF:", e);
-    throw new Error(e.message || "Failed to open PDF");
+    throw new Error(e instanceof Error ? e.message : "Failed to open PDF");
   }
 }

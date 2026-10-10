@@ -1,48 +1,51 @@
-// In Electron production, use the full backend URL
-// In development (Vite dev server), use relative paths with proxy
-const isElectron = navigator.userAgent.includes('Electron');
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || (isElectron ? "http://localhost:8000" : "");
+/**
+ * Backend URL resolution.
+ *
+ * Electron starts the backend on the first free port from 8000 and hands the
+ * resulting URL to the page as a query parameter (?backendUrl=...), so the
+ * renderer never has to guess. The Vite dev server proxies /api to :8000, so
+ * outside Electron relative paths are used unless VITE_API_BASE_URL is set.
+ */
+function resolveBaseUrl(): string {
+  const fromPage = new URLSearchParams(window.location.search).get("backendUrl");
+  if (fromPage) return fromPage.replace(/\/$/, "");
+  if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
+  return navigator.userAgent.includes("Electron") ? "http://127.0.0.1:8000" : "";
+}
 
-// Log API client configuration for debugging
-console.log('[API Client] Configuration:');
-console.log('  - Electron mode:', isElectron);
-console.log('  - BASE_URL:', BASE_URL);
-console.log('  - User agent:', navigator.userAgent);
+const BASE_URL = resolveBaseUrl();
+
+/** Turn a non-2xx response into an Error carrying the backend's message. */
+async function errorFromResponse(res: Response): Promise<Error> {
+  const text = await res.text();
+  try {
+    const body = JSON.parse(text);
+    const detail = body?.detail ?? body?.error;
+    if (typeof detail === "string") return new Error(detail);
+    if (detail) return new Error(JSON.stringify(detail));
+  } catch {
+    // not JSON
+  }
+  return new Error(`Request failed: ${res.status} ${text}`);
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const fullPath = BASE_URL + (path.startsWith("/") ? path : `/${path}`);
-  const res = await fetch(fullPath, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    signal: options.signal,
+  const res = await apiFetch(path, {
     ...options,
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Request failed: ${res.status} ${text}`);
-  }
-
-  const data = (await res.json()) as any;
-  
-  // Check if the response contains an error field (backend error responses)
-  if (data && typeof data === 'object' && 'error' in data) {
-    throw new Error(data.error || 'An error occurred');
-  }
-
-  return data as T;
+  return (await res.json()) as T;
 }
 
 /**
- * Configured fetch function that automatically prepends BASE_URL
- * Use this instead of direct fetch() calls to ensure proper URL resolution in Electron
+ * fetch() against the backend. Resolves only for 2xx responses; any other
+ * status throws an Error whose message is the backend's `detail`.
  */
-function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
   const fullPath = BASE_URL + (path.startsWith("/") ? path : `/${path}`);
-  console.log(`[API Fetch] ${options?.method || 'GET'} ${fullPath}`);
-  return fetch(fullPath, options);
+  const res = await fetch(fullPath, options);
+  if (!res.ok) throw await errorFromResponse(res);
+  return res;
 }
 
 export { BASE_URL, request, apiFetch };

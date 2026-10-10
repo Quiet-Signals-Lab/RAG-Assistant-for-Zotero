@@ -167,18 +167,14 @@ const SourcesPanel: React.FC = () => {
                       const fp = String(source.localPdfPath);
                       console.log("Opening PDF:", fp);
                       try {
-                        const resp = await apiFetch("/api/open_pdf", {
+                        await apiFetch("/api/open_pdf", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ pdf_path: fp }),
                         });
-                        const data = await resp.json();
-                        if (data.error) {
-                          alert(`Failed to open PDF: ${data.error}`);
-                        }
                       } catch (e) {
                         console.error("Failed to open PDF:", e);
-                        alert("Failed to open PDF. Check console for details.");
+                        alert(`Failed to open PDF: ${e instanceof Error ? e.message : String(e)}`);
                       }
                     } else {
                       alert("No local PDF path available for this source");

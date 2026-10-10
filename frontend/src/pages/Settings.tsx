@@ -5,7 +5,6 @@ import { apiFetch } from '../api/client';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import ProfileSelector from '../components/profile/ProfileSelector';
-import { useProfile } from '../contexts/ProfileContext';
 import { useAppUpdater } from '../hooks/useAppUpdater';
 import { isElectron } from '../utils/electron';
 import '../styles/settings.css';
@@ -13,7 +12,6 @@ import '../styles/settings.css';
 const Settings: React.FC = () => {
   const navigate = useNavigate();
   const { settings, updateSettings, loading, availableProviders } = useSettings();
-  const { profiles, activeProfile, deleteProfile } = useProfile();
   const [formData, setFormData] = useState(settings);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -236,10 +234,6 @@ const Settings: React.FC = () => {
       setSaveError(err instanceof Error ? err.message : 'Failed to save settings');
       setSaving(false);
     }
-  };
-
-  const getProviderInfo = (providerId: string): ProviderInfo | undefined => {
-    return availableProviders.find(p => p.id === providerId);
   };
 
   // Helper to render a provider configuration card

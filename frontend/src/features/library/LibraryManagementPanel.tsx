@@ -302,7 +302,7 @@ const LibraryManagementPanel: React.FC = () => {
         // Refresh stats after syncing
         await fetchStats();
       } else {
-        setMetadataSyncError(result.error || 'Metadata sync failed');
+        setMetadataSyncError('Metadata sync failed');
       }
     } catch (err) {
       setMetadataSyncError(err instanceof Error ? err.message : 'Metadata sync failed');

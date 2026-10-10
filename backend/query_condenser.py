@@ -12,6 +12,9 @@ Based on Perplexity-style conversational RAG architecture:
 
 from typing import List
 from backend.model_providers import Message, ProviderManager
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class QueryCondenser:
@@ -162,7 +165,7 @@ Now do the same for the conversation below."""
             
             # Validation: ensure we got a reasonable query back
             if len(standalone_query) < 5 or len(standalone_query) > 300:
-                print(f"Warning: Condensed query seems malformed ({len(standalone_query)} chars), using original")
+                logger.warning(f"Warning: Condensed query seems malformed ({len(standalone_query)} chars), using original")
                 return query
             
             # Remove common artifacts from LLM responses
@@ -185,17 +188,17 @@ Now do the same for the conversation below."""
             if orig_content and cond_content:
                 overlap = len(orig_content & cond_content) / max(len(orig_content), len(cond_content))
                 if overlap < 0.15:
-                    print(f"Warning: Condensed query diverged from original (overlap={overlap:.2f}), using original")
+                    logger.warning(f"Warning: Condensed query diverged from original (overlap={overlap:.2f}), using original")
                     return query
             
-            print(f" Query condensation:")
-            print(f"   Original: {query}")
-            print(f"   Standalone: {standalone_query}")
+            logger.info(f" Query condensation:")
+            logger.debug(f"   Original: {query}")
+            logger.debug(f"   Standalone: {standalone_query}")
             
             return standalone_query
             
         except Exception as e:
-            print(f"Query condensation failed: {e}")
+            logger.info(f"Query condensation failed: {e}")
             # Fallback to original query
             return query
     
@@ -267,7 +270,7 @@ Now do the same for the conversation below."""
         should_cond = has_anaphora or has_formal_anaphora or has_ellipsis
 
         if should_cond:
-            print(f"[QueryCondenser] should_condense=True: "
+            logger.info(f"[QueryCondenser] should_condense=True: "
                   f"anaphora={has_anaphora}, formal_anaphora={has_formal_anaphora}, "
                   f"ellipsis={has_ellipsis}")
         

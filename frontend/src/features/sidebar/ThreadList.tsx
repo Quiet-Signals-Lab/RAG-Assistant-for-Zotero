@@ -31,7 +31,7 @@ function writeThreads(ts: Thread[]) {
 }
 
 const ThreadList: React.FC = () => {
-  const { messages, lastResponse, sendMessage, loadThread } = useChatContext();
+  const { messages, lastResponse, loadThread } = useChatContext();
   const [threads, setThreads] = useState<Thread[]>([]);
 
   useEffect(() => {

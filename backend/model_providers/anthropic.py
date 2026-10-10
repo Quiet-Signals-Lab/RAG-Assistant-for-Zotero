@@ -13,6 +13,9 @@ from .base import (
     ProviderRateLimitError, ProviderContextError,
     MessageAdapter, ParameterMapper
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AnthropicProvider(BaseProvider):
@@ -105,7 +108,7 @@ class AnthropicProvider(BaseProvider):
             available_models = []
             validation_succeeded = False
             
-            print(f"[Anthropic Provider] Testing model availability...")
+            logger.info(f"[Anthropic Provider] Testing model availability...")
             
             # Test each model - this simultaneously validates credentials and discovers models
             for model_info in known_models:
@@ -118,7 +121,7 @@ class AnthropicProvider(BaseProvider):
                     # Success means both valid credentials AND accessible model
                     validation_succeeded = True
                     available_models.append(model_info)
-                    print(f"[Anthropic Provider] ✓ {model_info.id} accessible")
+                    logger.info(f"[Anthropic Provider] ✓ {model_info.id} accessible")
                 except Exception as e:
                     error_str = str(e).lower()
                     # Check for authentication errors
@@ -128,9 +131,9 @@ class AnthropicProvider(BaseProvider):
                     elif "not_found" not in error_str and "404" not in error_str:
                         validation_succeeded = True
                         available_models.append(model_info)
-                        print(f"[Anthropic Provider] ~ {model_info.id} included (non-404 error)")
+                        logger.info(f"[Anthropic Provider] ~ {model_info.id} included (non-404 error)")
                     else:
-                        print(f"[Anthropic Provider] ✗ {model_info.id} not available (404)")
+                        logger.info(f"[Anthropic Provider] ✗ {model_info.id} not available (404)")
             
             if validation_succeeded:
                 return {

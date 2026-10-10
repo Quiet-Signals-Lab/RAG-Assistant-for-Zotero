@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Large libraries no longer exhaust memory** (#86): several operations loaded every chunk of the vector store into Python at once, which on a 2.6-million-chunk library grew the backend to 58 GB and got it killed. The keyword (BM25) index now lives on disk in SQLite FTS5 and is updated as items are added or removed, so there is no rebuild at the end of indexing and nothing to load on the first search. Item inventories, filter counts, deletes and the metadata migration page through the store instead of fetching it whole.
+- **Long books index again** (#86): an item whose chunks exceeded ChromaDB's maximum batch size failed with "Batch size ... is greater than max batch size". Adds are now split to the limit the database reports.
+- **"Sync Metadata" no longer corrupts the index**: since v0.4.7 the sync looked up each item by fetching the whole library and taking the first row, so every chunk was stamped with the first item's title, authors, tags and year. It now looks items up by id and reads the library once. If you have used Sync Metadata on 0.4.7 or later, run a full reindex.
+- **The app works when port 8000 is taken**: the backend already moved to the next free port, but the window kept talking to 8000. The backend's real address is now handed to the page at load.
+- **Indexing progress reaches 100%**: PDFs with no text layer (scanned images) were never counted, so the progress bar stalled short of the total. They are now reported as skipped with a reason.
+- **A full reindex replaces an item's chunks** instead of failing on the existing ids.
+- **API errors are HTTP errors**: endpoints answered `200 {"error": ...}` and parts of the UI treated that as success. Failures now return 4xx/5xx with a `detail` message that the UI shows.
+- **Switching profile or embedding model while indexing is refused** (409) instead of swapping the index out from under the running job.
+- **The health endpoint checks the Zotero database the active profile is configured to use**, not the default location.
+- **Linked PDFs outside the Zotero storage folder can be opened** when they were indexed from there (e.g. ZotMoov).
+- **Backend logs survive a crash**: on Linux they went to `/tmp` and were overwritten on each launch (#86). All platforms now append to `logs/backend.log` under the app's user data folder, keeping one previous generation past 10 MB.
+
+### Changed
+- The backend uses the standard logging module throughout instead of `print`, and importing the API module no longer loads models or touches the profile directory, which makes it testable.
+- Removed the `rank-bm25` dependency, the in-memory BM25 index and its JSON corpus (deleted on first start), the broken Google Books endpoint, the deprecated `/api/ollama_status` endpoint, an unused Electron auth token, and the pre-React chat tab sources.
+- Continuous integration: GitHub Actions now runs the backend tests, the renderer type-check and lint, and the full build on every push and pull request. The renderer build type-checks before bundling; ESLint 9 has a configuration again.
+- The two indexing workers (full and incremental) are one worker with a per-item skip path; `collection`-scoped indexing is still not supported, exclusions are the way to narrow a run.
+
 ## [0.5.2] - 2026-09-09
 
 ### Changed
