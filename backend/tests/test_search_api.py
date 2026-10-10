@@ -100,6 +100,7 @@ def test_scope_read_from_the_query_is_reported_and_applied(bot):
     assert out["scope"]["extracted_ignored"] is False
     where = bot.chroma.query_hybrid_rrf.call_args.kwargs["where"]
     assert "2015" in str(where)
+    assert bot.chroma.query_hybrid_rrf.call_args.kwargs["query"] == "riders"  # scope words are not topic
     bot.provider_manager.chat.assert_not_called()
 
 

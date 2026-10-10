@@ -102,9 +102,10 @@ if (process.platform === 'linux') {
 }
 
 /**
- * Hand a URL to the system browser, but only a web URL. The renderer can ask
- * for any string (window.open, the open-external IPC), and shell.openExternal
- * would happily launch file:, javascript: or custom-scheme handlers.
+ * Hand a URL to the system browser, but only a web URL or one of the two
+ * Zotero links the reference desk uses. The renderer can ask for any string
+ * (window.open, the open-external IPC), and shell.openExternal would happily
+ * launch file:, javascript: or custom-scheme handlers.
  */
 function openExternalUrl(url: string): void {
   let parsed: URL;
@@ -112,6 +113,16 @@ function openExternalUrl(url: string): void {
     parsed = new URL(url);
   } catch {
     console.warn(`Refusing to open malformed external URL: ${url}`);
+    return;
+  }
+  if (parsed.protocol === 'zotero:') {
+    // Only "show this item" and "open this PDF" links, which hand control to Zotero.
+    const path = `${parsed.host}${parsed.pathname}`;
+    if (!/^(select|open-pdf)\/(library|groups\/\d+)\/items\/[A-Z0-9]{8}$/.test(path)) {
+      console.warn(`Refusing to open Zotero URL: ${url}`);
+      return;
+    }
+    shell.openExternal(parsed.href).catch((err) => console.error('openExternal failed:', err));
     return;
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {

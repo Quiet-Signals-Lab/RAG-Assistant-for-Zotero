@@ -29,8 +29,10 @@ MAX_PASSAGES_PER_ITEM = 6
 EXTRACT_MAX_CHARS = 240
 
 # A title counts as the item the reader means when this share of words overlaps
-# in both directions (query in title and title in query).
-TITLE_MATCH_MIN = 0.6
+# in both directions (query in title and title in query). 0.6 pinned generic
+# titles such as "Adversarial machine learning" for topical queries on a real
+# library; quoted titles use a lower bar because the reader marked them as titles.
+TITLE_MATCH_MIN = 0.8
 
 _STOPWORDS = frozenset(
     """a about after again against all also am an and any are as at be because been
@@ -178,6 +180,28 @@ def dedupe_passages(passages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return kept
 
 
+def _strip_shared_prefix(before: str, text: str, min_words: int = 8) -> str:
+    """Drop the words `text` repeats from the end of `before`.
+
+    Chunks overlap by about 40 words, so a passage that follows another one in
+    the same item would otherwise show that text twice.
+    """
+    a, b = before.split(), text.split()
+    for k in range(min(len(a), len(b) - 1, 80), min_words - 1, -1):
+        if a[-k:] == b[:k]:
+            return "…" + " ".join(b[k:])
+    return text
+
+
+def trim_overlaps(passages: List[Dict[str, Any]]) -> None:
+    """Trim each passage that directly follows another kept passage of the same item."""
+    by_idx = {p["chunk_idx"]: p["text"] for p in passages if isinstance(p.get("chunk_idx"), int)}
+    for p in passages:
+        idx = p.get("chunk_idx")
+        if isinstance(idx, int) and idx - 1 in by_idx:
+            p["text"] = _strip_shared_prefix(by_idx[idx - 1], p["text"])
+
+
 def _item_key(meta: Dict[str, Any]) -> str:
     item_id = str(meta.get("item_id") or "").strip()
     if item_id and item_id != "None":
@@ -229,6 +253,7 @@ def build_bibliography(
     for key, group in groups.items():
         ordered = sorted(group["passages"], key=lambda p: p["score"], reverse=True)
         passages = dedupe_passages(ordered)[:MAX_PASSAGES_PER_ITEM]
+        trim_overlaps(passages)
         best = passages[0]
         good = sum(1 for p in passages if p["score"] >= BAND_CUTOFFS[1][0])
         score = best["score"] + COVERAGE_BONUS * math.log1p(good)
@@ -257,10 +282,54 @@ def build_bibliography(
         })
 
     items.sort(key=lambda it: it["score"], reverse=True)
-    items = items[:max_items]
+    items = _fold_duplicates(items)[:max_items]
     for rank, item in enumerate(items, 1):
         item["rank"] = rank
     return items
+
+
+def _fold_duplicates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Show an item stored twice in Zotero as one row.
+
+    Same title (case and punctuation aside), same year and same authors, so two
+    different chapters called "Introduction" stay apart. Expects items sorted
+    best first; the best copy stays and lists the others.
+    """
+    kept: List[Dict[str, Any]] = []
+    seen: Dict[Any, Dict[str, Any]] = {}
+    for item in items:
+        title = " ".join(_WORD.findall(item["title"].lower()))
+        authors = frozenset(a.strip().lower() for a in re.split(r"[,;]", item["authors"]) if a.strip())
+        key = (title, item["year"], authors) if title else None
+        if key is not None and key in seen:
+            seen[key]["duplicates"].append(item["item_id"])
+            continue
+        item["duplicates"] = []
+        if key is not None:
+            seen[key] = item
+        kept.append(item)
+    return kept
+
+
+# The phrases backend/metadata_extractor.py reads as scope. Keep the two in step.
+_SCOPE_PHRASES = re.compile(
+    r"\b(?:from|between)\s+\d{4}\s+(?:to|and)\s+\d{4}\b"
+    r"|\b\d{4}\s*[-\u2013]\s*\d{4}\b"
+    r"|\b(?:after|since|from|before|until)\s+\d{4}\b"
+    r"|\btagged\s+\"[^\"]+\""
+    r"|\bin\s+\"[^\"]+\"",
+    re.I,
+)
+
+
+def topic_of(query: str) -> str:
+    """The query without the phrases read as scope ("since 2015", 'in "PhD"').
+
+    Scope is applied as a filter; left in the text it also skews retrieval and
+    the reranker (on a real library "since 2010" took the best score from 5.3 to -4.2).
+    """
+    topic = " ".join(_SCOPE_PHRASES.sub(" ", query or "").split())
+    return topic or (query or "").strip()
 
 
 def extracted_scope(extracted: Optional[Dict[str, Any]]) -> Dict[str, Any]:

@@ -18,6 +18,7 @@ CREATE TABLE creatorTypes (creatorTypeID INTEGER PRIMARY KEY, creatorType TEXT);
 CREATE TABLE itemCreators (itemID INT, creatorID INT, creatorTypeID INT, orderIndex INT);
 CREATE TABLE groups (groupID INTEGER PRIMARY KEY, libraryID INT, name TEXT);
 CREATE TABLE deletedItems (itemID INTEGER PRIMARY KEY);
+CREATE TABLE itemAttachments (itemID INTEGER PRIMARY KEY, parentItemID INT, contentType TEXT, path TEXT);
 """
 
 
@@ -65,6 +66,9 @@ def zlib(tmp_path):
     lib.add(3, "bookSection", "SECTION1", {"title": "Trade union responses", "bookTitle": "A modern guide",
                                            "date": "2021"}, [("Jane", "Editor", "editor")])
     lib.add(4, "attachment", "ATTACH01", {"title": "The gig economy full text PDF"})
+    lib.conn.execute("INSERT INTO itemAttachments VALUES (4, 1, 'application/pdf', 'storage:gig.pdf')")
+    lib.add(7, "attachment", "SNAPSHOT", {"title": "Snapshot"})
+    lib.conn.execute("INSERT INTO itemAttachments VALUES (7, 2, 'text/html', 'storage:page.html')")
     lib.add(5, "book", "GONE0001", {"title": "The gig economy deleted copy", "date": "2020"})
     lib.conn.execute("INSERT INTO deletedItems VALUES (5)")
     lib.add(6, "journalArticle", "GROUP001", {"title": "Group paper 100% real", "date": "2019"},
@@ -82,6 +86,8 @@ def test_bibliographic_flattens_fields_and_keeps_creator_order(zlib):
     assert book["publisher"] == "Polity" and book["place"] == "Cambridge"
     assert [c["last"] for c in book["creators"]] == ["Woodcock", "Graham"]
     assert book["group_id"] is None
+    assert book["pdf_key"] == "ATTACH01"
+    assert bib["2"]["pdf_key"] is None  # an HTML snapshot is not a PDF
     article = bib["2"]
     assert article["container"] == "Work, Employment and Society"
     assert (article["volume"], article["issue"], article["pages"]) == ("34", "1", "35-54")

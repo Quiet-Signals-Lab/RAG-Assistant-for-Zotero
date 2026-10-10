@@ -278,7 +278,7 @@ class ZoteroLibrary:
             for item_id, key, type_name, group_id in cur.fetchall():
                 raw[str(item_id)] = {
                     "item_id": str(item_id), "item_key": key, "item_type": type_name,
-                    "group_id": group_id, "creators": [], "fields": {},
+                    "group_id": group_id, "pdf_key": None, "creators": [], "fields": {},
                 }
             field_marks = ",".join("?" * len(self._BIB_FIELDS))
             cur.execute(f"""
@@ -302,6 +302,20 @@ class ZoteroLibrary:
             for item_id, first, last, role in cur.fetchall():
                 if str(item_id) in raw:
                     raw[str(item_id)]["creators"].append({"first": first or "", "last": last or "", "role": role})
+            # The PDF attachment's own key: Zotero opens a reader at a page by attachment, not parent.
+            cur.execute(f"""
+                SELECT ia.parentItemID, a.key
+                FROM itemAttachments ia
+                JOIN items a ON a.itemID = ia.itemID
+                WHERE ia.parentItemID IN ({marks})
+                  AND (ia.contentType = 'application/pdf' OR ia.path LIKE '%.pdf')
+                  AND ia.itemID NOT IN (SELECT itemID FROM deletedItems)
+                ORDER BY ia.parentItemID, a.itemID
+            """, ids)
+            for parent_id, key in cur.fetchall():
+                entry = raw.get(str(parent_id))
+                if entry is not None and not entry["pdf_key"]:
+                    entry["pdf_key"] = key
         return {item_id: _citation(entry) for item_id, entry in raw.items()}
 
     def find_items_by_field(self, field_names, needle, normalise=False, limit=25):

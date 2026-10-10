@@ -3,8 +3,8 @@
 from backend import desk
 
 
-def meta(item_id, page=1, title="T", year=2020, chunk_idx=0):
-    return {"item_id": item_id, "page": page, "title": title, "year": year, "chunk_idx": chunk_idx,
+def meta(item_id, page=1, title=None, year=2020, chunk_idx=0):
+    return {"item_id": item_id, "page": page, "title": title or f"Title {item_id}", "year": year, "chunk_idx": chunk_idx,
             "authors": "A", "tags": "Labour,Platforms", "collections": "", "pdf_path": f"/{item_id}.pdf"}
 
 
@@ -106,6 +106,24 @@ def test_max_items_caps_the_list():
     assert len(desk.build_bibliography(docs, metas, [1, 2, 3, 4, 5], "doc", max_items=3)) == 3
 
 
+def test_the_same_paper_stored_twice_is_one_row():
+    docs = ["adversarial passage one", "adversarial passage two", "other"]
+    metas = [meta("1", title="Explaining and Harnessing Adversarial Examples", year=2015),
+             meta("2", title="Explaining and harnessing adversarial examples.", year=2015),
+             meta("3", title="Explaining and Harnessing Adversarial Examples", year=2014)]
+    items = desk.build_bibliography(docs, metas, [5.0, 4.0, 1.0], "adversarial")
+    assert [it["item_id"] for it in items] == ["1", "3"]  # a different year is a different item
+    assert items[0]["duplicates"] == ["2"] and items[1]["duplicates"] == []
+    assert [it["rank"] for it in items] == [1, 2]
+
+
+def test_different_items_with_similar_titles_are_kept_apart():
+    metas = [meta("1", title="Introduction", year=2020), dict(meta("2", title="Introduction", year=2020), authors="B"),
+             meta("3", title="Title 1"), meta("4", title="Title 2")]
+    items = desk.build_bibliography(["a", "b", "c", "d"], metas, [4.0, 3.0, 2.0, 1.0], "x")
+    assert [it["item_id"] for it in items] == ["1", "2", "3", "4"]
+
+
 def test_extracted_scope_keeps_only_set_values():
     assert desk.extracted_scope({"year_min": 2015, "year_max": None, "tags": [], "has_filters": True}) == {"year_min": 2015}
     assert desk.extracted_scope(None) == {}
@@ -147,3 +165,37 @@ def test_title_match_is_symmetric_overlap():
     assert desk.title_match_score("gig economy", title) == 0.5
     assert desk.title_match_score("cruel optimism", "Cruel Optimism") == 1.0
     assert desk.title_match_score("platform workers organise", title) == 0.0
+    # Found on a real library: a topical query sharing three words with a generic title.
+    topical = desk.title_match_score("adversarial examples against machine learning classifiers", "Adversarial machine learning")
+    assert topical < desk.TITLE_MATCH_MIN
+
+
+def test_topic_drops_the_phrases_read_as_scope():
+    assert desk.topic_of("courier strikes since 2015") == "courier strikes"
+    assert desk.topic_of('riders between 2010 and 2020 tagged "Labour" in "PhD"') == "riders"
+    assert desk.topic_of("riders 2015-2020") == "riders"
+    assert desk.topic_of("since 2015") == "since 2015"  # nothing left: keep the query
+    assert desk.topic_of("from Turin to London") == "from Turin to London"
+
+
+def test_a_passage_that_follows_another_drops_the_repeated_words():
+    first = " ".join(f"w{i}" for i in range(100))
+    second = " ".join(f"w{i}" for i in range(60, 100)) + " fresh words follow here"
+    alone = " ".join(f"w{i}" for i in range(60, 100)) + " no predecessor kept"
+    passages = [{"text": first, "chunk_idx": 3}, {"text": second, "chunk_idx": 4}, {"text": alone, "chunk_idx": 9}]
+    desk.trim_overlaps(passages)
+    assert passages[0]["text"] == first
+    assert passages[1]["text"] == "…fresh words follow here"
+    assert passages[2]["text"] == alone
+
+
+def test_overlap_trimming_in_the_bibliography_keeps_highlights_aligned():
+    # As the chunker writes them: about 130 words, the last 40 repeated at the start of the next.
+    shared = " ".join(f"s{i}" for i in range(40))
+    first = "Couriers organised. " + " ".join(f"a{i}" for i in range(90)) + " " + shared
+    fresh = "couriers struck again " + " ".join(f"b{i}" for i in range(87))
+    second = shared + " " + fresh
+    items = desk.build_bibliography([first, second], [meta("1", chunk_idx=0), meta("1", chunk_idx=1)], [2.0, 1.0], "couriers")
+    later = items[0]["passages"][1]
+    assert later["text"] == "…" + fresh
+    assert [later["text"][a:b] for a, b in later["highlights"]] == ["couriers"]

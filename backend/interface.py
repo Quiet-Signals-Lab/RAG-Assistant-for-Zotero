@@ -660,13 +660,14 @@ class ZoteroChatbot:
             base_where, _, _ = self._build_filter(
                 query, filter_item_ids=filter_item_ids, manual_filters=manual_filters,
             )
+        topic = desk.topic_of(query) if extracted else query
         docs, metas, scores, fell_back = self._search_and_rerank(
-            query, where=where, k=self.DESK_RETRIEVAL_K,
+            topic, where=where, k=self.DESK_RETRIEVAL_K,
             rerank_top_k=self.DESK_RERANK_K, fallback_where=base_where,
         )
         retrieved = time.perf_counter()
 
-        items = desk.build_bibliography(docs, metas, scores, query, max_items=self.DESK_MAX_ITEMS)
+        items = desk.build_bibliography(docs, metas, scores, topic, max_items=self.DESK_MAX_ITEMS)
         try:
             known = self._known_items(query)
         except Exception as e:
