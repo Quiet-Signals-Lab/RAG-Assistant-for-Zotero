@@ -16,17 +16,17 @@ Each stage ends with green tests (`pytest -m "not integration"`) and a clean fro
 
 Pure, testable desk logic lives in a new `backend/desk.py`. The class keeps orchestration.
 
-- [ ] **1.1 Factor `retrieve()` out of `ZoteroChatbot.chat()`.** Filters (extracted + manual + item ids), hybrid RRF search, auto-filter fallback, cross-encoder rerank. Returns docs, metadatas, rerank scores and the effective scope. `chat()` calls it with unchanged behaviour.
-- [ ] **1.2 Item-level results in `desk.py`.**
+- [x] **1.1 Factor `retrieve()` out of `ZoteroChatbot.chat()`.** Filters (extracted + manual + item ids), hybrid RRF search, auto-filter fallback, cross-encoder rerank. Returns docs, metadatas, rerank scores and the effective scope. `chat()` calls it with unchanged behaviour.
+- [x] **1.2 Item-level results in `desk.py`.**
   - Dedupe overlapping passages within an item (same page, high token overlap) before anything is counted.
   - MaxP item score. Optional coverage bonus behind a constant set to 0.
   - Bands: strong / good / weak / see-also. Until per-reranker calibration exists (Stage 4) bands are assigned from the sigmoid of the cross-encoder logit with fixed cut-offs, kept in one place.
   - Query-biased extract: the sentence from the best passage with the most query terms, trimmed, with page.
-- [ ] **1.3 Deterministic known-item detection.** Quoted title, DOI, ISBN, arXiv id, author + year. Matched against item metadata (Zotero SQLite, read-only). Result pinned above the list, never replaces it.
-- [ ] **1.4 Bibliographic hydration.** `ZoteroLibrary.get_bibliographic(item_ids)`: item key, type, creators with roles, title, date, container, volume, issue, pages, publisher, DOI, URL. One batched read-only query per search; no reindex needed.
-- [ ] **1.5 `ZoteroChatbot.search()` and `POST /api/search`.** Desk retrieval limits independent of the chat model's context window (retrieve 60, rerank 40, up to 30 items, 3 passages each). Response shape as in the plan, plus `scope.extracted` so the UI can show what was read from the query.
-- [ ] **1.6 `interfaceMode` setting** (`"desk"` | `"chat"`, default `"desk"`) in backend default settings.
-- [ ] **1.7 Tests.** `test_desk.py` (dedupe, MaxP, bands, extract, known-item patterns, false-positive set), `test_zotero_bibliographic.py` (in-memory SQLite with the Zotero tables it touches), `test_search_api.py` (shape, no provider configured, filters passed through, 400 on empty query and empty scope).
+- [x] **1.3 Deterministic known-item detection.** Quoted title, DOI, ISBN, arXiv id, author + year. Matched against item metadata (Zotero SQLite, read-only). Result pinned above the list, never replaces it.
+- [x] **1.4 Bibliographic hydration.** `ZoteroLibrary.get_bibliographic(item_ids)`: item key, type, creators with roles, title, date, container, volume, issue, pages, publisher, DOI, URL. One batched read-only query per search; no reindex needed.
+- [x] **1.5 `ZoteroChatbot.search()` and `POST /api/search`.** Desk retrieval limits independent of the chat model's context window (retrieve 60, rerank 40, up to 30 items, 3 passages each). Response shape as in the plan, plus `scope.extracted` so the UI can show what was read from the query.
+- [x] **1.6 `interfaceMode` setting** (`"desk"` | `"chat"`, default `"desk"`) in backend default settings.
+- [x] **1.7 Tests.** `test_desk.py` (dedupe, MaxP, bands, extract, known-item patterns, false-positive set), `test_zotero_bibliographic.py` (in-memory SQLite with the Zotero tables it touches), `test_search_api.py` (shape, no provider configured, filters passed through, 400 on empty query and empty scope).
 
 ## Stage 2 · Frontend: Reading Room theme and the desk
 

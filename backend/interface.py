@@ -558,6 +558,189 @@ class ZoteroChatbot:
             include_reasoning=True  # Enable chain-of-thought for complex questions
         )
 
+    def _build_filter(
+        self,
+        query,
+        filter_item_ids=None,
+        use_metadata_filters=False,
+        manual_filters=None,
+        provider_manager=None,
+    ):
+        """Combine item ids, manual filters and filters read from the query into one where clause.
+
+        `provider_manager=None` keeps extraction to the regex pass, so no model runs.
+
+        Returns (where, extracted, item_where): `extracted` is what was read from the
+        query (None when nothing was) and `item_where` is the item-id scope alone, the
+        place to fall back to when an extracted filter matches nothing.
+        """
+        from backend.metadata_extractor import extract_metadata_filters
+        from backend.metadata_utils import build_metadata_where_clause, merge_where_clauses
+
+        def clause(f):
+            return build_metadata_where_clause(
+                year_min=f.get("year_min"),
+                year_max=f.get("year_max"),
+                tags=f.get("tags"),
+                collections=f.get("collections"),
+                title=f.get("title"),
+                author=f.get("author"),
+                item_types=f.get("item_types"),
+            )
+
+        extracted = None
+        metadata_where = None
+        if use_metadata_filters:
+            found = extract_metadata_filters(query, provider_manager)
+            if found["has_filters"]:
+                extracted = found
+                metadata_where = clause(found)
+                logger.debug(f"METADATA FILTERS (extracted): {found}")
+        if manual_filters:
+            metadata_where = merge_where_clauses(metadata_where, clause(manual_filters))
+            logger.debug(f"METADATA FILTERS (manual): {manual_filters}")
+
+        item_where = {"item_id": {"$in": list(filter_item_ids)}} if filter_item_ids else None
+        return merge_where_clauses(item_where, metadata_where), extracted, item_where
+
+    def _search_and_rerank(self, query, where, k, rerank_top_k, use_rrf=True, fallback_where=None):
+        """Hybrid search under `where`, then cross-encoder rerank.
+
+        When the search finds nothing and `fallback_where` differs from `where`, it
+        retries once under `fallback_where`. Pass `fallback_where=where` for no fallback.
+
+        Returns (docs, metas, scores, fell_back), with `scores` the reranker's raw
+        logits in the same order as `docs`.
+        """
+        search = self.chroma.query_hybrid_rrf if use_rrf else self.chroma.query_hybrid
+        search_prompt = self.build_search_prompt(query)
+
+        def run(w):
+            results = search(query=search_prompt, k=k, where=w, embedding_model_id=self.embedding_model_id) or {}
+            return (results.get("documents") or [[]])[0] or [], (results.get("metadatas") or [[]])[0] or []
+
+        docs, metas = run(where)
+        fell_back = False
+        if not docs and fallback_where != where:
+            logger.debug("FALLBACK: extracted filter returned 0 results, retrying without it")
+            docs, metas = run(fallback_where)
+            fell_back = True
+
+        scores = []
+        if docs:
+            ranked = rerank_passages(query, docs, top_k=rerank_top_k)
+            docs = [docs[i] for i, _ in ranked]
+            metas = [metas[i] for i, _ in ranked]
+            scores = [float(score) for _, score in ranked]
+        return docs, metas, scores, fell_back
+
+    # Reference desk retrieval is sized for reading, not for a model's context window.
+    DESK_RETRIEVAL_K = 60
+    DESK_RERANK_K = 40
+    DESK_MAX_ITEMS = 30
+    DESK_MAX_KNOWN_ITEMS = 3
+
+    def search(self, query, manual_filters=None, use_metadata_filters=True, filter_item_ids=None):
+        """Reference desk search: a ranked bibliography with its evidence. No model is called.
+
+        Scope read from the query uses the regex pass only. If that scope matches
+        nothing it is dropped and the response says so, so the UI never shows a
+        chip that is silently not applied.
+        """
+        from backend import desk
+
+        started = time.perf_counter()
+        query = (query or "").strip()
+        where, extracted, _ = self._build_filter(
+            query, filter_item_ids=filter_item_ids,
+            use_metadata_filters=use_metadata_filters, manual_filters=manual_filters,
+        )
+        base_where = where
+        if extracted:
+            base_where, _, _ = self._build_filter(
+                query, filter_item_ids=filter_item_ids, manual_filters=manual_filters,
+            )
+        docs, metas, scores, fell_back = self._search_and_rerank(
+            query, where=where, k=self.DESK_RETRIEVAL_K,
+            rerank_top_k=self.DESK_RERANK_K, fallback_where=base_where,
+        )
+        retrieved = time.perf_counter()
+
+        items = desk.build_bibliography(docs, metas, scores, query, max_items=self.DESK_MAX_ITEMS)
+        try:
+            known = self._known_items(query)
+        except Exception as e:
+            logger.warning("Known-item lookup failed: %s", e)
+            known = []
+        try:
+            citations = self.zlib.get_bibliographic([it["item_id"] for it in items] + [k["item_id"] for k in known])
+        except Exception as e:
+            logger.warning("Could not read citations from the Zotero database: %s", e)
+            citations = {}
+        for entry in items + known:
+            entry["citation"] = citations.get(entry["item_id"])
+
+        return {
+            "query": query,
+            "scope": {
+                "manual": manual_filters or {},
+                "extracted": desk.extracted_scope(extracted),
+                "extracted_ignored": bool(extracted) and fell_back,
+            },
+            "known_items": known,
+            "items": items,
+            "see_also_count": sum(1 for it in items if it["band"] == desk.SEE_ALSO),
+            "timing_ms": {
+                "retrieve": round((retrieved - started) * 1000),
+                "total": round((time.perf_counter() - started) * 1000),
+            },
+        }
+
+    def _known_items(self, query):
+        """Items the query names directly: DOI, ISBN, arXiv id, a title, or author and year."""
+        from backend import desk
+
+        hint = desk.detect_known_item(query)
+        if not hint:
+            return []
+        z = self.zlib
+        kind = hint["kind"]
+        if kind == "doi":
+            ids = [i for i, _ in z.find_items_by_field(("DOI", "url", "extra"), hint["doi"])]
+        elif kind == "isbn":
+            ids = [i for i, _ in z.find_items_by_field(("ISBN",), hint["isbn"], normalise=True)]
+        elif kind == "arxiv":
+            ids = [i for i, _ in z.find_items_by_field(("url", "extra", "DOI", "archiveID"), hint["arxiv"])]
+        elif kind == "author_year":
+            ids = z.find_items_by_creator_year(hint["authors"][0], hint["year"])
+            others = [name.lower() for name in hint["authors"][1:]]
+            if others and ids:
+                creators = {i: c.get("creators", []) for i, c in z.get_bibliographic(ids).items()}
+                ids = [
+                    i for i in ids
+                    if all(any(c["last"].lower().startswith(o) for c in creators.get(i, [])) for o in others)
+                ]
+        else:
+            words = sorted(desk.title_words(hint["title"]), key=len, reverse=True)
+            if not words or len(words[0]) < 4:
+                return []
+            threshold = 0.5 if hint.get("quoted") else desk.TITLE_MATCH_MIN
+            scored = {}
+            for item_id, title in z.find_items_by_field(("title", "shortTitle"), words[0], limit=200):
+                score = desk.title_match_score(hint["title"], title)
+                if score >= threshold:
+                    scored[item_id] = max(score, scored.get(item_id, 0.0))
+            ids = sorted(scored, key=scored.get, reverse=True)
+
+        seen = []
+        for item_id in ids:
+            if item_id not in seen:
+                seen.append(item_id)
+        return [
+            {"item_id": item_id, "kind": kind, "indexed": bool(self.chroma.item_exists(item_id))}
+            for item_id in seen[: self.DESK_MAX_KNOWN_ITEMS]
+        ]
+
     def chat(
         self,
         query,
@@ -628,99 +811,29 @@ class ZoteroChatbot:
             logger.debug(f"   Using original query: '{query}'")
         
         # STEP 3: RETRIEVE using the standalone/condensed query
-        # Build metadata filter if enabled
-        metadata_where = None
-        if use_metadata_filters or manual_filters:
-            from backend.metadata_extractor import extract_metadata_filters
-            from backend.metadata_utils import build_metadata_where_clause, merge_where_clauses
-            
-            # Extract from query if enabled
-            if use_metadata_filters:
-                extracted = extract_metadata_filters(retrieval_query, self.provider_manager)
-                if extracted["has_filters"]:
-                    metadata_where = build_metadata_where_clause(
-                        year_min=extracted.get("year_min"),
-                        year_max=extracted.get("year_max"),
-                        tags=extracted.get("tags"),
-                        collections=extracted.get("collections"),
-                        title=extracted.get("title"),
-                        author=extracted.get("author"),
-                        item_types=extracted.get("item_types"),
-                    )
-                    logger.debug(f"\nMETADATA FILTERS (extracted): {extracted}")
-            
-            # Apply manual filters if provided
-            if manual_filters:
-                manual_where = build_metadata_where_clause(
-                    year_min=manual_filters.get("year_min"),
-                    year_max=manual_filters.get("year_max"),
-                    tags=manual_filters.get("tags"),
-                    collections=manual_filters.get("collections"),
-                    title=manual_filters.get("title"),
-                    author=manual_filters.get("author"),
-                    item_types=manual_filters.get("item_types"),
-                )
-                metadata_where = merge_where_clauses(metadata_where, manual_where)
-                logger.debug(f"\nMETADATA FILTERS (manual): {manual_filters}")
-        
-        # Combine with item_id filter
-        item_id_where = {"item_id": {"$in": filter_item_ids}} if filter_item_ids else None
-        from backend.metadata_utils import merge_where_clauses
-        db_filter = merge_where_clauses(item_id_where, metadata_where)
-        
+        db_filter, _extracted, item_where = self._build_filter(
+            retrieval_query,
+            filter_item_ids=filter_item_ids,
+            use_metadata_filters=use_metadata_filters,
+            manual_filters=manual_filters,
+            provider_manager=self.provider_manager,
+        )
         if db_filter:
             logger.debug(f"\nFINAL WHERE CLAUSE: {db_filter}")
-        
-        # Use hybrid search (dense + sparse) for best results
-        search_prompt = self.build_search_prompt(retrieval_query)  # Use condensed query!
 
         # Get dynamic retrieval limits based on model's context window
         is_focused_query_prelim = db_filter is not None
         limits = self.get_retrieval_limits(is_focused=is_focused_query_prelim, max_sources_override=max_sources)
-        retrieval_k = limits["retrieval_k"]
-        rerank_top_k = limits["rerank_top_k"]
 
-        if use_rrf:
-            # Use RRF hybrid search for better fusion
-            results = self.chroma.query_hybrid_rrf(
-                query=search_prompt,
-                k=retrieval_k,
-                where=db_filter,
-                embedding_model_id=self.embedding_model_id,
-            ) or {}
-        else:
-            # Use traditional hybrid search
-            results = self.chroma.query_hybrid(
-                query=search_prompt,
-                k=retrieval_k,
-                where=db_filter,
-                embedding_model_id=self.embedding_model_id
-            ) or {}
-
-        docs_outer = results.get("documents", [[]])
-        metas_outer = results.get("metadatas", [[]])
-        docs = docs_outer[0] if docs_outer else []
-        metas = metas_outer[0] if metas_outer else []
-
-        # Fallback: if auto-extracted filter produced zero results, retry without it.
-        # Manual filters are intentional, so we don't fall back for those.
-        if not docs and db_filter is not None and use_metadata_filters and not manual_filters:
-            logger.debug(f"\nFALLBACK: auto-extracted filter returned 0 results — retrying unfiltered")
-            fallback_fn = self.chroma.query_hybrid_rrf if use_rrf else self.chroma.query_hybrid
-            fallback_results = fallback_fn(
-                query=search_prompt,
-                k=15,
-                where=None,
-                embedding_model_id=self.embedding_model_id,
-            ) or {}
-            docs = (fallback_results.get("documents", [[]])[0]) or []
-            metas = (fallback_results.get("metadatas", [[]])[0]) or []
-
-        # RE-RANK using cross-encoder for better relevance
-        if docs:
-            ranked = rerank_passages(retrieval_query, docs, top_k=rerank_top_k)  # Use condensed query for ranking!
-            docs = [docs[idx] for idx, score in ranked]
-            metas = [metas[idx] for idx, score in ranked]
+        # Manual filters are intentional, so only an auto-extracted filter falls back.
+        docs, metas, _scores, _fell_back = self._search_and_rerank(
+            retrieval_query,
+            where=db_filter,
+            k=limits["retrieval_k"],
+            rerank_top_k=limits["rerank_top_k"],
+            use_rrf=use_rrf,
+            fallback_where=item_where if (use_metadata_filters and not manual_filters) else db_filter,
+        )
 
         # Detect focused queries and relax caps so deep single-document questions
         # get enough context. Two signals trigger focused mode:

@@ -247,9 +247,151 @@ class ZoteroLibrary:
                 if row[0]
             ]
     
+    # Fields read for a citation. Zotero stores the type-specific field name
+    # (bookTitle, proceedingsTitle, university ...), so all of them are asked for.
+    _BIB_FIELDS = (
+        "title", "shortTitle", "date", "publicationTitle", "bookTitle", "proceedingsTitle",
+        "websiteTitle", "blogTitle", "volume", "issue", "pages", "publisher", "institution",
+        "university", "place", "DOI", "ISBN", "url", "edition", "reportNumber", "thesisType",
+    )
+    _PARENT_TYPES_SQL = "t.typeName NOT IN ('attachment', 'note', 'annotation')"
+
+    def get_bibliographic(self, item_ids):
+        """Citation data for items, keyed by item id as a string.
+
+        One read-only query per table, so a page of results costs three queries.
+        Ids that are not in the library are left out.
+        """
+        ids = sorted({int(i) for i in item_ids if str(i).strip().isdigit()})
+        if not ids:
+            return {}
+        marks = ",".join("?" * len(ids))
+        raw = {}
+        with self._cursor() as cur:
+            cur.execute(f"""
+                SELECT i.itemID, i.key, t.typeName, g.groupID
+                FROM items i
+                JOIN itemTypes t ON t.itemTypeID = i.itemTypeID
+                LEFT JOIN groups g ON g.libraryID = i.libraryID
+                WHERE i.itemID IN ({marks})
+            """, ids)
+            for item_id, key, type_name, group_id in cur.fetchall():
+                raw[str(item_id)] = {
+                    "item_id": str(item_id), "item_key": key, "item_type": type_name,
+                    "group_id": group_id, "creators": [], "fields": {},
+                }
+            field_marks = ",".join("?" * len(self._BIB_FIELDS))
+            cur.execute(f"""
+                SELECT d.itemID, f.fieldName, v.value
+                FROM itemData d
+                JOIN fields f ON f.fieldID = d.fieldID
+                JOIN itemDataValues v ON v.valueID = d.valueID
+                WHERE d.itemID IN ({marks}) AND f.fieldName IN ({field_marks})
+            """, ids + list(self._BIB_FIELDS))
+            for item_id, name, value in cur.fetchall():
+                if str(item_id) in raw:
+                    raw[str(item_id)]["fields"][name] = value
+            cur.execute(f"""
+                SELECT ic.itemID, c.firstName, c.lastName, ct.creatorType
+                FROM itemCreators ic
+                JOIN creators c ON c.creatorID = ic.creatorID
+                JOIN creatorTypes ct ON ct.creatorTypeID = ic.creatorTypeID
+                WHERE ic.itemID IN ({marks})
+                ORDER BY ic.itemID, ic.orderIndex
+            """, ids)
+            for item_id, first, last, role in cur.fetchall():
+                if str(item_id) in raw:
+                    raw[str(item_id)]["creators"].append({"first": first or "", "last": last or "", "role": role})
+        return {item_id: _citation(entry) for item_id, entry in raw.items()}
+
+    def find_items_by_field(self, field_names, needle, normalise=False, limit=25):
+        """Parent items with a field (DOI, ISBN, title ...) containing `needle`.
+
+        Case-insensitive for ASCII. `normalise` strips hyphens and spaces from the
+        stored value first, for ISBNs. Returns [(item_id, value)].
+        """
+        if not needle or not field_names:
+            return []
+        value = "REPLACE(REPLACE(v.value, '-', ''), ' ', '')" if normalise else "v.value"
+        marks = ",".join("?" * len(field_names))
+        with self._cursor() as cur:
+            cur.execute(f"""
+                SELECT DISTINCT i.itemID, v.value
+                FROM items i
+                JOIN itemTypes t ON t.itemTypeID = i.itemTypeID
+                JOIN itemData d ON d.itemID = i.itemID
+                JOIN fields f ON f.fieldID = d.fieldID
+                JOIN itemDataValues v ON v.valueID = d.valueID
+                WHERE f.fieldName IN ({marks})
+                  AND {self._PARENT_TYPES_SQL}
+                  AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
+                  AND {value} LIKE ? ESCAPE '\\'
+                LIMIT ?
+            """, list(field_names) + [f"%{_like_escape(needle)}%", limit])
+            return [(str(item_id), val) for item_id, val in cur.fetchall()]
+
+    def find_items_by_creator_year(self, last_name, year, limit=25):
+        """Parent items with a creator whose last name starts with `last_name`, dated `year`."""
+        if not last_name or not year:
+            return []
+        with self._cursor() as cur:
+            cur.execute(f"""
+                SELECT DISTINCT i.itemID
+                FROM items i
+                JOIN itemTypes t ON t.itemTypeID = i.itemTypeID
+                JOIN itemCreators ic ON ic.itemID = i.itemID
+                JOIN creators c ON c.creatorID = ic.creatorID
+                JOIN itemData d ON d.itemID = i.itemID
+                JOIN fields f ON f.fieldID = d.fieldID AND f.fieldName = 'date'
+                JOIN itemDataValues v ON v.valueID = d.valueID
+                WHERE c.lastName LIKE ? ESCAPE '\\'
+                  AND v.value LIKE ?
+                  AND {self._PARENT_TYPES_SQL}
+                  AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
+                LIMIT ?
+            """, (f"{_like_escape(last_name)}%", f"{int(year)}%", limit))
+            return [str(row[0]) for row in cur.fetchall()]
+
     def close(self):
         """Close thread-local connections. Call this on shutdown."""
         if hasattr(self._local, 'conn') and self._local.conn is not None:
             self._local.conn.close()
             self._local.conn = None
 
+
+
+def _like_escape(text):
+    return str(text).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _first(fields, *names):
+    return next((fields[n] for n in names if fields.get(n)), "")
+
+
+def _citation(entry):
+    """Flatten raw Zotero fields into the citation shape the desk renders and exports."""
+    import re
+    fields = entry.pop("fields")
+    date = fields.get("date") or ""
+    # Zotero stores dates as "2020-03-00 March 2020": a sortable part, then the date as typed.
+    typed = date.split(" ", 1)[1] if re.match(r"^\d{4}-\d{2}-\d{2} ", date) else date
+    year = re.search(r"\b(\d{4})\b", date)
+    entry.update({
+        "title": fields.get("title") or "",
+        "short_title": fields.get("shortTitle") or "",
+        "date": typed,
+        "year": int(year.group(1)) if year else None,
+        "container": _first(fields, "publicationTitle", "bookTitle", "proceedingsTitle", "websiteTitle", "blogTitle"),
+        "volume": fields.get("volume") or "",
+        "issue": fields.get("issue") or "",
+        "pages": fields.get("pages") or "",
+        "publisher": _first(fields, "publisher", "institution", "university"),
+        "place": fields.get("place") or "",
+        "edition": fields.get("edition") or "",
+        "report_number": fields.get("reportNumber") or "",
+        "thesis_type": fields.get("thesisType") or "",
+        "doi": fields.get("DOI") or "",
+        "isbn": fields.get("ISBN") or "",
+        "url": fields.get("url") or "",
+    })
+    return entry

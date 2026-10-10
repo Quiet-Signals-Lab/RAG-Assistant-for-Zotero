@@ -132,6 +132,8 @@ def load_settings(profile_id: str = None):
         "embeddingModel": "bge-base",
         "zoteroPath": DB_PATH,
         "chromaPath": profile_chroma_path,
+        # "desk" (reference desk, the default) or "chat" (legacy chat mode)
+        "interfaceMode": "desk",
         "providers": {
             "ollama": {
                 "enabled": True,
@@ -682,13 +684,78 @@ def chat_post(payload: dict = Body(...)):
     except HTTPException:
         raise
     except Exception as e:
-        if "embedding with dimension" in str(e).lower():
-            raise _fail(RuntimeError(
-                "Database configuration error: embedding dimension mismatch. Your database was "
-                "created with a different embedding model. Delete the vector database and "
-                f"re-index your library. ({e})"
-            ))
-        raise _fail(e)
+        raise _retrieval_failure(e)
+
+
+def _retrieval_failure(e: Exception) -> HTTPException:
+    """Turn a search failure into an HTTP error, explaining the one users can fix themselves."""
+    if "embedding with dimension" in str(e).lower():
+        return _fail(RuntimeError(
+            "Database configuration error: embedding dimension mismatch. Your database was "
+            "created with a different embedding model. Delete the vector database and "
+            f"re-index your library. ({e})"
+        ))
+    return _fail(e)
+
+
+def _clean_filters(raw) -> Optional[dict]:
+    """Validate scope filters from the client. Unknown keys are dropped; bad values are a 400."""
+    if not raw:
+        return None
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail="'manual_filters' must be an object")
+    clean = {}
+    for key in ("year_min", "year_max"):
+        value = raw.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            clean[key] = int(value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"'{key}' must be a year")
+    for key in ("tags", "collections", "item_types"):
+        values = raw.get(key) or []
+        if isinstance(values, str):
+            values = [values]
+        if not isinstance(values, list):
+            raise HTTPException(status_code=400, detail=f"'{key}' must be a list")
+        values = [str(v).strip() for v in values if str(v).strip()]
+        if values:
+            clean[key] = values
+    for key in ("author", "title"):
+        value = str(raw.get(key) or "").strip()
+        if value:
+            clean[key] = value
+    return clean or None
+
+
+@app.post("/api/search")
+def search(payload: dict = Body(...)):
+    """Reference desk search: a ranked bibliography with evidence. No model is called.
+
+    Body: {"query": str, "manual_filters"?: {year_min, year_max, tags, collections,
+    item_types, author, title}, "use_metadata_filters"?: bool (read scope from the
+    query, default true), "item_ids"?: [str]}
+    """
+    query = str(payload.get("query") or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Type what you are looking for.")
+    if len(query) > 2000:
+        raise HTTPException(status_code=400, detail="The query is too long. Keep it under 2,000 characters.")
+    manual_filters = _clean_filters(payload.get("manual_filters"))
+    item_ids = payload.get("item_ids") or []
+    if isinstance(item_ids, str):
+        item_ids = item_ids.split(",")
+    item_ids = [str(i).strip() for i in item_ids if str(i).strip()] if isinstance(item_ids, list) else []
+    try:
+        return chatbot.search(
+            query,
+            manual_filters=manual_filters,
+            use_metadata_filters=bool(payload.get("use_metadata_filters", True)),
+            filter_item_ids=item_ids or None,
+        )
+    except Exception as e:
+        raise _retrieval_failure(e)
 
 
 @app.get("/api/index_status")
