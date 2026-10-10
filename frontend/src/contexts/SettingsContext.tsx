@@ -42,6 +42,8 @@ export interface Settings {
   excludedTags?: string[];
   excludedItemTypes?: string[];
   theme?: 'light' | 'dark';
+  /** 'desk' (the reference desk, default) or 'chat' (legacy chat mode). */
+  interfaceMode?: 'desk' | 'chat';
 }
 
 interface SettingsContextType {
@@ -67,6 +69,7 @@ const defaultSettings: Settings = {
   excludedTags: [],
   excludedItemTypes: [],
   theme: 'light',
+  interfaceMode: 'desk',
   providers: {
     ollama: {
       enabled: true,

@@ -24,9 +24,9 @@
 }
 
 .semantic-modal-content {
-  background: var(--bg-main, #fff);
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  background: var(--bg-main);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
   max-width: 700px;
   width: 100%;
   max-height: 85vh;
@@ -51,7 +51,7 @@
   justify-content: space-between;
   align-items: flex-start;
   padding: 24px 24px 16px;
-  border-bottom: 1px solid var(--border, #ddd);
+  border-bottom: 1px solid var(--border);
   gap: 16px;
 }
 
@@ -78,14 +78,14 @@
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-muted);
   transition: all 0.2s ease;
 }
 
 .semantic-modal-close:hover {
-  background: var(--bg-hover, #f0f0f0);
+  background: var(--bg-hover);
   color: var(--text-main);
 }
 
@@ -159,9 +159,9 @@
 
 .semantic-citation-item {
   padding: 12px;
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 6px;
-  border-left: 3px solid var(--accent, #8b4513);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
 }
 
 .semantic-citation-title {
@@ -186,7 +186,7 @@
 
 .semantic-modal-footer {
   padding: 16px 24px;
-  border-top: 1px solid var(--border, #ddd);
+  border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
 }
@@ -196,10 +196,10 @@
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: var(--accent, #8b4513);
-  color: white;
+  background: var(--ink);
+  color: var(--paper);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
@@ -208,9 +208,9 @@
 }
 
 .semantic-link-button:hover {
-  background: var(--accent-dark, #6b3410);
+  background: var(--ink);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(139, 69, 19, 0.3);
+  box-shadow: none;
 }
 
 .semantic-link-button svg {

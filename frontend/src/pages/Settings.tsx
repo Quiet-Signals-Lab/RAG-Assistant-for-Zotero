@@ -526,6 +526,46 @@ const Settings: React.FC = () => {
         </section>
 
         <section className="settings-section">
+          <h2 className="settings-section-title">Interface</h2>
+          <p className="settings-section-description">
+            Choose how you work with your library.
+          </p>
+          <fieldset className="settings-field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="sr-only">Interface</legend>
+            <label className="settings-label" style={{ cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="radio"
+                name="interfaceMode"
+                value="desk"
+                checked={settings.interfaceMode !== 'chat'}
+                onChange={() => updateSettings({ interfaceMode: 'desk' })}
+                style={{ marginRight: '8px', accentColor: 'var(--ink)' }}
+              />
+              Reference desk
+            </label>
+            <p className="settings-hint">
+              Search your library and get back a ranked bibliography with the evidence open at the page.
+              No answers are written, and no model is needed.
+            </p>
+            <label className="settings-label" style={{ cursor: 'pointer', userSelect: 'none', marginTop: '12px' }}>
+              <input
+                type="radio"
+                name="interfaceMode"
+                value="chat"
+                checked={settings.interfaceMode === 'chat'}
+                onChange={() => updateSettings({ interfaceMode: 'chat' })}
+                style={{ marginRight: '8px', accentColor: 'var(--ink)' }}
+              />
+              Legacy chat
+            </label>
+            <p className="settings-hint">
+              The earlier chat interface, where a model writes an answer from your sources.
+              It needs a configured model and is no longer developed.
+            </p>
+          </fieldset>
+        </section>
+
+        <section className="settings-section">
           <h2 className="settings-section-title">Appearance</h2>
           <p className="settings-section-description">
             Choose how the app looks. Changes apply immediately.
@@ -542,7 +582,7 @@ const Settings: React.FC = () => {
                   width: '18px',
                   height: '18px',
                   cursor: 'pointer',
-                  accentColor: 'var(--accent)'
+                  accentColor: 'var(--ink)'
                 }}
               />
               Dark mode
@@ -570,7 +610,7 @@ const Settings: React.FC = () => {
                   width: '18px', 
                   height: '18px', 
                   cursor: 'pointer',
-                  accentColor: 'var(--accent)'
+                  accentColor: 'var(--ink)'
                 }}
               />
               Show system notification
@@ -591,7 +631,7 @@ const Settings: React.FC = () => {
                   width: '18px', 
                   height: '18px', 
                   cursor: 'pointer',
-                  accentColor: 'var(--accent)'
+                  accentColor: 'var(--ink)'
                 }}
               />
               Play sound notification

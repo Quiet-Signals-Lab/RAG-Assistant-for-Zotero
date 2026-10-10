@@ -12,7 +12,7 @@
   gap: 4px;
   padding: 8px 4px;
   border-right: 1px solid var(--border);
-  background: var(--bg-panel-alt, #fafafa);
+  background: var(--bg-panel-alt);
 }
 
 .sidebar-tabs__nav-item {
@@ -23,7 +23,7 @@
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-muted);
   transition: all 0.2s ease;
@@ -31,14 +31,14 @@
 }
 
 .sidebar-tabs__nav-item:hover {
-  background: var(--bg-hover, #f0f0f0);
+  background: var(--bg-hover);
   color: var(--text-main);
 }
 
 .sidebar-tabs__nav-item.active {
-  background: var(--bg-main, #ffffff);
-  color: var(--accent, #8b4513);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--bg-main);
+  color: var(--ink);
+  box-shadow: none;
 }
 
 .sidebar-tabs__nav-item.active::before {
@@ -49,7 +49,7 @@
   transform: translateY(-50%);
   width: 3px;
   height: 24px;
-  background: var(--accent, #8b4513);
+  background: var(--ink);
   border-radius: 0 2px 2px 0;
 }
 

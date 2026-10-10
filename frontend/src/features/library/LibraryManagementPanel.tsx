@@ -412,7 +412,7 @@ const LibraryManagementPanel: React.FC = () => {
             </button>
           </div>
 
-          <p className="muted" style={{ fontSize: '12px', marginTop: '10px', lineHeight: '1.5', background: 'rgba(230, 160, 32, 0.06)', border: '1.5px solid rgba(230, 160, 32, 0.3)', borderRadius: '6px', padding: '10px 12px', color: '#b07820' }}>
+          <p className="muted" style={{ fontSize: '12px', marginTop: '10px', lineHeight: '1.5', borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)', padding: '8px 0', color: 'var(--ink-2)' }}>
             Changing the embedding model requires a full re-index of your library. To try a different model while keeping existing embeddings, create a new profile instead.
           </p>
         </section>
@@ -443,11 +443,11 @@ const LibraryManagementPanel: React.FC = () => {
                   padding: '7px 10px',
                   fontSize: '13px',
                   fontWeight: 600,
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
-                  border: '1px solid var(--border, rgba(0,0,0,0.12))',
-                  background: activeAxis === axis.key ? 'var(--accent, #5b7bc5)' : 'transparent',
-                  color: activeAxis === axis.key ? '#fff' : 'var(--text-main)',
+                  border: '1px solid var(--rule)',
+                  background: activeAxis === axis.key ? 'var(--ink)' : 'transparent',
+                  color: activeAxis === axis.key ? 'var(--paper)' : 'var(--text-main)',
                 }}
               >
                 {axis.label}
@@ -457,7 +457,7 @@ const LibraryManagementPanel: React.FC = () => {
                     fontSize: '11px',
                     padding: '1px 6px',
                     borderRadius: '10px',
-                    background: activeAxis === axis.key ? 'rgba(255,255,255,0.25)' : 'rgba(100,130,240,0.15)',
+                    background: 'transparent',
                   }}>
                     {axis.selected.length}
                   </span>
@@ -478,8 +478,8 @@ const LibraryManagementPanel: React.FC = () => {
               padding: '7px 10px',
               fontSize: '13px',
               marginBottom: '8px',
-              borderRadius: '6px',
-              border: '1px solid var(--border, rgba(0,0,0,0.12))',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--rule)',
               background: 'var(--input-bg, transparent)',
               color: 'var(--text-main)',
             }}
@@ -491,7 +491,7 @@ const LibraryManagementPanel: React.FC = () => {
           ) : filteredOptions.length === 0 ? (
             <div className="muted" style={{ fontSize: '12px' }}>No matches for “{exclSearch}”.</div>
           ) : (
-            <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border, rgba(0,0,0,0.12))', borderRadius: '6px', padding: '8px 10px' }}>
+            <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--rule)', borderRadius: 'var(--radius-sm)', padding: '8px 10px' }}>
               {filteredOptions.map(o => (
                 <label key={o.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', fontSize: '13px', cursor: 'pointer' }}>
                   <input
@@ -647,7 +647,7 @@ const LibraryManagementPanel: React.FC = () => {
             <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>Full Reindex:</strong> Wipes and rebuilds the entire index from scratch. Only needed if your index is corrupted or you change embedding models.
           </p>
 
-          <div className="info-box" style={{ fontSize: '12px', marginTop: '14px', lineHeight: '1.5', background: 'rgba(100, 130, 240, 0.06)', border: '1.5px solid rgba(100, 130, 240, 0.25)', borderRadius: '6px', padding: '10px 12px', color: '#5b7bc5' }}>
+          <div className="info-box" style={{ fontSize: '12px', marginTop: '14px', lineHeight: '1.5', borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)', padding: '8px 0', color: 'var(--ink-2)' }}>
             <strong style={{ display: 'block', marginBottom: '4px', color: 'var(--text-main)' }}>Large libraries:</strong>
             Indexing can take a long time for large collections. If you close the app or are interrupted, just click <strong>Sync Library</strong> again — it will pick up where it left off.
           </div>

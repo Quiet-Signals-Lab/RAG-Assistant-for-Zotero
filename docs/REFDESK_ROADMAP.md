@@ -16,7 +16,7 @@ Each stage ends with green tests (`pytest -m "not integration"`) and a clean fro
 
 Pure, testable desk logic lives in a new `backend/desk.py`. The class keeps orchestration.
 
-- [x] **1.1 Factor `retrieve()` out of `ZoteroChatbot.chat()`.** Filters (extracted + manual + item ids), hybrid RRF search, auto-filter fallback, cross-encoder rerank. Returns docs, metadatas, rerank scores and the effective scope. `chat()` calls it with unchanged behaviour.
+- [x] **1.1 Factor retrieval out of `ZoteroChatbot.chat()`** (as `_build_filter()` and `_search_and_rerank()`). Filters (extracted + manual + item ids), hybrid RRF search, auto-filter fallback, cross-encoder rerank. Returns docs, metadatas, rerank scores and the effective scope. `chat()` calls it with unchanged behaviour.
 - [x] **1.2 Item-level results in `desk.py`.**
   - Dedupe overlapping passages within an item (same page, high token overlap) before anything is counted.
   - MaxP item score. Optional coverage bonus behind a constant set to 0.
@@ -30,14 +30,24 @@ Pure, testable desk logic lives in a new `backend/desk.py`. The class keeps orch
 
 ## Stage 2 · Frontend: Reading Room theme and the desk
 
-- [ ] **2.1 Tokens.** `theme.css` moves to the Reading Room palette: paper, page, ink, rule, brass, stamp, catalogue blue; after-hours dark set. Radius 2 px, hairlines instead of shadows. `--font-mono` leads with IBM Plex Mono and falls back to the system mono (no font is fetched from the network; bundling Plex is an open decision). Legacy aliases kept so existing components keep resolving.
-- [ ] **2.2 Shared restyle.** `.btn` becomes flat, hairline, 2 px radius, sentence case; panels lose shadows and 16 px radii. Settings page inherits it through tokens. Legacy chat gets the new skin without behavioural change.
-- [ ] **2.3 Interface toggle.** `Settings.interfaceMode` in `SettingsContext`; Settings → General → Interface: "Reference desk (default)" / "Legacy chat". `AppShell` renders `DeskShell` or the existing chat shell.
-- [ ] **2.4 Desk state.** `features/desk/DeskContext.tsx`: query, scope chips, results, selection, pins, query log. `api/search.ts`.
-- [ ] **2.5 Query desk (left).** Query field, scope chips (year range, tags, collections, item types, author), dashed auto-extracted chips that can be removed, query log, rooms rail (desk, library, model, about).
-- [ ] **2.6 Bibliography (centre).** Known-item card pinned above the list, numbered rows, citation, mono meta line, extract with page, band marks, actions (open PDF, show in Zotero, pin), sort (relevance, year, author), "see also" fold, honest empty state.
-- [ ] **2.7 Evidence (right).** Passages for the selected item with stem-match highlighting, page, band, pin, open in Zotero at page; reading list of pins.
-- [ ] **2.8 Keyboard and responsive.** ↑/↓ rows, → evidence, `p` pin, `o` open, `/` query. Three panes ≥ 1100 px; evidence as an overlay 760–1099 px; one pane with Ask · Browse · Verify under 760 px.
+- [x] **2.1 Tokens.** `theme.css` moves to the Reading Room palette: paper, page, ink, rule, brass, stamp, catalogue blue; after-hours dark set. Radius 2 px, hairlines instead of shadows. `--font-mono` leads with IBM Plex Mono and falls back to the system mono (no font is fetched from the network; bundling Plex is an open decision). Legacy aliases kept so existing components keep resolving.
+- [x] **2.2 Shared restyle.** `.btn` becomes flat, hairline, 2 px radius, sentence case; panels lose shadows and 16 px radii. Settings page inherits it through tokens. Legacy chat gets the new skin without behavioural change.
+- [x] **2.3 Interface toggle.** `Settings.interfaceMode` in `SettingsContext`; Settings → General → Interface: "Reference desk (default)" / "Legacy chat". `AppShell` renders `DeskShell` or the existing chat shell.
+- [x] **2.4 Desk state.** `features/desk/DeskContext.tsx`: query, scope chips, results, selection, pins, query log. `api/search.ts`.
+- [x] **2.5 Query desk (left).** Query field, scope chips (year range, tags, collections, item types, author), dashed auto-extracted chips that can be removed, query log, rooms rail (desk, library, model, about).
+- [x] **2.6 Bibliography (centre).** Known-item card pinned above the list, numbered rows, citation, mono meta line, extract with page, band marks, actions (open PDF, show in Zotero, pin), sort (relevance, year, author), "see also" fold, honest empty state.
+- [x] **2.7 Evidence (right).** Passages for the selected item with stem-match highlighting, page, band, pin, open in Zotero at page; reading list of pins.
+- [x] **2.8 Keyboard and responsive.** ↑/↓ rows, → evidence, `p` pin, `o` open, `/` query. Three panes ≥ 1100 px; evidence as an overlay 760–1099 px; one pane with Ask · Browse · Verify under 760 px.
+
+### Found by running Stages 1–2 on a real library (2026-10-11)
+
+A throwaway index of 599 items built from Zotero abstracts, real reranker, real Zotero database:
+- Scope phrases read from the query ("since 2010") are stripped before search and rerank; left in, they took the best score from 5.3 to −4.2.
+- Unquoted title matching for known items needs 0.8 overlap; 0.6 pinned generic titles ("Adversarial machine learning") for topical queries.
+- The same work stored twice in Zotero (same title, year and authors) is shown once, noting the duplicate.
+- Passages that follow each other in an item drop the ~40 words the chunker repeats.
+- The desk opens PDFs in Zotero's reader at the page through the attachment key; Electron now lets exactly `zotero://select` and `zotero://open-pdf` item links through.
+- Warm searches take 0.4–1.0 s on an M-series Mac; the first search after start loads models and takes several seconds.
 
 ## Stage 3 · Desk depth
 - [ ] Query log and pins persisted per profile on the backend (own file next to `sessions.json`, not the chat blob)

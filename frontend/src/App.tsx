@@ -11,6 +11,7 @@ import { ResponseSelectionProvider } from "./contexts/ResponseSelectionContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ProfileProvider } from "./contexts/ProfileContext";
 import { SearchSettingsProvider } from "./contexts/SearchSettingsContext";
+import { DeskProvider } from "./features/desk/DeskContext";
 
 const App: React.FC = () => (
 	<Router>
@@ -20,10 +21,12 @@ const App: React.FC = () => (
 						<SessionsProvider>
 							<ResponseSelectionProvider>
 								<ChatProvider>
-									<Routes>
-										<Route path="/" element={<AppShell />} />
-										<Route path="/settings" element={<Settings />} />
-									</Routes>
+									<DeskProvider>
+										<Routes>
+											<Route path="/" element={<AppShell />} />
+											<Route path="/settings" element={<Settings />} />
+										</Routes>
+									</DeskProvider>
 								</ChatProvider>
 							</ResponseSelectionProvider>
 						</SessionsProvider>

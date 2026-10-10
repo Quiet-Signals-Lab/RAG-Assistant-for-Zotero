@@ -23,29 +23,29 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 
 .update-banner__content--info {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .update-banner__content--progress {
-  background: #4299e1;
-  color: white;
+  background: var(--ink);
+  color: var(--paper);
   flex-direction: column;
   align-items: stretch;
 }
 
 .update-banner__content--success {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  color: white;
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .update-banner__content--error {
-  background: linear-gradient(135deg, #eb3941 0%, #f15e64 100%);
-  color: white;
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .update-banner__message {
@@ -73,7 +73,7 @@
 .update-banner__button {
   padding: 6px 16px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -81,29 +81,28 @@
 }
 
 .update-banner__button--primary {
-  background: rgba(255, 255, 255, 0.25);
-  color: white;
-  backdrop-filter: blur(10px);
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--paper);
 }
 
 .update-banner__button--primary:hover {
-  background: rgba(255, 255, 255, 0.35);
-  transform: translateY(-1px);
+  background: transparent;
 }
 
 .update-banner__button--text {
   background: transparent;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--paper);
 }
 
 .update-banner__button--text:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: transparent;
 }
 
 .update-banner__progress {
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.25);
+  background: transparent;
   border-radius: 2px;
   overflow: hidden;
   margin-top: 8px;

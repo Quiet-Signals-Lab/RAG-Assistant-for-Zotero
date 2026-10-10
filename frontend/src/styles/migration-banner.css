@@ -1,11 +1,11 @@
 /* Migration Banner Styles */
 .migration-banner {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--ink);
+  color: var(--paper);
   padding: 20px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   margin: 16px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: none;
   animation: slideDown 0.3s ease-out;
 }
 
@@ -33,14 +33,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.2);
+  background: transparent;
   border-radius: 50%;
 }
 
 .migration-banner-icon svg {
   width: 24px;
   height: 24px;
-  color: white;
+  color: var(--paper);
 }
 
 .migration-banner-text {
@@ -51,14 +51,14 @@
   margin: 0 0 8px 0;
   font-size: 18px;
   font-weight: 600;
-  color: white;
+  color: var(--paper);
 }
 
 .migration-banner-message {
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--paper);
 }
 
 .migration-banner-actions {
@@ -75,23 +75,22 @@
 /* Make primary button stand out on gradient background */
 .migration-banner-actions button[class*="primary"] {
   background: white;
-  color: #667eea;
+  color: var(--ink);
   border: none;
 }
 
 .migration-banner-actions button[class*="primary"]:hover {
-  background: rgba(255, 255, 255, 0.9);
-  transform: translateY(-1px);
+  background: var(--paper);
 }
 
 .migration-banner-actions button[class*="secondary"] {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--paper);
 }
 
 .migration-banner-actions button[class*="secondary"]:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: transparent;
 }
 
 /* Responsive layout for smaller screens */

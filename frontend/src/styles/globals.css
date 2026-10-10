@@ -16,11 +16,8 @@ body,
 
 body {
   font-family: var(--font-sans);
-  background:
-    radial-gradient(circle at top left, var(--bg-body-gradient), var(--bg-body));
-  color: var(--text-main);
-  
-  /* Enhanced font rendering for all platforms */
+  background: var(--paper);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -28,33 +25,15 @@ body {
   font-kerning: normal;
 }
 
+/* One focus ring everywhere: 2px of ink with a gap, so it holds on paper and on dark. */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 /* Disable drag on interactive elements */
 button, a, input, textarea, select {
   -webkit-app-region: no-drag;
-}
-
-/* keep the paper texture but make it slightly softer */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.55),
-      rgba(255, 255, 255, 0.55)
-    ),
-    linear-gradient(
-      to right,
-      rgba(255, 255, 255, 0.7) 0,
-      rgba(255, 255, 255, 0.7) 1px,
-      transparent 1px,
-      transparent 5px
-    );
-  background-size: 100% 100%, 6px 100%;
-  mix-blend-mode: multiply;
-  z-index: -1;
 }
 
 a {
@@ -64,6 +43,8 @@ a {
 
 a:hover {
   text-decoration: underline;
+  text-decoration-color: var(--brass);
+  text-underline-offset: 3px;
 }
 
 code,
@@ -86,7 +67,8 @@ pre {
 
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 5px;
+  border-radius: 0;
+  border: 3px solid var(--paper);
 }
 
 /* Utility */
@@ -295,13 +277,13 @@ pre {
 }
 
 .message__body a {
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: underline;
   transition: color 0.2s ease;
 }
 
 .message__body a:hover {
-  color: var(--accent-2);
+  color: var(--ink);
 }
 
 .message__body h1,
@@ -343,7 +325,7 @@ pre {
 }
 
 .citation-ref {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 600;
   margin: 0 1px;
   cursor: pointer;
@@ -353,7 +335,7 @@ pre {
 }
 
 .citation-ref:hover {
-  color: var(--accent-2);
+  color: var(--ink);
   text-decoration: underline;
 }
 
@@ -470,4 +452,16 @@ pre {
 
 .reasoning-text p:last-child {
   margin-bottom: 0;
+}
+/* Visually hidden, still read by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

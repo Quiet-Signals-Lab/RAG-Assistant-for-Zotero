@@ -40,10 +40,10 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background-color: #d4edda;
-  border: 1px solid #c3e6cb;
-  border-radius: 6px;
-  color: #155724;
+  background-color: var(--page);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  color: var(--ok);
   font-size: 13px;
   animation: fadeInUp 0.2s ease-out;
   width: 100%;
@@ -62,9 +62,9 @@
 
 .active-model-note {
   padding: 12px;
-  background-color: var(--bg-hover, #f8f9fa);
-  border-left: 3px solid var(--accent, #d6b26a);
-  border-radius: 4px;
+  background-color: var(--bg-hover);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
   margin-bottom: 20px;
   font-size: 13px;
   color: var(--text);
@@ -118,7 +118,7 @@
   padding: 10px 14px;
   font-size: 14px;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-main);
   transition: all 0.2s ease;
@@ -129,7 +129,7 @@
 .active-model-select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(214, 178, 106, 0.15);
+  box-shadow: none;
 }
 
 .active-model-select:disabled {
@@ -147,8 +147,8 @@
 .active-model-info {
   margin-top: 24px;
   padding: 12px;
-  background-color: var(--bg-hover, #f8f9fa);
-  border-radius: 6px;
+  background-color: var(--bg-hover);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
 }
 

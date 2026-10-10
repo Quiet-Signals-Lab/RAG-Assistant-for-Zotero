@@ -46,7 +46,7 @@
 .top-nav__title-input {
   font-size: 1rem;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
 }
 
@@ -109,32 +109,19 @@
 .app-shell__sidebar,
 .app-shell__main,
 .app-shell__sources {
-  background-color: var(--bg-panel);
-  border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  box-shadow: var(--shadow-soft);
+  background-color: var(--paper);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--rule);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
 }
 
-/* Sidebar */
-
-.app-shell__sidebar {
-  background:
-    linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.9),
-      rgba(245, 237, 222, 0.98)
-    ),
-    var(--bg-sidebar);
-  border-color: #cbbfa9;
-}
-
 .app-shell__sidebar header {
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid var(--rule);
 }
 
 .app-shell__sidebar main {
@@ -175,7 +162,7 @@
 
 .app-shell__sources header {
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid var(--rule);
 }
 
 .app-shell__sources main {
@@ -187,8 +174,8 @@
 
 .session-header {
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  background: linear-gradient(to bottom, var(--bg-panel-alt), transparent);
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
 }
 
 .session-header__title {
@@ -216,8 +203,8 @@
 
 .snippets-list .snippet {
   padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--rule);
   background: var(--bg-panel-alt);
 }
 
@@ -247,7 +234,7 @@
   flex: 1;
   resize: none;
   padding: var(--spacing-md);
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   font-family: var(--font-sans);
   font-size: 0.95rem;
@@ -257,75 +244,59 @@
 }
 
 .chat-input__textarea:focus {
-  outline: 1px solid var(--accent-focus);
+  outline: 2px solid var(--ink);
   border-color: var(--accent-focus);
-  box-shadow: 0 0 0 1px rgba(214, 178, 106, 0.26);
+  box-shadow: none;
 }
 
-/* Buttons: modern pill design */
+/* Buttons: flat, hairline, sentence case */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: linear-gradient(180deg, #f8f3ec 0%, #eee0cf 100%);
-  color: #5b4632;
-  font-size: 0.8rem;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  font: 500 12px/1.2 var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
-  font-family: var(--font-sans);
-  box-shadow: 0 1px 1px rgba(15, 8, 3, 0.05);
-  transition:
-    background 120ms ease-out,
-    box-shadow 120ms ease-out,
-    transform 80ms ease-out,
-    border-color 120ms ease-out;
+  transition: border-color 120ms ease-out, background-color 120ms ease-out;
 }
 
 .btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, #fdf8f2 0%, #f1e1cf 100%);
-  border-color: rgba(0, 0, 0, 0.2);
-  box-shadow: 0 4px 10px rgba(15, 8, 3, 0.12);
-}
-
-.btn:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: 0 1px 4px rgba(15, 8, 3, 0.18);
+  border-color: var(--ink);
 }
 
 .btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: default;
-  box-shadow: none;
 }
 
-/* Stronger primary button (Send, Open PDF, etc.) */
-
 .btn--primary {
-  background: linear-gradient(135deg, #d7b48a 0%, #c38f5a 100%);
-  color: #fffaf3;
-  border-color: rgba(118, 76, 26, 0.45);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #dfbd95 0%, #c89461 100%);
+  background: var(--ink-2);
+  border-color: var(--ink-2);
 }
 
-/* Danger button (Stop generation, etc.) */
-
 .btn--danger {
-  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-  color: #ffffff;
-  border-color: rgba(192, 57, 43, 0.45);
+  color: var(--stamp);
+  border-color: var(--stamp);
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: linear-gradient(135deg, #ec7063 0%, #cb4335 100%);
+  border-color: var(--stamp);
+  background: var(--bg-hover);
 }
 
 /* Sources strip */
@@ -337,7 +308,7 @@
 }
 
 .source-pill {
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--accent-soft);
   background: var(--bg-panel-alt);
   padding: 3px 10px;
@@ -350,10 +321,10 @@
 .error-banner {
   padding: 6px 10px;
   margin-bottom: var(--spacing-sm);
-  border-radius: 999px;
-  border: 1px solid #c77a7a;
-  background: #fceeee;
-  color: #6e2727;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--stamp);
+  background: transparent;
+  color: var(--stamp);
   font-size: 0.85rem;
 }
 
@@ -362,7 +333,7 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-size: 0.78rem;
   border: 1px solid var(--border-subtle);
   background: var(--bg-panel-alt);
@@ -406,22 +377,4 @@
   .app-shell__sources {
     display: none; /* can replace with tabbed UI later */
   }
-}
-
-/* Dark-theme adjustments for surfaces that bake in light gradients, which the
-   CSS-variable system can't recolour on its own. Light mode is untouched. */
-:root[data-theme="dark"] .app-shell__sidebar {
-  background: var(--bg-sidebar);
-  border-color: var(--border-subtle);
-}
-
-:root[data-theme="dark"] .btn {
-  background: linear-gradient(180deg, #322c23 0%, #29241d 100%);
-  color: var(--text-main);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-:root[data-theme="dark"] .btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, #3a332a 0%, #302a22 100%);
-  border-color: rgba(255, 255, 255, 0.2);
 }

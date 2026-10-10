@@ -10,8 +10,17 @@ import TopNav from "./TopNav";
 import "../../styles/layout.css";
 import "../../styles/sidebar-tabs.css";
 import { useSessions } from "../../contexts/SessionsContext";
+import { useSettings } from "../../contexts/SettingsContext";
+import DeskShell from "../../features/desk/DeskShell";
 
 const AppShell: React.FC = () => {
+  const { settings, loading } = useSettings();
+  if (loading) return null; // avoid flashing the desk for someone who chose legacy chat
+  return settings.interfaceMode === "chat" ? <LegacyChatShell /> : <DeskShell />;
+};
+
+/** The legacy chat interface, kept behind Settings → Interface. Not developed further. */
+const LegacyChatShell: React.FC = () => {
   const { leftCollapsed, rightCollapsed, leftActiveTab, setLeftActiveTab } = useSessions();
   const classes = ["app-shell", leftCollapsed ? "app-shell--left-collapsed" : "", rightCollapsed ? "app-shell--right-collapsed" : ""].join(" ");
 

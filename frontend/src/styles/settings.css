@@ -27,7 +27,7 @@
   padding: 8px 16px;
   background: transparent;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-main);
   font-size: 14px;
   cursor: pointer;
@@ -37,7 +37,7 @@
 .settings-back-btn:hover {
   background: rgba(0, 0, 0, 0.03);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .settings-title {
@@ -94,8 +94,8 @@
 }
 
 .settings-tab.active {
-  color: var(--accent, #d6b26a);
-  border-bottom-color: var(--accent, #d6b26a);
+  color: var(--ink);
+  border-bottom-color: var(--accent);
   font-weight: 600;
 }
 
@@ -117,10 +117,10 @@
 .settings-section {
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   padding: 32px;
   margin-bottom: 32px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
 }
 
 .settings-section-title {
@@ -173,7 +173,7 @@
   padding: 10px 14px;
   font-size: 14px;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-main);
   transition: all 0.2s ease;
@@ -184,7 +184,7 @@
 .settings-select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(214, 178, 106, 0.15);
+  box-shadow: none;
 }
 
 .settings-input::placeholder {
@@ -210,7 +210,7 @@
   padding: 6px;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-muted);
   display: flex;
@@ -236,7 +236,7 @@
 }
 
 .settings-hint a {
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: none;
 }
 
@@ -247,9 +247,9 @@
 .settings-warning {
   background: rgba(255, 152, 0, 0.08);
   border: 1px solid rgba(255, 152, 0, 0.3);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
-  color: #e65100;
+  color: var(--notice);
   margin-top: 8px;
 }
 
@@ -269,14 +269,14 @@
   padding: 8px 16px;
   background: rgba(76, 175, 80, 0.1);
   border: 1px solid rgba(76, 175, 80, 0.3);
-  border-radius: 6px;
-  color: #2e7d32;
+  border-radius: var(--radius-sm);
+  color: var(--ok);
   font-size: 14px;
   flex: 1;
 }
 
 .settings-success svg {
-  color: #2e7d32;
+  color: var(--ok);
 }
 
 .settings-error {
@@ -286,8 +286,8 @@
   padding: 8px 16px;
   background: rgba(244, 67, 54, 0.1);
   border: 1px solid rgba(244, 67, 54, 0.3);
-  border-radius: 6px;
-  color: #c62828;
+  border-radius: var(--radius-sm);
+  color: var(--error);
   font-size: 14px;
   flex: 1;
 }
@@ -296,7 +296,7 @@
   padding: 10px 14px;
   font-size: 14px;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-main);
   transition: all 0.2s ease;
@@ -306,7 +306,7 @@
 .input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(214, 178, 106, 0.15);
+  box-shadow: none;
 }
 
 .input::placeholder {
@@ -330,7 +330,7 @@
 .provider-config-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 20px;
   margin-bottom: 16px;
   transition: all 0.2s ease;
@@ -338,7 +338,7 @@
 
 .provider-config-card:hover {
   border-color: var(--accent-hover);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
 }
 
 .provider-header {
@@ -360,7 +360,7 @@
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: var(--accent);
+  accent-color: var(--ink);
 }
 
 .provider-name {
@@ -372,19 +372,19 @@
 .provider-status {
   font-size: 12px;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   font-weight: 500;
 }
 
 .provider-status.valid {
   background: rgba(76, 175, 80, 0.1);
-  color: #2e7d32;
+  color: var(--ok);
   border: 1px solid rgba(76, 175, 80, 0.3);
 }
 
 .provider-status.invalid {
   background: rgba(244, 67, 54, 0.1);
-  color: #c62828;
+  color: var(--error);
   border: 1px solid rgba(244, 67, 54, 0.3);
 }
 
@@ -407,7 +407,7 @@
 .update-status-card {
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 20px;
   margin-top: 16px;
 }
@@ -428,7 +428,7 @@
 
 .update-message {
   padding: 12px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   margin-top: 12px;
   font-size: 14px;
   line-height: 1.6;
@@ -436,7 +436,7 @@
 
 .update-message.checking {
   background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+  color: var(--ink);
   border: 1px solid rgba(59, 130, 246, 0.3);
   display: flex;
   align-items: center;
@@ -445,36 +445,36 @@
 
 .update-message.up-to-date {
   background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  color: var(--ok);
   border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .update-message.available {
   background: rgba(249, 115, 22, 0.1);
-  color: #f97316;
+  color: var(--notice);
   border: 1px solid rgba(249, 115, 22, 0.3);
 }
 
 .update-message.available strong {
-  color: #f97316;
+  color: var(--notice);
   display: block;
   margin-bottom: 4px;
 }
 
 .update-message.downloading {
   background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+  color: var(--ink);
   border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .update-message.downloaded {
   background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  color: var(--ok);
   border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .update-message.downloaded strong {
-  color: #22c55e;
+  color: var(--ok);
   display: block;
   margin-bottom: 8px;
 }
@@ -492,12 +492,12 @@
 
 .update-message.error {
   background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  color: var(--error);
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .update-message.error strong {
-  color: #ef4444;
+  color: var(--error);
 }
 
 /* Spinner Animation */
@@ -505,7 +505,7 @@
   width: 14px;
   height: 14px;
   border: 2px solid rgba(59, 130, 246, 0.3);
-  border-top-color: #3b82f6;
+  border-top-color: var(--ink);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   display: inline-block;
@@ -528,7 +528,7 @@
 
 .release-notes summary {
   font-size: 13px;
-  color: var(--accent);
+  color: var(--ink);
   padding: 4px 0;
   user-select: none;
 }
@@ -541,7 +541,7 @@
   margin-top: 8px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.5);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--text-main);
   white-space: pre-wrap;
@@ -558,7 +558,7 @@
 .progress-text {
   font-size: 14px;
   margin-bottom: 8px;
-  color: #3b82f6;
+  color: var(--ink);
   font-weight: 500;
 }
 
@@ -566,16 +566,16 @@
   width: 100%;
   height: 8px;
   background: rgba(59, 130, 246, 0.2);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   margin-bottom: 6px;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  background: var(--ink);
   transition: width 0.3s ease;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .progress-details {

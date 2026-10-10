@@ -32,7 +32,7 @@
 }
 
 .scope-section-title svg {
-  color: var(--accent, #d6b26a);
+  color: var(--ink);
   flex-shrink: 0;
 }
 
@@ -43,7 +43,7 @@
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  background: var(--accent, #d6b26a);
+  background: var(--ink);
   color: white;
   border-radius: 11px;
   font-size: 11px;
@@ -108,7 +108,7 @@
 
 .search-input:focus {
   outline: none;
-  border-color: var(--accent, #d6b26a);
+  border-color: var(--accent);
   background: var(--bg-surface, #ffffff);
   box-shadow: 0 0 0 2px rgba(214, 178, 106, 0.1);
 }
@@ -174,7 +174,7 @@
 
 .tag-list::-webkit-scrollbar-thumb:hover,
 .collection-list::-webkit-scrollbar-thumb:hover {
-  background: var(--accent, #d6b26a);
+  background: var(--ink);
 }
 
 .tag-item {
@@ -194,14 +194,14 @@
 
 .tag-item:hover {
   background: var(--bg-panel-alt, #fdf9f2);
-  border-color: var(--accent, #d6b26a);
+  border-color: var(--accent);
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
 .tag-item.selected {
-  background: var(--accent, #d6b26a);
-  border-color: var(--accent, #d6b26a);
+  background: var(--ink);
+  border-color: var(--accent);
   color: white;
   font-weight: 600;
   box-shadow: 0 1px 4px rgba(214, 178, 106, 0.3);
@@ -255,14 +255,14 @@
 
 .collection-item:hover {
   background: var(--bg-panel-alt, #fdf9f2);
-  border-color: var(--accent, #d6b26a);
+  border-color: var(--accent);
   transform: translateX(2px);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .collection-item.selected {
-  background: var(--accent, #d6b26a);
-  border-color: var(--accent, #d6b26a);
+  background: var(--ink);
+  border-color: var(--accent);
   color: white;
   font-weight: 600;
   box-shadow: 0 1px 4px rgba(214, 178, 106, 0.3);
@@ -318,7 +318,7 @@
 
 .date-range-filter input:focus {
   outline: none;
-  border-color: var(--accent, #d6b26a);
+  border-color: var(--accent);
   background: var(--bg-surface, #ffffff);
   box-shadow: 0 0 0 2px rgba(214, 178, 106, 0.1);
 }
@@ -362,7 +362,7 @@
 
 .text-filter-input:focus {
   outline: none;
-  border-color: var(--accent, #d6b26a);
+  border-color: var(--accent);
   background: var(--bg-surface, #ffffff);
   box-shadow: 0 0 0 2px rgba(214, 178, 106, 0.1);
 }
@@ -431,7 +431,7 @@
   cursor: pointer;
   width: 16px;
   height: 16px;
-  accent-color: var(--accent, #d6b26a);
+  accent-color: var(--ink);
   margin: 0;
 }
 
@@ -464,7 +464,7 @@
 
 .toggle-btn.active {
   background: var(--bg-surface, #ffffff);
-  color: var(--accent, #d6b26a);
+  color: var(--ink);
   font-weight: 600;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
@@ -494,7 +494,7 @@
 }
 
 .scope-preview strong {
-  color: var(--accent, #d6b26a);
+  color: var(--ink);
   font-size: 16px;
   font-weight: 700;
 }
@@ -536,7 +536,7 @@
 }
 
 .btn-primary {
-  background: var(--accent, #d6b26a);
+  background: var(--ink);
   color: white;
   box-shadow: 0 1px 4px rgba(214, 178, 106, 0.3);
 }
@@ -564,7 +564,7 @@
 
 .btn-secondary:hover {
   background: var(--bg-panel-alt, #fdf9f2);
-  border-color: var(--accent, #d6b26a);
+  border-color: var(--accent);
   transform: translateY(-1px);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }

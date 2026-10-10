@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from '../api/client';
+import { getElectronAPI } from './electron';
 
 /**
  * Build a zotero://select URI to open and select an item in Zotero
@@ -52,27 +53,19 @@ export function buildZoteroOpenPdfUri(
 }
 
 /**
- * Attempt to open a zotero:// URI
- * This will trigger the Zotero desktop application to handle the URI
- * @param uri - The zotero:// URI to open
- * @returns true if the URI was successfully triggered, false otherwise
+ * Hand a zotero:// URI to Zotero. In the desktop app this goes through the main
+ * process, which only lets "select" and "open-pdf" links through.
+ * @returns false when there was no URI to open
  */
 export function tryOpenZoteroUri(uri: string | null): boolean {
   if (!uri) return false;
-  try {
-    // Use location.href to let the browser/OS handle the protocol
-    window.location.href = uri;
+  const electron = getElectronAPI();
+  if (electron) {
+    void electron.openExternal(uri);
     return true;
-  } catch (e) {
-    try {
-      // Fallback: try window.open
-      window.open(uri, "_blank");
-      return true;
-    } catch (e2) {
-      console.warn("Failed to open Zotero URI:", uri, e2);
-      return false;
-    }
   }
+  window.location.href = uri;
+  return true;
 }
 
 /**
