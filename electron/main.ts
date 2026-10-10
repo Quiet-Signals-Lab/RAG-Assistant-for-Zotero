@@ -8,7 +8,7 @@
  * - Manage application lifecycle (startup, shutdown, updates)
  */
 
-import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, shell } from 'electron';
 import type { OnHeadersReceivedListenerDetails, HeadersReceivedResponse } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
@@ -99,6 +99,26 @@ if (process.platform === 'linux') {
     console.log('    - Disabling GPU acceleration (improves Remote Desktop compatibility)');
     app.commandLine.appendSwitch('disable-gpu');
   }
+}
+
+/**
+ * Hand a URL to the system browser, but only a web URL. The renderer can ask
+ * for any string (window.open, the open-external IPC), and shell.openExternal
+ * would happily launch file:, javascript: or custom-scheme handlers.
+ */
+function openExternalUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    console.warn(`Refusing to open malformed external URL: ${url}`);
+    return;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    console.warn(`Refusing to open external URL with scheme ${parsed.protocol}: ${url}`);
+    return;
+  }
+  shell.openExternal(parsed.href).catch((err) => console.error('openExternal failed:', err));
 }
 
 /**
@@ -1787,7 +1807,7 @@ function createWindow(): void {
   
   // Handle navigation to external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    require('electron').shell.openExternal(url);
+    openExternalUrl(url);
     return { action: 'deny' };
   });
 }
@@ -1824,8 +1844,8 @@ function setupIpcHandlers(): void {
   });
   
   // Open external links
-  ipcMain.handle('open-external', (event, url: string) => {
-    require('electron').shell.openExternal(url);
+  ipcMain.handle('open-external', (_event, url: string) => {
+    openExternalUrl(url);
   });
 }
 
