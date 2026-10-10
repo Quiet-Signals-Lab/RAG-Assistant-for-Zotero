@@ -1,47 +1,30 @@
-# Contributing
+# Contributing to RAG Assistant for Zotero
 
-Contributions are welcome. Please follow these guidelines to keep the project maintainable.
+Thanks for your interest in contributing! This project is copyright © Alexander Hepburn and contributors, and is licensed under GPL-3.0 (see `LICENSE`). By submitting a pull request, you agree that your contribution is licensed under the same terms as the rest of the project.
 
-## Getting Started
+## Before You Start
 
-1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/RAG-Assistant-for-Zotero.git`
-3. Set up the development environment:
+For significant changes (new features, architectural changes, dependency additions, UI redesigns), please open an issue first to discuss it. Small fixes — typos, obvious bugs, minor doc edits — can go straight to a pull request.
+
+## Forking and Branching
+
+1. Fork the repo, then add the upstream remote and keep your fork in sync:
    ```bash
-   ./setup.sh
-   source .venv/bin/activate
-   npm install
-   cd frontend && npm install
+   git remote add upstream https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero.git
+   git fetch upstream
+   git checkout main
+   git merge upstream/main
    ```
-4. Create a branch: `git checkout -b your-feature-name`
-5. Make your changes
-6. Test locally
-7. Submit a pull request
+2. Work on a dedicated branch (e.g., `fix/zotero-path-detection`), not directly on `main`.
+3. Don't commit secrets, API keys, or a populated `.env` file — use `.env.example` as a starting point.
+4. Don't commit build artifacts (`release/` from `npm run package:*`) — check `.gitignore` first.
+5. Since this project is GPL-3.0, if you publicly distribute a modified version of the app, that version needs to stay open source under GPL-3.0 too.
 
-## Development
+## Development Setup
 
-Run the application in development mode:
-
-```bash
-# All-in-one (recommended)
-npm run dev
-
-# Or separately:
-source .venv/bin/activate && uvicorn backend.main:app --reload  # Terminal 1
-cd frontend && npm run dev                                       # Terminal 2
-```
-
-## Code Guidelines
-
-**Python:**
-- Follow PEP 8
-- Add type hints
-- Include docstrings for public functions
-
-**TypeScript/React:**
-- Use TypeScript for all new code
-- Prefer functional components with hooks
-- Keep components focused
+- Backend: install `requirements.txt` in a virtual environment.
+- Frontend/Electron: `npm install`, then `npm run package:mac` / `package:win` / `package:linux` to build.
+- See `docs/BUILD_CHECKLIST.md` and `docs/TECHNICAL_DETAILS.md` for details on the build and the retrieval pipeline.
 
 ## Testing
 
@@ -53,37 +36,18 @@ python -m pytest
 cd frontend && npm run typecheck && npm run lint && npm run build
 ```
 
-The same checks run in GitHub Actions on every push and pull request
-(`.github/workflows/ci.yml`). Add tests for new features when applicable.
-
-## Security
-
-Never commit:
-- API keys or credentials
-- `.env` files with real values
-- Personal database paths
-- Chat history or profile data
-- Files in `~/.zotero-llm/`
-
-The `.gitignore` file already excludes these, but verify before committing: `git status`
+The same checks run in GitHub Actions on every push and pull request (`.github/workflows/ci.yml`). Add tests for new features when applicable.
 
 ## Pull Requests
 
-- Write clear commit messages
-- Update documentation if adding features
-- Include testing steps in the PR description
-- Reference related issues with `#issue-number`
+- Keep PRs focused on one change.
+- Describe what changed, why, and how you tested it (platform + LLM provider used).
+- Match the existing code style (Python in `backend/`, TypeScript/React in `frontend/`).
+- Preserve the privacy model — excluded collections/tags must never be sent to a cloud provider.
+- Push follow-up commits to the same branch instead of force-pushing over reviewed history.
 
-## Bug Reports
+## Reporting Issues
 
-When opening an issue for a bug, include:
-- Steps to reproduce
-- Expected vs actual behavior
-- Environment (OS, Python version, Node version)
-- Relevant error messages
-
-Do not include API keys or personal data.
-
-## License
-
-Contributions are licensed under the project's MIT license.
+- Search existing issues first.
+- Include your OS, install method, LLM provider, and steps to reproduce.
+- For security issues, follow `SECURITY.md` instead of opening a public issue.
