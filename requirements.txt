@@ -31,7 +31,7 @@ durationpy==0.10
 fastapi==0.134.0
 filelock==3.20.3
 flatbuffers==25.9.23
-fsspec==2025.10.0
+fsspec==2026.6.0
 google-auth==2.43.0
 googleapis-common-protos==1.72.0
 grpcio==1.76.0
