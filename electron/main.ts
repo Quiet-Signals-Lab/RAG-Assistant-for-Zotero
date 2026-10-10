@@ -592,12 +592,12 @@ async function setupLinuxVenv(onProgress?: (message: string, progress?: number) 
   // Find system Python
   const systemPython = await findSystemPython();
   if (!systemPython) {
-    console.error('✗ System Python 3.8+ not found');
+    console.error('✗ System Python 3.11+ not found');
     console.error('Please install: sudo apt install python3 python3-pip python3-venv');
     if (mainWindow) {
       dialog.showErrorBox(
         'Python Required',
-        'Python 3.8 or later is required.\n\nPlease install:\nsudo apt install python3 python3-pip python3-venv\n\nThen restart the application.'
+        'Python 3.11 or later is required.\n\nPlease install:\nsudo apt install python3 python3-pip python3-venv\n\nThen restart the application.'
       );
     }
     return null;
@@ -706,7 +706,7 @@ async function setupLinuxVenv(onProgress?: (message: string, progress?: number) 
         'Try installing build essentials:\n' +
         '  sudo apt install build-essential python3-dev\n\n';
     } else {
-      userMessage += 'Please ensure Python 3.8+ is installed:\n' +
+      userMessage += 'Please ensure Python 3.11+ is installed:\n' +
         '  sudo apt install python3 python3-pip python3-venv\n\n';
     }
     
@@ -734,7 +734,7 @@ async function getBackendPath(): Promise<{ command: string; args: string[]; cwd:
     
     if (!pythonInfo) {
       console.error('✗ No Python 3 interpreter found on system');
-      console.error('Please install Python 3.8+ for development');
+      console.error('Please install Python 3.11+ for development');
       return null;
     }
     
@@ -777,7 +777,7 @@ async function getBackendPath(): Promise<{ command: string; args: string[]; cwd:
         console.error('================================================================================');
         console.error('✗ FATAL: Failed to set up Linux virtual environment');
         console.error('================================================================================');
-        console.error('  Please ensure Python 3.8+ is installed:');
+        console.error('  Please ensure Python 3.11+ is installed:');
         console.error('    sudo apt install python3 python3-pip python3-venv');
         console.error('================================================================================');
         
@@ -785,7 +785,7 @@ async function getBackendPath(): Promise<{ command: string; args: string[]; cwd:
         dialog.showErrorBox(
           'Python Environment Setup Failed',
           'Failed to set up the Python environment required to run this application.\n\n' +
-          'Required: Python 3.8 or later with venv support\n\n' +
+          'Required: Python 3.11 or later with venv support\n\n' +
           'Please install:\n' +
           '  sudo apt install python3 python3-pip python3-venv\n\n' +
           'Then restart the application.\n\n' +
@@ -976,7 +976,7 @@ async function startBackend(): Promise<boolean> {
     if (IS_DEV) {
       // Development mode: guide user to install Python
       const platform = process.platform;
-      let instructions = 'Please install Python 3.8 or later.';
+      let instructions = 'Please install Python 3.11 or later.';
       
       if (platform === 'linux') {
         instructions = 'Please install Python 3:\n\n' +

@@ -77,11 +77,13 @@ sudo sysctl --system
 ```
 
 **This is the default on:**
-- Ubuntu 18.04+
-- Debian 10 (Buster)+
-- Linux Mint 19+
-- Pop!_OS 20.04+
-- Most modern distributions
+- Ubuntu 24.04+ (Python 3.12)
+- Debian 12 (Bookworm)+ (Python 3.11)
+- Linux Mint 22+, Pop!_OS 24.04+ and other Ubuntu 24.04 derivatives
+
+Ubuntu 22.04 is not supported: its `python3` is 3.10, and the pinned numpy,
+scipy and networkx need 3.11. The package declares `python3 (>= 3.11)`, so apt
+refuses the install there with a clear message instead of failing on first launch.
 
 > **Maintainer gotcha:** a Debian control file's `Description` continuation lines
 > **must** each start with a single space, or `dpkg` fails with a "error parsing
@@ -92,45 +94,60 @@ sudo sysctl --system
 
 ### Dependencies
 
-The `.deb` package automatically installs these dependencies:
-- `libnotify4` - Desktop notifications
-- `libnss3` - Network security services
-- `libxss1` - Screen saver extension
-- `libasound2` - Audio support
-- `libxtst6` - X11 testing extensions
-- `libappindicator1` - System tray support
-- `gconf2`, `gconf-service` - Configuration system
+Declared in `build.deb.depends` in `package.json`; `apt install ./<pkg>.deb` installs them:
+- electron-builder's default Electron runtime set: `libgtk-3-0`, `libnotify4`,
+  `libnss3`, `libxss1`, `libxtst6`, `xdg-utils` (opening PDFs and links),
+  `libatspi2.0-0`, `libuuid1`, `libsecret-1-0`
+- `libasound2t64 | libasound2` (renamed in Ubuntu 24.04; the real package is listed first so apt never picks an OSS compatibility shim for the virtual name) and `libgbm1`
+- `python3 (>= 3.11)` and `python3-venv`: the backend runs in a venv created from
+  the system Python on first launch
+
+`dpkg -i` does not resolve dependencies; use `apt install ./<pkg>.deb`.
 
 ## How the Sandbox Works
 
 ### What Happens During Installation
 
-1. **Package extracts to `/opt/RAGAssistant/`**
-   - Main binary: `/opt/RAGAssistant/rag-assistant`
-   - Sandbox helper: `/opt/RAGAssistant/chrome-sandbox`
-   - Resources and Python bundle included
+1. **Files install to `/opt/RAG Assistant/`** (electron-builder uses the product
+   name, space included): the `rag-assistant` binary, the `chrome-sandbox` helper,
+   and `resources/` including `start-backend.sh` and `apparmor-profile`.
 
-2. **Post-install script runs automatically** (`linux-postinstall.sh`)
-   - Sets `chrome-sandbox` ownership to `root:root`
-   - Sets permissions to `4755` (setuid root)
-   - This allows unprivileged users to use the sandbox
+2. **electron-builder's default post-install script runs.** There is deliberately
+   no custom script: the old one hard-coded `/opt/RAGAssistant`, silently did
+   nothing after the 0.4.3 rename, and left the sandbox unconfigured. The default
+   script is maintained upstream and takes its paths from the build, so it:
+   - links `/usr/bin/rag-assistant` through `update-alternatives`;
+   - sets `chrome-sandbox` to `4755` (setuid root) only where user namespaces are
+     unavailable, and `0755` otherwise;
+   - on AppArmor systems that support it (Ubuntu 24.04+), installs
+     `resources/apparmor-profile` as `/etc/apparmor.d/rag-assistant`. The profile
+     grants the app user namespaces, which Ubuntu 24.04 otherwise blocks
+     (`kernel.apparmor_restrict_unprivileged_userns = 1`), so Chromium's
+     namespace sandbox works without a setuid helper.
 
-3. **Desktop entry registered**
-   - Shows in application menu under "Office"
-   - Uses proper app name and icon
-   - No special flags needed
+3. **Desktop entry registered** under Office/Education/Science.
+
+Removal runs the default post-remove script, which unregisters the
+`/usr/bin` link and unloads and deletes the AppArmor profile.
 
 ### Verifying Sandbox Configuration
 
 ```bash
-# Check chrome-sandbox permissions
-ls -la "/opt/RAGAssistant/chrome-sandbox"
-# Should show: -rwsr-xr-x 1 root root
+# On Ubuntu 24.04+: the profile should be installed and loaded
+ls -l /etc/apparmor.d/rag-assistant
+sudo aa-status | grep rag-assistant
 
-# Test sandbox initialization
-rag-assistant --version
-# Should NOT show "Running without sandbox" warnings
+# Without user namespaces: chrome-sandbox should be setuid root
+ls -la "/opt/RAG Assistant/chrome-sandbox"   # -rwsr-xr-x root root
+
+# Launch from a terminal; there should be no "SUID sandbox helper" FATAL
+rag-assistant
 ```
+
+If an older install left the sandbox broken ("The SUID sandbox helper binary was
+found, but is not configured correctly"), reinstalling a fixed package repairs it.
+As a one-off workaround on an affected install:
+`sudo chmod 4755 "/opt/RAG Assistant/chrome-sandbox"`.
 
 ## Building `.deb` Packages
 
@@ -217,15 +234,15 @@ ls /opt | grep -i zotero
 **Fix:**
 ```bash
 # Manually fix permissions
-sudo chown root:root "/opt/RAGAssistant/chrome-sandbox"
-sudo chmod 4755 "/opt/RAGAssistant/chrome-sandbox"
+sudo chown root:root "/opt/RAG Assistant/chrome-sandbox"
+sudo chmod 4755 "/opt/RAG Assistant/chrome-sandbox"
 ```
 
 ### "Operation not permitted" or "namespace" Errors
 
-**Cause:** User namespaces disabled in kernel
+**Cause:** User namespaces disabled in kernel. On Ubuntu 24.04+ the installed AppArmor profile is the intended fix (see above); check it with `sudo aa-status | grep rag-assistant` before changing kernel settings.
 
-**Fix:**
+**Fix (other distributions):**
 ```bash
 # Enable unprivileged user namespaces
 sudo sysctl kernel.unprivileged_userns_clone=1
@@ -238,7 +255,7 @@ echo 'kernel.unprivileged_userns_clone=1' | sudo tee /etc/sysctl.d/00-local-user
 
 **Check:**
 1. Dependencies installed: `apt-cache policy libnotify4 libnss3 libxss1`
-2. Python bundle present: `ls "/opt/RAGAssistant/resources/python/"`
+2. Python environment set up: `ls ~/.config/rag-assistant/venv/bin/python3` (created on first launch from the system `python3`, 3.11+)
 3. Logs: Run `rag-assistant` from terminal to see error output
 
 ### AppImage Sandbox Issues
@@ -295,7 +312,7 @@ environment at `~/.config/rag-assistant/venv` on first run and installs
 dependencies there (2-5 min). Most problems are venv setup issues.
 
 **Backend won't start (`ERR_CONNECTION_REFUSED` on `localhost:8000`)** — the venv
-didn't set up. Check `python3 --version` (needs 3.8+), then reset it (recreated on next launch):
+didn't set up. Check `python3 --version` (needs 3.11+), then reset it (recreated on next launch):
 
 ```bash
 rm -rf ~/.config/rag-assistant/venv

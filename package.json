@@ -3,10 +3,11 @@
   "productName": "RAG Assistant",
   "version": "0.6.0",
   "description": "AI-powered research assistant for your Zotero library",
+  "desktopName": "rag-assistant.desktop",
   "main": "dist/electron/main.js",
   "author": {
     "name": "Alexander Hepburn",
-    "email": "aahepburn@proton.me"
+    "email": "support@quietsignalslab.com"
   },
   "license": "GPL-3.0-or-later",
   "repository": {
@@ -197,10 +198,6 @@
     "linux": {
       "extraResources": [
         {
-          "from": "build/linux-postinstall.sh",
-          "to": "../linux-postinstall.sh"
-        },
-        {
           "from": "scripts/start-backend.sh",
           "to": "start-backend.sh"
         }
@@ -214,34 +211,39 @@
         }
       ],
       "icon": "build/icons",
-      "category": "Office",
+      "category": "Office;Education;Science;",
       "synopsis": "AI-powered research assistant for Zotero",
       "description": "Chat with your Zotero library using AI. Get cited answers, search semantically, and manage your research with intelligent assistance.",
       "desktop": {
         "entry": {
           "Name": "RAG Assistant for Zotero",
-          "Comment": "AI-powered research assistant for Zotero",
-          "Categories": "Office;Education;Science;",
           "StartupWMClass": "rag-assistant"
         }
       },
       "executableName": "rag-assistant",
-      "maintainer": "aahepburn <your-email@example.com>",
-      "vendor": "aahepburn"
+      "maintainer": "Quiet Signals Lab <support@quietsignalslab.com>",
+      "vendor": "Quiet Signals Lab",
+      "packageCategory": "science"
     },
     "deb": {
       "packageName": "rag-assistant",
       "depends": [
         "libgtk-3-0",
         "libnotify4",
-        "libxtst6",
         "libnss3",
         "libxss1",
-        "libasound2",
-        "libgbm1"
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libasound2t64 | libasound2",
+        "libgbm1",
+        "python3 (>= 3.11)",
+        "python3-venv"
       ],
       "priority": "optional",
-      "afterInstall": "build/linux-postinstall.sh"
+      "recommends": []
     }
   }
 }
