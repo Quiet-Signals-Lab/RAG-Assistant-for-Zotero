@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - **Electron 39 → 44.7.0** (Chromium 142 → 152, Node 22 → 24). Electron 39 left support in May 2026 and had received no Chromium security fixes since. This closes the four Electron advisories (GHSA-hq2x-r82h-9wj4, GHSA-gr2m-v5gq-v685, GHSA-j84w-jfhq-vhvj, GHSA-9qh4-3jw8-366w) and the build-time chain under the `electron` package (extract-zip, @electron/get, global-agent, roarr, sprintf-js). None of the four was reachable in this app (new windows are denied, no webview, no custom protocol handlers); the Chromium gap was the real exposure.
 - External links opened from the app are limited to `http` and `https` URLs. Anything else handed to the system opener is dropped and logged.
-- Build-time dependency advisories that needed no major bump are cleared (brace-expansion, fast-uri, joi, http-cache-semantics, sharp, shell-quote). The one carried over is `sprintf-js` under electron-builder's `@electron/get` 3, which has no fix in any electron-builder 26.x and only runs at packaging time.
+- Build-time dependency advisories that needed no major bump are cleared (brace-expansion, fast-uri, joi, http-cache-semantics, sharp, shell-quote); electron-builder moved from 26.15.3 to 26.17.0 within its existing range as part of this. The one carried over is `sprintf-js` under electron-builder's `@electron/get` 3, which has no fix in any electron-builder 26.x and only runs at packaging time.
 
 ## [0.5.2] - 2026-09-09
 
