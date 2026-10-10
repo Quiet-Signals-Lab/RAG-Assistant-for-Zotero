@@ -176,6 +176,16 @@ jobs:
               attempt=$((attempt + 1))
             fi
           done
+
+          # electron-updater skips a release whose manifest minimumSystemVersion
+          # is above the host's os.release(), which on macOS is the Darwin
+          # kernel version: 22.0.0 is macOS 13 Ventura, the floor since
+          # Electron 44. electron-builder writes the floor into the app plist
+          # but not into latest-mac.yml, so add it here. Without it a macOS 12
+          # machine would be offered the update and fail to launch afterwards.
+          echo 'minimumSystemVersion: 22.0.0' >> release/latest-mac.yml
+          node -e "require('js-yaml').load(require('fs').readFileSync('release/latest-mac.yml','utf8'))" \
+            && tail -3 release/latest-mac.yml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Code signing (Developer ID Application cert exported as base64 .p12)
@@ -266,8 +276,12 @@ jobs:
             release/latest.yml
           retention-days: 30
 
+  # Only a version tag publishes. A workflow_dispatch run on a branch builds and
+  # signs all three installers as workflow artifacts for testing without creating
+  # a release, touching the Homebrew cask, or opening a winget PR.
   create-release:
     needs: build-all
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
