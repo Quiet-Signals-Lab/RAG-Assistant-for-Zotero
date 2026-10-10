@@ -11,7 +11,7 @@ These are settled. The rest of the plan assumes them.
 - **Free, with no monetisation.** No tiers, no keys sold, no telemetry. The product exists to be excellent and to carry the Quiet Signals Lab name.
 - **No answers, ever.** No code path asks a model to answer a question or synthesise across documents. "Do these five papers agree?" is out of scope by design, and the README says so.
 - **Chat becomes a legacy mode.** The desk is the default from v0.7. Chat stays available behind Settings → Interface for existing users and is not developed further. (Revised 2026-10-10; the original plan removed it outright.)
-- **Works fully with no model.** No-model mode is the baseline product. Every model feature is an opt-in upgrade with a named requirement.
+- **Model use is a choice, not a rule.** The desk can run with no model, and a model can work before the list appears (reading the query) or after it (notes, labels). Which of these is on is a setting. (Corrected 2026-10-11: earlier editions listed "works fully with no model" and "zero model calls before first paint" as decisions. They were proposals and were never agreed.)
 - **Local-first by default.** Nothing leaves the machine unless the user configures a cloud provider or supplies their own key for an external service.
 - **A place, not a persona.** "A reference desk for your Zotero library", never "your AI librarian".
 - **Small codebase.** Single-maintainer plugins in this ecosystem die at Zotero major-version boundaries. Deletion is a feature.
@@ -31,7 +31,7 @@ The backend already is a search engine. Everything in `ZoteroChatbot.chat()` (`b
 | Books are for use | Every row is one click from the PDF at the page and one click from the item in Zotero |
 | Every reader their book | The reference interview comes first; the desk shows how it read the query and makes correction cheaper than retyping |
 | Every book its reader | "See also" fold, pearl growing, browse by scope surface what you forgot you own |
-| Save the time of the reader | Zero model calls before first paint; bibliography under 2 s; model output decorates, never gates |
+| Save the time of the reader | Bibliography in about 2 s; any model step that delays it is one the reader turned on, with a time limit |
 | The library is a growing organism | Query log, pins and reading lists accumulate; nothing is discarded, because there is no conversation |
 
 One rule above the five, our own principle derived from professional norms: **the desk answers with sources, never with claims.**
@@ -131,7 +131,7 @@ The LRM select task. Passages for the selected item ordered by band, with page a
 
 ## 6. The librarian's jobs
 
-Every model call: short input, short output, strict schema, off the critical path, stratified by risk. Grounded jobs over supplied passages are the safe ones; anything leaning on parametric knowledge (free term suggestion) is the dangerous one.
+Every model call: short input, short output, strict schema, stratified by risk. Query reading may run before the search; the other jobs run after the list appears. Grounded jobs over supplied passages are the safe ones; anything leaning on parametric knowledge (free term suggestion) is the dangerous one.
 
 | Job | Tier | Input | Output | Guard | Without a model |
 |---|---|---|---|---|---|
@@ -273,7 +273,7 @@ Done when: no code path asks a model to answer a question, and the write-up is p
 
 **Tests to add:** `test_retrieve.py` (dedupe, MaxP, per-item cap, bands, empty-scope browse); `test_search_api.py` (shape, no provider, extraction merged with manual filters, known-item pin); `test_known_item.py` (author-year, quoted title, DOI, ISBN, false-positive set); `test_complete_json.py`; `test_guards.py` (wrong page, foreign author, low entailment → extract, non-candidate also-try); `test_note_tone.py` (hand-reviewed on every prompt change).
 
-**Targets:** first paint under 2 s at 10k chunks and under 5 s at 100k with no model; zero model calls before first paint; notes within the Phase 0 measured budget; zero guard failures and zero unlabelled model text shown to users.
+**Targets:** first paint under 2 s at 10k chunks and under 5 s at 100k with no model, plus the measured cost of model query reading when it is on; notes within the Phase 0 measured budget; zero guard failures and zero unlabelled model text shown to users.
 
 ## 11. Positioning and visibility
 

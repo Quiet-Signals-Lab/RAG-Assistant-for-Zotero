@@ -12,7 +12,7 @@ Each stage ends with green tests (`pytest -m "not integration"`) and a clean fro
 - [x] `refdesk` branch
 - [x] This roadmap; plan updated for the legacy-toggle decision
 
-## Stage 1 · Backend: the catalogue (no model on the critical path)
+## Stage 1 · Backend: the catalogue (retrieval and ranking; no model needed)
 
 Pure, testable desk logic lives in a new `backend/desk.py`. The class keeps orchestration.
 
