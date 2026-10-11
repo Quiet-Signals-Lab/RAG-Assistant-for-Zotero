@@ -116,9 +116,14 @@ class OllamaProvider(BaseProvider):
                 # - repeat_penalty: 1.15 prevents citation/concept repetition
                 "top_p": mapped_params.get("top_p", 0.9),
                 "top_k": mapped_params.get("top_k", 50),
-                "repeat_penalty": mapped_params.get("repeat_penalty", 1.15),
+                "repeat_penalty": 1.0 if kwargs.get("response_schema") else mapped_params.get("repeat_penalty", 1.15),
             }
         }
+        if kwargs.get("response_schema"):
+            # Constrain decoding to the schema, and skip a thinking model's reasoning:
+            # the desk clerk wants a short structured answer, not a monologue.
+            payload["format"] = kwargs["response_schema"]
+            payload["think"] = False
         
         try:
             resp = requests.post(

@@ -1,0 +1,118 @@
+{
+  "about": "Evaluation set for the desk clerk's model jobs (scripts/eval_clerk.py). All text is written for this set; none comes from a real library. Fields a read_query case does not list must come back empty or null. read_query cases come in three groups: plain (the library reader was written for these), beyond (phrasings the library reader does not handle, where a model can help) trap (topic words that look like limits, where reading too much is the error) and heldout (written after the guards were tuned on the other three, and not tuned on since: the honest score).",
+  "today": "2026-10-11",
+  "vocab": {
+    "authors": ["Berlant", "Woodcock", "Graham", "Kant", "de Beauvoir", "Biggio", "Goodfellow", "Tsay", "Valiant"],
+    "tags": ["Labour", "Security", "Affect theory", "Platforms", "Machine learning", "Adversarial examples", "Time series", "Feminism", "Ethics"],
+    "collections": ["PhD Research", "Security", "Teaching 2024", "Reading group"],
+    "item_types": ["book", "bookSection", "journalArticle", "thesis", "report", "conferencePaper", "preprint"]
+  },
+  "read_query": [
+    {"query": "courier strikes since 2015", "expect": {"year_min": 2015}, "topic_has": ["courier", "strike"], "topic_not": ["2015"]},
+    {"query": "papers by Berlant about optimism", "expect": {"author": "Berlant"}, "topic_has": ["optimism"], "topic_not": ["Berlant"]},
+    {"query": "Berlant's books on affect", "expect": {"author": "Berlant", "item_types": ["book"]}, "topic_has": ["affect"]},
+    {"query": "theses on algorithmic management from the last five years", "expect": {"item_types": ["thesis"], "year_min": 2021}, "topic_has": ["algorithmic", "management"]},
+    {"query": "adversarial attacks in my Security collection", "expect": {"collections": ["Security"]}, "topic_has": ["adversarial", "attack"]},
+    {"query": "adversarial attacks tagged \"Security\"", "expect": {"tags": ["Security"]}, "topic_has": ["adversarial"]},
+    {"query": "image classification, not medical imaging", "expect": {"exclude": ["medical imaging"]}, "topic_has": ["image", "classification"]},
+    {"query": "travail de plateforme depuis 2018", "expect": {"year_min": 2018}, "topic_has": ["travail", "plateforme"]},
+    {"query": "what does Berlant argue about cruel optimism", "expect": {}, "topic_has": ["cruel", "optimism"]},
+    {"query": "security of machine learning models", "expect": {}, "topic_has": ["security", "machine", "learning"]},
+    {"query": "recent work on platform labour", "expect": {}, "topic_has": ["platform", "labour"]},
+    {"query": "labour unions between 1990 and 1999", "expect": {"year_min": 1990, "year_max": 1999}, "topic_has": ["labour", "union"]},
+    {"query": "feminist theory in the 1970s", "expect": {"year_min": 1970, "year_max": 1979}, "topic_has": ["feminist", "theory"]},
+    {"query": "readings from my thesis folder on affect", "expect": {"collections": ["PhD Research"]}, "topic_has": ["affect"]},
+    {"query": "chapters about surveillance published before 2000", "expect": {"item_types": ["bookSection"], "year_max": 1999}, "topic_has": ["surveillance"]},
+    {"query": "Goodfellow's work on adversarial examples", "expect": {"author": "Goodfellow"}, "topic_has": ["adversarial", "example"]},
+    {"query": "time series volatility models, excluding finance", "expect": {"exclude": ["finance"]}, "topic_has": ["volatility"]},
+    {"query": "conference papers on adversarial examples since 2017", "expect": {"item_types": ["conferencePaper"], "year_min": 2017}, "topic_has": ["adversarial"]},
+    {"query": "how do platform workers organise collectively", "expect": {}, "topic_has": ["platform", "worker", "organise"]},
+    {"query": "papers by Haraway on cyborgs", "expect": {}, "topic_has": ["cyborg"]},
+    {"query": "books on feminism tagged ethics", "expect": {"item_types": ["book"], "tags": ["Ethics"]}, "topic_has": ["feminism"]},
+    {"query": "deep learning robustness in the past decade", "expect": {"year_min": 2016}, "topic_has": ["robustness"]},
+    {"query": "estrategias sindicales desde 2010", "expect": {"year_min": 2010}, "topic_has": ["estrategias", "sindicales"]},
+    {"query": "work by de Beauvoir on ambiguity", "expect": {"author": "de Beauvoir"}, "topic_has": ["ambiguity"]},
+    {"group": "beyond", "query": "anything Woodcock has written about riders", "expect": {"author": "Woodcock"}, "topic_has": ["riders"], "topic_not": ["Woodcock"]},
+    {"group": "beyond", "query": "Kant on beauty", "expect": {"author": "Kant"}, "topic_has": ["beauty"], "topic_not": ["Kant"]},
+    {"group": "beyond", "query": "Biggio and colleagues on poisoning attacks", "expect": {"author": "Biggio"}, "topic_has": ["poisoning"], "topic_not": ["Biggio"]},
+    {"group": "beyond", "query": "surveillance chapters before 2000", "expect": {"item_types": ["bookSection"], "year_max": 1999}, "topic_has": ["surveillance"], "topic_not": ["chapters"]},
+    {"group": "beyond", "query": "work from the nineties on labour unions", "expect": {"year_min": 1990, "year_max": 1999}, "topic_has": ["labour", "unions"], "topic_not": ["nineties"]},
+    {"group": "beyond", "query": "pre-2000 work on surveillance", "expect": {"year_max": 1999}, "topic_has": ["surveillance"], "topic_not": ["2000"]},
+    {"group": "beyond", "query": "post-2020 research on algorithmic management", "expect": {"year_min": 2021}, "topic_has": ["algorithmic", "management"], "topic_not": ["2020"]},
+    {"group": "beyond", "query": "feminist theory from my teaching collection", "expect": {"collections": ["Teaching 2024"]}, "topic_has": ["feminist", "theory"], "topic_not": ["teaching"]},
+    {"group": "beyond", "query": "image classification but nothing on medical imaging", "expect": {"exclude": ["medical imaging"]}, "topic_has": ["image", "classification"], "topic_not": ["medical"]},
+    {"group": "beyond", "query": "affect theory with the tag feminism", "expect": {"tags": ["Feminism"]}, "topic_has": ["affect"], "topic_not": ["tag"]},
+    {"group": "trap", "query": "how couriers organise without unions", "expect": {}, "topic_has": ["couriers", "unions"]},
+    {"group": "trap", "query": "reports of police violence", "expect": {}, "topic_has": ["reports", "police", "violence"]},
+    {"group": "trap", "query": "why some workers do not join unions", "expect": {}, "topic_has": ["workers", "unions"]},
+    {"group": "trap", "query": "the folder structure of digital archives", "expect": {}, "topic_has": ["folder", "archives"]},
+    {"group": "trap", "query": "Kant's influence on feminist ethics", "expect": {}, "topic_has": ["Kant", "feminist", "ethics"]},
+    {"group": "trap", "query": "books as objects in early modern Europe", "expect": {}, "topic_has": ["books", "objects", "modern"]},
+    {"group": "heldout", "query": "Tsay's textbook on financial time series", "expect": {"author": "Tsay"}, "topic_has": ["financial", "time", "series"], "topic_not": ["Tsay"]},
+    {"group": "heldout", "query": "older work on cyborg feminism, before 1995", "expect": {"year_max": 1994}, "topic_has": ["cyborg", "feminism"], "topic_not": ["1995"]},
+    {"group": "heldout", "query": "machine learning security papers from the 2010s", "expect": {"year_min": 2010, "year_max": 2019}, "topic_has": ["machine", "learning", "security"], "topic_not": ["2010s"]},
+    {"group": "heldout", "query": "dissertations on platform work", "expect": {"item_types": ["thesis"]}, "topic_has": ["platform"], "topic_not": ["dissertations"]},
+    {"group": "heldout", "query": "Goodfellow et al. on adversarial training", "expect": {"author": "Goodfellow"}, "topic_has": ["adversarial", "training"], "topic_not": ["Goodfellow"]},
+    {"group": "heldout", "query": "gig economy research in the last 3 years", "expect": {"year_min": 2023}, "topic_has": ["gig", "economy"], "topic_not": ["years"]},
+    {"group": "heldout", "query": "a book about strikes", "expect": {"item_types": ["book"]}, "topic_has": ["strikes"]},
+    {"group": "heldout", "query": "works of Kant on the sublime", "expect": {"author": "Kant"}, "topic_has": ["sublime"], "topic_not": ["Kant"]},
+    {"group": "heldout", "query": "Berlant on intimacy", "expect": {"author": "Berlant"}, "topic_has": ["intimacy"], "topic_not": ["Berlant"]},
+    {"group": "heldout", "query": "preprints on federated learning since last year", "expect": {"item_types": ["preprint"], "year_min": 2025}, "topic_has": ["federated", "learning"]},
+    {"group": "heldout", "query": "Haraway's cyborg manifesto", "expect": {}, "topic_has": ["cyborg", "manifesto"]},
+    {"group": "heldout", "query": "the politics of tagging in online communities", "expect": {}, "topic_has": ["tagging", "communities"]},
+    {"group": "heldout", "query": "theories of collection in museums", "expect": {}, "topic_has": ["collection", "museums"]},
+    {"group": "heldout", "query": "studies of the 1968 strikes", "expect": {}, "topic_has": ["1968", "strikes"]}
+  ],
+  "note": [
+    {"id": "faithful", "query": "how couriers organise without unions", "title": "Delivery work in three cities",
+     "passages": [
+       {"page": 118, "text": "The strikes were not called by any union. Couriers used WhatsApp groups to organise log-offs across the city, a tactic that spread from Turin to London within weeks."},
+       {"page": 112, "text": "Platform workers rarely meet in person, so the waiting areas outside restaurants became the places where grievances were shared."}]},
+    {"id": "strong-claim", "query": "remote work and productivity", "title": "Working from home: a field experiment",
+     "passages": [
+       {"page": 4, "text": "This study proves conclusively that remote work increases productivity by 13 percent, a landmark result for the field."},
+       {"page": 9, "text": "Call-centre employees were randomly assigned to work from home or in the office for nine months."}]},
+    {"id": "loosely-related", "query": "algorithmic management of warehouse work", "title": "Rating the driver",
+     "passages": [
+       {"page": 22, "text": "Drivers described the passenger rating system as a constant source of anxiety, since a few low ratings could lead to deactivation."}]},
+    {"id": "names-and-numbers", "query": "membership of grassroots unions", "title": "New unions in old cities",
+     "passages": [
+       {"page": 41, "text": "By 2019 the Independent Workers' Union of Great Britain reported around 5,000 members, most of them cleaners, couriers and security guards."}]},
+    {"id": "disagreement", "query": "do trade unions benefit platform workers", "title": "Two views of platform unions",
+     "passages": [
+       {"page": 3, "text": "Some researchers argue that traditional unions have adapted well to platform work through legal campaigns."},
+       {"page": 7, "text": "Others find that established unions have largely ignored platform workers, leaving grassroots groups to organise them."}]},
+    {"id": "method", "query": "forecasting volatility", "title": "Volatility models compared",
+     "passages": [
+       {"page": 55, "text": "We compare GARCH and stochastic volatility models on daily exchange rate returns, using out-of-sample forecasts over a two-year window."}]},
+    {"id": "theory", "query": "affect and political attachment", "title": "Attachments that hurt",
+     "passages": [
+       {"page": 1, "text": "A relation of cruel optimism exists when something you desire is actually an obstacle to your flourishing."},
+       {"page": 24, "text": "The chapter reads novels and films of the 1990s for the ways their characters stay attached to fantasies of the good life."}]},
+    {"id": "short", "query": "adversarial examples", "title": "Small changes, wrong answers",
+     "passages": [
+       {"page": 2, "text": "Adding a small, carefully chosen perturbation to an image can make a classifier label it wrongly with high confidence."}]},
+    {"id": "evaluative-source", "query": "history of statistical learning theory", "title": "Learning from examples",
+     "passages": [
+       {"page": 1, "text": "This important and influential paper introduced a formal model of learning from examples, in which a learner must output a hypothesis that is probably approximately correct."}]},
+    {"id": "off-topic", "query": "courier strikes in Europe", "title": "Garden birds of northern England",
+     "passages": [
+       {"page": 12, "text": "Robins defend their territory in winter, and both males and females sing to warn off rivals."}]}
+  ],
+  "also_try": [
+    {"query": "courier strikes", "candidates": ["Labour", "Platforms", "Gig economy", "Trade unions", "Strikes", "Food delivery", "Algorithmic management"]},
+    {"query": "adversarial examples", "candidates": ["Machine learning", "Security", "Deep learning", "Robustness", "Image classification", "Adversarial examples"]},
+    {"query": "cruel optimism", "candidates": ["Affect theory", "Feminism", "Neoliberalism", "Precarity", "Literary criticism"]},
+    {"query": "volatility forecasting", "candidates": ["Time series", "Finance", "GARCH", "Econometrics", "Exchange rates"]}
+  ],
+  "themes": [
+    {"groups": [
+      {"id": 1, "item_ids": ["a", "b", "c"], "titles": ["Courier strikes in London", "Riders on the storm: strikes among food couriers", "Log-offs and walkouts in delivery work"], "tags": [["Labour"], ["Labour", "Strikes"], ["Strikes"]]},
+      {"id": 2, "item_ids": ["d", "e"], "titles": ["Algorithmic management in warehouses", "Managed by an app: algorithmic control at work"], "tags": [[], ["Algorithmic management"]]},
+      {"id": 3, "item_ids": ["f", "g"], "titles": ["Unions and the platform economy", "Will trade unions survive platform work?"], "tags": [["Trade unions"], []]}]},
+    {"groups": [
+      {"id": 1, "item_ids": ["a", "b"], "titles": ["Explaining and harnessing adversarial examples", "Adversarial examples in the physical world"], "tags": [[], []]},
+      {"id": 2, "item_ids": ["c", "d", "e"], "titles": ["Certified robustness by randomized smoothing", "Provable defenses against adversarial attacks", "Towards robust deep networks"], "tags": [["Robustness"], [], ["Robustness"]]},
+      {"id": 3, "item_ids": ["f", "g"], "titles": ["Poisoning attacks on support vector machines", "Data poisoning in federated learning"], "tags": [["Security"], ["Security"]]}]}
+  ]
+}

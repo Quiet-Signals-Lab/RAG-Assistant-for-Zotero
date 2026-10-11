@@ -263,3 +263,30 @@ def rerank_passages(query: str, passages: list[str], top_k: Optional[int] = None
         ranked = ranked[:top_k]
     
     return ranked
+
+
+# Natural-language inference model for the clerk's note guard. MiniLM because the
+# DeBERTa NLI models fail to load under Python 3.13 with this torch release.
+NLI_MODEL = "cross-encoder/nli-MiniLM2-L6-H768"
+_nli = None
+_nli_lock = threading.Lock()
+
+
+def entailment(premises: list[str], hypothesis: str) -> float:
+    """How strongly the best of `premises` entails `hypothesis`, from 0 to 1.
+
+    Used to check that a model-written note says only what a passage says: on test
+    notes, faithful ones scored 0.85-0.99, and notes with a wrong topic, a reversed
+    claim or an evaluative judgement scored 0.00-0.02 (docs/DESK_CLERK.md).
+    """
+    global _nli
+    premises = [p for p in premises if p and p.strip()]
+    if not premises or not hypothesis.strip():
+        return 0.0
+    with _nli_lock:
+        if _nli is None:
+            _nli = CrossEncoder(NLI_MODEL, cache_folder=MODELS_CACHE_DIR)
+        model = _nli
+    labels = {v.lower(): k for k, v in model.config.id2label.items()}
+    scores = model.predict([(p, hypothesis) for p in premises], apply_softmax=True)
+    return float(max(row[labels["entailment"]] for row in scores))

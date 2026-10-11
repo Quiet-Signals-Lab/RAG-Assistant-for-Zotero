@@ -219,6 +219,48 @@ class ResponseValidator:
         return len(issues) == 0, issues
 
 
+# Size limits that strict schema modes may refuse (OpenAI documents a subset of JSON
+# Schema for strict mode). The clerk's guards check every one of them anyway.
+_UNENFORCED = {"maxLength", "minLength", "maxItems", "minItems"}
+
+
+def strict_schema(schema: Any) -> Any:
+    """The schema without size limits, for servers that enforce it strictly."""
+    if isinstance(schema, dict):
+        return {k: strict_schema(v) for k, v in schema.items() if k not in _UNENFORCED}
+    if isinstance(schema, list):
+        return [strict_schema(v) for v in schema]
+    return schema
+
+
+def structured_request(kwargs: Dict[str, Any], mode: str = "json_schema") -> Dict[str, Any]:
+    """Extra arguments for an OpenAI-style create() when the caller wants JSON.
+
+    `kwargs["response_schema"]` is a JSON schema from the desk clerk. "json_schema"
+    asks the server to constrain decoding to it; "json_object" only asks for valid
+    JSON, for APIs that accept no schema. A per-request timeout is passed through so
+    an abandoned call closes its connection and a local server stops generating.
+    """
+    extra: Dict[str, Any] = {}
+    if kwargs.get("timeout"):
+        extra["timeout"] = kwargs["timeout"]
+    schema = kwargs.get("response_schema")
+    if schema:
+        if mode == "json_schema":
+            extra["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "desk_job", "schema": strict_schema(schema), "strict": True},
+            }
+        else:
+            extra["response_format"] = {"type": "json_object"}
+    return extra
+
+
+def repetition_penalty(kwargs: Dict[str, Any], default: float) -> float:
+    """No repetition penalty for JSON: it penalises the quotes, commas and braces JSON must repeat."""
+    return 0.0 if kwargs.get("response_schema") else default
+
+
 class ModelProvider(Protocol):
     """
     Protocol defining the interface all LLM providers must implement.

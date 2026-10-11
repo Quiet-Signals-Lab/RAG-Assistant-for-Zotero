@@ -52,34 +52,37 @@ A throwaway index of 599 items built from Zotero abstracts, real reranker, real 
 - Warm searches take 0.4–1.0 s on an M-series Mac; the first search after start loads models and takes several seconds.
 
 ## Stage 3 · Desk depth
-- [ ] Query log and pins persisted per profile on the backend (own file next to `sessions.json`, not the chat blob)
-- [ ] Export: BibTeX, RIS, plain bibliography (APA, Chicago) for results or the reading list
-- [ ] More like this (item-level vector) and metadata-only browse (empty query + scope)
-- [ ] Refinement chips: narrow to decade, only this collection, exclude top 3
-- [ ] Group by facet: period, form, collection, author, journal
-- [ ] Rocchio-style re-rank by pins (optional, model-free)
+- [x] Query log and pins persisted per profile on the backend (`desk.json` next to `sessions.json`, `GET/PUT /api/profiles/{id}/desk`; browser-stored ones are moved over once)
+- [x] Export: BibTeX and RIS (`features/desk/exports.ts`), besides copying APA references. Chicago is not done: a second hand-written style is the point at which citeproc-js and CSL earn their place
+- [x] More like this: the item's title as the query, the item itself set aside (pearl growing). Not an item-level vector: the title search needs no index change and shows the reader what was searched
+- [ ] Metadata-only browse (empty query + scope). Skipped: Zotero already browses by collection and tag, and a desk list without relevance would need rows with no band rather than a made-up one
+- [x] Refinement chips: narrow to the busiest decade or the most common collection, set the top 3 aside
+- [x] Group by facet: decade, kind of item, collection, first author, journal or book, and the clerk's themes
+- [ ] Rocchio-style re-rank by pins (optional, model-free): not started
 
 ## Stage 4 · Index and measurement
-- [ ] Contextual chunk headers (`{title} — {authors, year}`) and item key + DOI in chunk metadata, via a metadata-version migration
-- [ ] Test collection v1: 40 queries split by intent, pooled, paired comparisons; script under `scripts/`
-- [ ] Per-reranker Platt calibration fitted on the test collection; replaces the fixed band cut-offs
-- [ ] Measure local fan-out latency (`llama-server -np 8`, 4B model) and record it
+- [ ] Contextual chunk headers (`{title} — {authors, year}`) and item key + DOI in chunk metadata, via a metadata-version migration. Waits for the test collection: it costs every user a full reindex, so it should ship with a measured gain
+- [x] Test collection harness: `scripts/eval_ranking.py` pools queries (with intents), scores nDCG@10, P@5 and MRR, compares two runs with a sign test. The 40 judged queries themselves need the library's owner; judgments stay in the profile folder
+- [x] Platt calibration fit (`eval_ranking.py calibrate`); replacing the fixed band cut-offs waits for real judgments
+- [ ] Measure local fan-out latency (`llama-server -np 8`, 4B model) and record it. Measured instead through mlx_lm.server, one call at a time: see `docs/DESK_CLERK.md`
 
 ## Stage 5 · The desk clerk (tier 1, opt-in)
-- [ ] `provider_manager.complete_json()` with native schema modes and one retry
-- [ ] Annotate stream (SSE) keyed by search id; cached by item + query hash; per-job budgets
-- [ ] Indicative notes behind the deterministic guard and an NLI entailment gate; extract fallback
-- [ ] Also-try selected from corpus vocabulary, typed BT / NT / RT
-- [ ] Theme labels for k-means clusters; LLM scope extraction validated against library vocabulary
-- [ ] Measured model allowlist; "unmeasured" label for others
+- [x] Structured output per provider (Ollama `format`, OpenAI/LM Studio `json_schema`, JSON mode elsewhere), one retry for malformed output, no retry after a guard failure: `backend/clerk.py`
+- [x] Annotate stream: newline-delimited JSON, queued by what the reader sees first, cancelled by a new search; cached by job, model and input
+- [x] Indicative notes behind the deterministic guard and an NLI entailment gate (passages, joined, three-sentence windows); extract fallback
+- [x] Also-try selected from corpus vocabulary; BT / NT / RT from the words, not the model
+- [x] Theme labels for k-means clusters; model query reading merged into the library reader's, each value tied to a phrase in the request
+- [x] Measured-model register (`backend/clerk_models.json`, `scripts/eval_clerk.py --record`); "unmeasured" label for others
+- [x] Clerk room on the rail: model, jobs, measurement; header status
 
 ## Stage 6 · The stacks
-- [ ] References and cited-by from any row via the Semantic Scholar integration, owned items marked
-- [ ] Write-back to a Zotero collection (Zotero 10 local API, BBT fallback, feature-detected)
-- [ ] Pathfinder export; tier 2 facets (place, method)
-- [ ] Trigram keyword index; scripted berrypicking trail test
+- [x] References and cited-by from the evidence pane via Semantic Scholar, owned items marked (by DOI, else exact title)
+- [ ] Write-back to a Zotero collection (Zotero 10 local API, BBT fallback, feature-detected): not started; needs a Zotero to test against
+- [x] Pathfinder export (Markdown: groups, notes or extracts, pinned passages). Tier 2 facets (place, method) not started
+- [ ] Trigram keyword index; scripted berrypicking trail test: not started
 
 ## Stage 7 · Release
-- [ ] README rewrite: scoped claim, prior art, "what this app will never do", design rationale with sources
-- [ ] CHANGELOG, screenshots, migration note for chat users (where the toggle is)
+- [x] README rewrite: scoped claim, "what this app will never do", design rationale linked. Prior art stays in the plan
+- [x] CHANGELOG with the migration note for chat users (where the toggle is)
+- [ ] Screenshots: need a demo library, not a real one
 - [ ] Published evaluation write-up

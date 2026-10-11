@@ -199,3 +199,11 @@ def test_overlap_trimming_in_the_bibliography_keeps_highlights_aligned():
     later = items[0]["passages"][1]
     assert later["text"] == "…" + fresh
     assert [later["text"][a:b] for a, b in later["highlights"]] == ["couriers"]
+
+
+def test_owned_works_are_marked_by_doi_or_title_and_listed_first():
+    from backend.desk import mark_owned
+    entries = [{"title": "Elsewhere", "doi": None}, {"title": "Riders on the Storm.", "doi": None},
+               {"title": "Other", "doi": "10.1/ABC"}]
+    out = mark_owned(entries, {"10.1/abc": "9"}, {"Riders on the storm": "2"})
+    assert [(e["title"], e["owned_item_id"]) for e in out] == [("Riders on the Storm.", "2"), ("Other", "9"), ("Elsewhere", None)]

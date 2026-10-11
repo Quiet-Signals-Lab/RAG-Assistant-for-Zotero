@@ -32,7 +32,7 @@ logging.getLogger('grpc').setLevel(logging.CRITICAL)
 logging.getLogger('google.auth').setLevel(logging.WARNING)
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Query, Body, HTTPException
+from fastapi import FastAPI, Query, Body, HTTPException, Request
 from typing import Optional
 from backend.zoteroitem import ZoteroItem
 from backend.external_api_utils import fetch_semantic_scholar_data
@@ -134,6 +134,13 @@ def load_settings(profile_id: str = None):
         "chromaPath": profile_chroma_path,
         # "desk" (reference desk, the default) or "chat" (legacy chat mode)
         "interfaceMode": "desk",
+        # The desk's model jobs (backend/clerk_jobs.py). Each runs only when a model is set.
+        "deskReadQuery": True,   # read the request with the model before searching
+        "deskReadTimeout": 8,    # seconds to wait for that reading before using the library's
+        "deskNotes": True,       # one indicative note per result, after the list appears
+        "deskAlsoTry": True,     # next searches chosen from the results' terms
+        "deskThemes": True,      # group the results into labelled themes
+        "deskClerkCloud": False, # let the clerk use a cloud provider: queries and passages are sent to it
         "providers": {
             "ollama": {
                 "enabled": True,
@@ -713,7 +720,7 @@ def _clean_filters(raw) -> Optional[dict]:
             clean[key] = int(value)
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail=f"'{key}' must be a year")
-    for key in ("tags", "collections", "item_types"):
+    for key in ("tags", "collections", "item_types", "exclude"):
         values = raw.get(key) or []
         if isinstance(values, str):
             values = [values]
@@ -731,11 +738,13 @@ def _clean_filters(raw) -> Optional[dict]:
 
 @app.post("/api/search")
 def search(payload: dict = Body(...)):
-    """Reference desk search: a ranked bibliography with evidence. No model is called.
+    """Reference desk search: a ranked bibliography with evidence.
 
     Body: {"query": str, "manual_filters"?: {year_min, year_max, tags, collections,
-    item_types, author, title}, "use_metadata_filters"?: bool (read scope from the
-    query, default true), "item_ids"?: [str]}
+    item_types, author, title, exclude}, "use_metadata_filters"?: bool (read scope
+    from the query, default true), "item_ids"?: [str] (search only these),
+    "exclude_item_ids"?: [str] (set these aside)}. A model reads the query only when
+    the desk settings allow it and the library reader leaves something unread.
     """
     query = str(payload.get("query") or "").strip()
     if not query:
@@ -743,19 +752,157 @@ def search(payload: dict = Body(...)):
     if len(query) > 2000:
         raise HTTPException(status_code=400, detail="The query is too long. Keep it under 2,000 characters.")
     manual_filters = _clean_filters(payload.get("manual_filters"))
-    item_ids = payload.get("item_ids") or []
-    if isinstance(item_ids, str):
-        item_ids = item_ids.split(",")
-    item_ids = [str(i).strip() for i in item_ids if str(i).strip()] if isinstance(item_ids, list) else []
+    item_ids = _id_list(payload.get("item_ids"))
+    exclude_ids = _id_list(payload.get("exclude_item_ids"))
+    settings = load_settings()
+    _clerk_settings(settings)
     try:
         return chatbot.search(
             query,
             manual_filters=manual_filters,
             use_metadata_filters=bool(payload.get("use_metadata_filters", True)),
             filter_item_ids=item_ids or None,
+            exclude_item_ids=exclude_ids or None,
+            read_with_model=bool(settings.get("deskReadQuery", True)),
+            read_timeout=float(settings.get("deskReadTimeout", 8) or 8),
         )
     except Exception as e:
         raise _retrieval_failure(e)
+
+
+def _clerk_settings(settings: dict) -> None:
+    """The clerk may use a cloud provider only when the reader allowed it for the desk:
+    a key set up for legacy chat is not consent to send passages on every search."""
+    chatbot.clerk.allow_cloud = bool(settings.get("deskClerkCloud", False))
+
+
+def _id_list(raw) -> list:
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    return [str(i).strip() for i in raw if str(i).strip()] if isinstance(raw, list) else []
+
+
+@app.post("/api/annotate")
+async def annotate(request: Request, payload: dict = Body(...)):
+    """Stream the clerk's work on a result list as newline-delimited JSON.
+
+    Body: {"query": str, "items": [{item_id, title, tags, band, passages: [{page, text}]}]}.
+    Which jobs run follows the desk settings. The stream stops, and work not yet
+    started is cancelled, when the client goes away (a new search replaces it).
+    The body must be sent as JSON: a page in a browser could otherwise post here
+    without a CORS check and spend the reader's model quota.
+    """
+    import asyncio
+    import concurrent.futures
+    import json as _json
+    from fastapi.responses import StreamingResponse
+
+    query = str(payload.get("query") or "").strip()
+    items = payload.get("items")
+    if not query or not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="Send the query and the items to annotate.")
+    items = [
+        {
+            "item_id": str(it.get("item_id")),
+            "title": str(it.get("title") or "")[:500],
+            "tags": [str(t) for t in (it.get("tags") if isinstance(it.get("tags"), list) else [])][:30],
+            "band": str(it.get("band") or ""),
+            "passages": [
+                {"page": p.get("page") if isinstance(p.get("page"), int) else None, "text": str(p.get("text") or "")[:2000]}
+                for p in (it.get("passages") if isinstance(it.get("passages"), list) else [])[:3] if isinstance(p, dict)
+            ],
+        }
+        for it in items[:40] if isinstance(it, dict) and it.get("item_id")
+    ]
+    settings = load_settings()
+    _clerk_settings(settings)
+    provider = chatbot.provider_manager.get_active_provider() if chatbot.provider_manager else None
+    events = chatbot.annotate(
+        query, items,
+        notes=bool(settings.get("deskNotes", True)),
+        also_try=bool(settings.get("deskAlsoTry", True)),
+        themes=bool(settings.get("deskThemes", True)),
+        # A local server answers one call at a time: a second worker only queues work
+        # that a new search would then wait behind.
+        workers=3 if getattr(provider, "requires_api_key", False) else 1,
+    )
+
+    def close(_=None):
+        try:
+            events.close()
+        except ValueError:  # still running in the worker: close once it returns
+            pass
+
+    async def stream():
+        # The stream's own worker, so a disconnect mid-call can wait for that call
+        # to return before closing the generator (closing a running one raises).
+        worker = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="annotate-stream")
+        pending = None
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                pending = worker.submit(next, events, None)
+                event = await asyncio.wrap_future(pending)
+                if event is None:
+                    break
+                yield _json.dumps(event, ensure_ascii=False) + "\n"
+        finally:
+            if pending is not None and not pending.done():
+                pending.add_done_callback(close)
+            else:
+                close()
+            worker.shutdown(wait=False)
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
+@app.post("/api/desk/chain")
+def desk_chain(payload: dict = Body(...)):
+    """References and cited-by for one item, from Semantic Scholar, with the reader's own copies marked.
+
+    Sends the item's DOI (or its title when it has none) to Semantic Scholar, and
+    only when the reader asks. Body: {"item_id": str}.
+    """
+    import requests
+
+    item_id = str(payload.get("item_id") or "").strip()
+    if not item_id.isdigit():
+        raise HTTPException(status_code=400, detail="Send the item_id of a Zotero item.")
+    try:
+        out = chatbot.citation_chain(item_id)
+    except requests.HTTPError as e:
+        if getattr(e.response, "status_code", None) == 429:
+            raise HTTPException(status_code=503, detail="Semantic Scholar is limiting requests. Try again in a minute.")
+        raise HTTPException(status_code=502, detail="Semantic Scholar returned an error.")
+    except requests.RequestException:
+        raise HTTPException(status_code=502, detail="Could not reach Semantic Scholar. Check the connection.")
+    if out is None:
+        raise HTTPException(status_code=404, detail="This item is not in your Zotero library.")
+    return out
+
+
+@app.get("/api/desk/model")
+def desk_model():
+    """The model the desk's jobs would use, whether it may and can be used, and the desk's own measurements of it."""
+    from backend.clerk import measured
+    settings = load_settings()
+    _clerk_settings(settings)
+    model = chatbot.clerk.model()
+    provider = chatbot.provider_manager.get_active_provider() if chatbot.provider_manager else None
+    return {
+        "available": chatbot.clerk.available(),
+        "model": model,
+        "cloud": bool(getattr(provider, "requires_api_key", False)),
+        "cloud_allowed": chatbot.clerk.allow_cloud,
+        "measured": measured(model) if model else None,
+        "jobs": {
+            "read_query": bool(settings.get("deskReadQuery", True)),
+            "notes": bool(settings.get("deskNotes", True)),
+            "also_try": bool(settings.get("deskAlsoTry", True)),
+            "themes": bool(settings.get("deskThemes", True)),
+        },
+    }
 
 
 @app.get("/api/index_status")
@@ -1563,6 +1710,59 @@ def activate_profile(profile_id: str):
         raise
     except Exception as e:
         raise _fail(e)
+
+
+DESK_PIN_LIMIT, DESK_LOG_LIMIT = 500, 50
+
+
+def _desk_state(body) -> dict:
+    """Keep only the fields the desk writes, with sizes capped: the file is read back into the page."""
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Send an object with 'pins' and 'log'.")
+
+    def text(value, limit):
+        return str(value or "")[:limit]
+
+    def number(value):
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+    def scope(value):
+        try:
+            return _clean_filters(value) or {}
+        except HTTPException:
+            return {}
+
+    pins = [
+        {"id": text(p.get("id"), 300), "itemId": text(p.get("itemId"), 64), "label": text(p.get("label"), 300),
+         "page": number(p.get("page")), "text": text(p.get("text"), 4000), "query": text(p.get("query"), 500),
+         "at": number(p.get("at")) or 0}
+        for p in (body.get("pins") or []) if isinstance(p, dict) and p.get("id")
+    ][-DESK_PIN_LIMIT:]  # pins are appended: keep the newest
+    log = [
+        {"query": text(e.get("query"), 500), "scope": scope(e.get("scope")), "count": number(e.get("count")) or 0,
+         "at": number(e.get("at")) or 0}
+        for e in (body.get("log") or []) if isinstance(e, dict) and e.get("query")
+    ][:DESK_LOG_LIMIT]
+    return {"pins": pins, "log": log}
+
+
+@app.get("/api/profiles/{profile_id}/desk")
+def get_desk_state(profile_id: str):
+    """The reference desk's pins and query log for a profile."""
+    _validate_profile_id(profile_id)
+    return profile_manager.load_desk_state(profile_id)
+
+
+@app.put("/api/profiles/{profile_id}/desk")
+def put_desk_state(profile_id: str, body: dict = Body(...)):
+    """Replace the reference desk's pins and query log for a profile."""
+    _validate_profile_id(profile_id)
+    if not profile_manager.get_profile(profile_id):
+        raise HTTPException(status_code=404, detail="No such profile.")
+    state = _desk_state(body)
+    if not profile_manager.save_desk_state(profile_id, state):
+        raise HTTPException(status_code=500, detail="Could not save the desk's pins and log.")
+    return state
 
 
 @app.get("/api/profiles/{profile_id}/sessions")

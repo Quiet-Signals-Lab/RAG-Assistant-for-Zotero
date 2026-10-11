@@ -420,6 +420,47 @@ class ProfileManager:
             logger.error(f"Error saving profile sessions: {e}")
             return False
     
+    def get_profile_desk_file(self, profile_id: str) -> Path:
+        """The reference desk's pins and query log for a profile."""
+        return self.get_profile_dir(profile_id) / "desk.json"
+
+    def load_desk_state(self, profile_id: str) -> Dict[str, Any]:
+        """Pins and query log; empty when the desk has not saved any yet.
+
+        An unreadable file is moved aside (desk.json.bad) rather than left for the
+        next save to overwrite, so the pins in it can still be recovered.
+        """
+        path = self.get_profile_desk_file(profile_id)
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("not an object")
+            return {"pins": data.get("pins") or [], "log": data.get("log") or []}
+        except FileNotFoundError:
+            return {"pins": [], "log": []}
+        except (OSError, ValueError) as e:
+            logger.error(f"Unreadable desk state, moved to desk.json.bad: {e}")
+            try:
+                os.replace(path, path.with_suffix(".json.bad"))
+            except OSError:
+                pass
+            return {"pins": [], "log": []}
+
+    def save_desk_state(self, profile_id: str, state: Dict[str, Any]) -> bool:
+        """Write the desk state through a temporary file, so a crash never leaves half a file."""
+        path = self.get_profile_desk_file(profile_id)
+        tmp = path.with_suffix(".json.tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(state, f, ensure_ascii=False, indent=1)
+            os.replace(tmp, path)
+            return True
+        except Exception as e:
+            logger.error(f"Error saving desk state: {e}")
+            return False
+
     def export_profile(self, profile_id: str, export_path: str) -> bool:
         """
         Export a profile to a ZIP file (excluding vector database for size reasons).

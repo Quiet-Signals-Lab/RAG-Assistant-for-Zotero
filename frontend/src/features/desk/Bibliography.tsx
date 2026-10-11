@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { Citation, DeskItem, KnownItem, ScopeFilters } from "../../types/desk";
+import type { Citation, ClerkNote, DeskItem, KnownItem, ScopeFilters } from "../../types/desk";
 import { plain, reference, shortCite, sortName } from "./cite";
 import { useDesk, type Sort } from "./DeskContext";
-import { BandMark, Highlighted, itemTypeLabel, openPdf, pageSpan, Reference, showInZotero } from "./parts";
+import { bibtex, pathfinder, ris } from "./exports";
+import { FACETS, groupBy, refinements, type Facet, type Refinement } from "./facets";
+import { BandMark, ClerkNoteLine, Highlighted, itemTypeLabel, openPdf, pageSpan, Reference, showInZotero } from "./parts";
 
 function sortItems(items: DeskItem[], sort: Sort): DeskItem[] {
   if (sort === "relevance") return items;
@@ -33,6 +35,20 @@ async function copyText(text: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Save text as a file; Electron asks where. */
+function saveFile(name: string, text: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function fileStem(query: string): string {
+  return query.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 48) || "references";
 }
 
 /** Catalogue-card author line: "Woodcock, Jamie, and Mark Graham." */
@@ -97,8 +113,10 @@ const KnownItemCard: React.FC<{ known: KnownItem; others: KnownItem[] }> = ({ kn
   );
 };
 
-const Row = React.forwardRef<HTMLButtonElement, { item: DeskItem; selected: boolean; pinned: boolean; onPick: () => void }>(
-  ({ item, selected, pinned, onPick }, ref) => {
+type RowProps = { item: DeskItem; note?: ClerkNote; selected: boolean; pinned: boolean; onPick: () => void };
+
+const Row = React.forwardRef<HTMLButtonElement, RowProps>(
+  ({ item, note, selected, pinned, onPick }, ref) => {
     const desk = useDesk();
     const best = item.passages[0];
     const meta = [
@@ -121,7 +139,9 @@ const Row = React.forwardRef<HTMLButtonElement, { item: DeskItem; selected: bool
               {meta.join(" · ")}
               {pinned && <span className="row__pinned"> · ● pinned</span>}
             </span>
-            {item.extract.text && (
+            {note ? (
+              <ClerkNoteLine note={note} />
+            ) : item.extract.text && (
               <span className="row__extract">
                 “<Highlighted text={item.extract.text} spans={item.extract.highlights} />”
                 {item.extract.page && <span className="row__page"> p. {item.extract.page}</span>}
@@ -143,6 +163,7 @@ const Row = React.forwardRef<HTMLButtonElement, { item: DeskItem; selected: bool
                 {desk.isPinned(item, best) ? "Unpin passage" : "Pin passage"}
               </button>
             )}
+            <button type="button" className="btn" onClick={() => desk.moreLike(item)}>More like this</button>
             <button type="button" className="btn" onClick={() => desk.setPane("verify")}>Evidence</button>
           </div>
         )}
@@ -156,16 +177,25 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
   const desk = useDesk();
   const { result, status, error } = desk;
   const [showSeeAlso, setShowSeeAlso] = useState(false);
+  const [facet, setFacet] = useState<Facet>("none");
   const [copied, setCopied] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
 
   const sorted = useMemo(() => sortItems(result?.items ?? [], desk.sort), [result, desk.sort]);
-  const listed = sorted.filter((it) => it.band !== "see_also");
+  const ranked = useMemo(() => sorted.filter((it) => it.band !== "see_also"), [sorted]);
+  const groups = useMemo(() => groupBy(ranked, facet, desk.clerk.themes), [ranked, facet, desk.clerk.themes]);
+  const listed = groups ? groups.flatMap((g) => g.items) : ranked;
   const seeAlso = sorted.filter((it) => it.band === "see_also");
   const known = result?.known_items.filter((k) => k.citation) ?? [];
   // A name-and-year query has no topic, so weak passages are expected: the card answers it.
   const nothingStrong = !!result && result.items.length > 0 && listed.length === 0 && known.length === 0;
   const visible = showSeeAlso || nothingStrong ? [...listed, ...seeAlso] : listed;
+  const refine = useMemo(() => (result && !desk.within ? refinements(ranked, desk.scope) : []), [result, ranked, desk.scope, desk.within]);
+  const applyRefinement = (r: Refinement) => {
+    if (r.kind === "decade") desk.setScope({ ...desk.scope, year_min: r.year_min, year_max: r.year_max });
+    else if (r.kind === "collection") desk.setScope({ ...desk.scope, collections: [...(desk.scope.collections ?? []), r.collection] });
+    else desk.putAside(r.item_ids);
+  };
   const pinnedItems = useMemo(() => new Set(desk.pins.map((p) => p.itemId)), [desk.pins]);
 
   useEffect(() => setShowSeeAlso(false), [result]);
@@ -191,6 +221,24 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
     else if (e.key === "o" && item) { e.preventDefault(); openPdf(item, item.passages[0]?.page).catch((err) => alert(err.message)); }
   }
 
+  function saveAs(format: string) {
+    const stem = fileStem(result?.query ?? "");
+    if (format === "bib") saveFile(`${stem}.bib`, bibtex(visible), "application/x-bibtex");
+    else if (format === "ris") saveFile(`${stem}.ris`, ris(visible), "application/x-research-info-systems");
+    else if (format === "pathfinder" && result) {
+      const text = pathfinder({
+        query: result.query,
+        scope: describeScope({ ...result.scope.extracted, ...desk.scope }).replace("that limit", ""),
+        date: new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
+        // The groups on screen, else the clerk's themes, else one list.
+        groups: groups ?? groupBy(ranked, "theme", desk.clerk.themes) ?? [{ label: "Results", items: ranked }],
+        notes: desk.clerk.notes,
+        pins: desk.pins.filter((pin) => result.items.some((it) => it.item_id === pin.itemId)),
+      });
+      saveFile(`pathfinder-${stem}.md`, text, "text/markdown");
+    }
+  }
+
   async function copyBibliography() {
     const text = visible.map((it) => plain(reference(it))).join("\n");
     setCopied((await copyText(text)) ? `Copied ${visible.length} references` : "Could not reach the clipboard");
@@ -205,6 +253,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
         else rowRefs.current.delete(item.item_id);
       }}
       item={item}
+      note={desk.clerk.notes[item.item_id]}
       selected={item.item_id === desk.selectedId}
       pinned={pinnedItems.has(item.item_id)}
       onPick={() => {
@@ -230,7 +279,24 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
                 <option value="author">first author</option>
               </select>
             </label>
+            <label className="tool">
+              <span>Group</span>
+              <select value={facet} onChange={(e) => setFacet(e.target.value as Facet)}>
+                {FACETS.filter((f) => f.id !== "theme" || desk.clerk.themes).map((f) => (
+                  <option key={f.id} value={f.id}>{f.label}</option>
+                ))}
+              </select>
+            </label>
             <button type="button" className="tool-button" onClick={copyBibliography}>Copy references</button>
+            <label className="tool">
+              <span className="sr-only">Save the list as</span>
+              <select value="" onChange={(e) => saveAs(e.target.value)} aria-label="Save the list as a file">
+                <option value="" disabled>Save as…</option>
+                <option value="bib">BibTeX (.bib)</option>
+                <option value="ris">RIS (.ris)</option>
+                <option value="pathfinder">Pathfinder (.md)</option>
+              </select>
+            </label>
           </div>
         )}
       </div>
@@ -277,6 +343,17 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
             </p>
           )}
           {known[0] && <KnownItemCard known={known[0]} others={known.slice(1)} />}
+          {refine.length > 0 && (
+            <div className="refine" aria-label="Narrow the list">
+              <span className="refine__label">Narrow</span>
+              {refine.map((r) => (
+                <button key={r.kind} type="button" className="chip chip--suggest" onClick={() => applyRefinement(r)}>
+                  {r.label}
+                  {r.kind !== "set_aside" && <span className="chip__note"> · {r.count}</span>}
+                </button>
+              ))}
+            </div>
+          )}
 
           {result.items.length === 0 ? (
             <div className="desk-empty">
@@ -296,9 +373,21 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
                   <p>These are the nearest items the shelves hold.</p>
                 </div>
               )}
-              <ol className="rows" aria-label="Bibliography">
-                {(nothingStrong ? seeAlso : listed).map(renderRow)}
-              </ol>
+              {groups && !nothingStrong ? (
+                groups.map((g, i) => (
+                  <section key={`${i}-${g.label}`} className="rows__group" aria-label={`Group: ${g.label}`}>
+                    <h3 className="rows__group-head">
+                      <span>{g.label}</span>
+                      <span className="rows__group-count">{g.items.length}</span>
+                    </h3>
+                    <ol className="rows">{g.items.map(renderRow)}</ol>
+                  </section>
+                ))
+              ) : (
+                <ol className="rows" aria-label="Bibliography">
+                  {(nothingStrong ? seeAlso : listed).map(renderRow)}
+                </ol>
+              )}
               {seeAlso.length > 0 && !nothingStrong && (
                 <>
                   <div className="see-also">

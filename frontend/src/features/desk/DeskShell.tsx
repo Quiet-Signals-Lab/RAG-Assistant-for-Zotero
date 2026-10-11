@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { request } from "../../api/client";
+import { deskModel } from "../../api/search";
+import type { DeskModel } from "../../types/desk";
 import LibraryManagementPanel from "../library/LibraryManagementPanel";
 import { getElectronAPI } from "../../utils/electron";
 import Bibliography from "./Bibliography";
+import ClerkRoom from "./ClerkRoom";
 import { useDesk, type Pane, type Room } from "./DeskContext";
 import Evidence from "./Evidence";
 import QueryDesk from "./QueryDesk";
@@ -16,9 +19,10 @@ const REPO = "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero";
 const icons: Record<Room, React.ReactNode> = {
   desk: <><rect x="3" y="5" width="18" height="14" rx="1" /><path d="M3 9h18M7 13h7" /></>,
   library: <path d="M4 4h4v16H4zM10 4h4v16h-4zM16 6l4-1 3 15-4 1z" />,
+  clerk: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c1-4 4-6 7-6s6 2 7 6M3 20h18" /></>,
   about: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
 };
-const roomLabels: Record<Room, string> = { desk: "Desk", library: "Library and index", about: "About" };
+const roomLabels: Record<Room, string> = { desk: "Desk", library: "Library and index", clerk: "Desk clerk (model)", about: "About" };
 
 /** The QSL signal: "received", in Morse. The only place the lab signs the app. */
 const QslLine: React.FC = () => (
@@ -71,9 +75,11 @@ const DeskShell: React.FC = () => {
   const desk = useDesk();
   const navigate = useNavigate();
   const [stats, setStats] = useState<IndexStats | null>(null);
+  const [clerk, setClerk] = useState<DeskModel | null>(null);
 
   useEffect(() => {
     request<IndexStats>("/api/index_stats").then(setStats).catch(() => setStats(null));
+    deskModel().then(setClerk).catch(() => setClerk(null));
   }, [desk.room]);
 
   return (
@@ -91,6 +97,18 @@ const DeskShell: React.FC = () => {
           <span className="desk__index mono" title="What the desk can search">
             {stats.indexed_items.toLocaleString()} items · {stats.total_chunks.toLocaleString()} passages · {stats.current_embedding_model}
           </span>
+        )}
+        {clerk && (
+          <button
+            type="button"
+            className="desk__clerk mono"
+            onClick={() => desk.setRoom("clerk")}
+            title={clerk.available ? `The desk clerk uses ${clerk.model}` : "No model: the desk works on its own"}
+          >
+            {clerk.available
+              ? `clerk · ${clerk.model.split("/").pop()}${clerk.measured ? "" : " (unmeasured)"}${desk.clerk.working ? " · working" : ""}`
+              : "no clerk"}
+          </button>
         )}
         <button type="button" className="icon-button" aria-label="Settings" onClick={() => navigate("/settings")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -125,6 +143,7 @@ const DeskShell: React.FC = () => {
         <aside className="desk__ask" aria-label={roomLabels[desk.room]}>
           {desk.room === "desk" && <QueryDesk />}
           {desk.room === "library" && <LibraryManagementPanel />}
+          {desk.room === "clerk" && <ClerkRoom />}
           {desk.room === "about" && <About />}
         </aside>
 

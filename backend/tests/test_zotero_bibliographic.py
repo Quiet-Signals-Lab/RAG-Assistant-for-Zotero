@@ -153,3 +153,10 @@ def test_known_items(bot, query, expected):
     assert [k["item_id"] for k in found] == expected
     for k in found:
         assert k["indexed"] == (k["item_id"] == "1")
+
+
+def test_doi_and_title_index_covers_parent_items_only(zlib):
+    dois, titles = zlib.get_doi_and_title_index()
+    assert dois == {"10.1177/0950017019862954": "2"}
+    assert titles["Riders on the storm"] == "2" and titles["Group paper 100% real"] == "6"
+    assert "The gig economy full text PDF" not in titles and "The gig economy deleted copy" not in titles

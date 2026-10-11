@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { request } from "../../api/client";
-import type { ScopeFilters } from "../../types/desk";
+import type { Relation, ScopeFilters } from "../../types/desk";
 import { useDesk, withoutScope } from "./DeskContext";
 
 type Vocabulary = { tags: string[]; collections: string[]; itemTypes: string[] };
@@ -40,6 +40,7 @@ function chipsFor(scope: ScopeFilters): Chip[] {
   scope.item_types?.forEach((t) => chips.push({ key: "item_types", value: t, label: t.replace(/([a-z])([A-Z])/g, "$1 $2").toLocaleLowerCase() }));
   if (scope.author) chips.push({ key: "author", label: `by ${scope.author}` });
   if (scope.title) chips.push({ key: "title", label: `title “${scope.title}”` });
+  scope.exclude?.forEach((x) => chips.push({ key: "exclude", value: x, label: `not ${x}` }));
   return chips;
 }
 
@@ -50,6 +51,13 @@ function removeChip(scope: ScopeFilters, chip: Chip): ScopeFilters {
   }
   return withoutScope(scope, chip.key, chip.value);
 }
+
+/** ISO 25964's thesaurus relations, as a catalogue card prints them. */
+const RELATION: Record<Relation, { abbr: string; title: string }> = {
+  broader: { abbr: "BT", title: "Broader term" },
+  narrower: { abbr: "NT", title: "Narrower term" },
+  related: { abbr: "RT", title: "Related term" },
+};
 
 const ScopeEditor: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const desk = useDesk();
@@ -140,8 +148,14 @@ const QueryDesk: React.FC = () => {
   }, [desk.setPane]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const manual = chipsFor(desk.scope);
-  const extracted = desk.useExtracted && desk.result && !desk.result.scope.extracted_ignored ? chipsFor(desk.result.scope.extracted) : [];
+  // When the read limits found nothing and were set aside, exclusions still applied: keep showing them.
+  const readScope = desk.result?.scope;
+  const extracted = desk.useExtracted && readScope
+    ? chipsFor(readScope.extracted_ignored ? { exclude: readScope.extracted.exclude } : readScope.extracted)
+    : [];
   const current = desk.result?.query.toLocaleLowerCase();
+  const scopeRead = desk.result?.scope;
+  const topicDiffers = !!scopeRead?.topic && scopeRead.topic.toLocaleLowerCase() !== current;
 
   return (
     <div className="query-desk">
@@ -173,6 +187,15 @@ const QueryDesk: React.FC = () => {
         </button>
       </form>
 
+      {topicDiffers && extracted.length > 0 && (
+        <p className="query-desk__reading">
+          Searched for <q>{scopeRead?.topic}</q>
+          <span className="query-desk__reader">
+            {scopeRead?.read_by === "model" ? " · limits read by the clerk" : " · limits read by the desk"}
+          </span>
+        </p>
+      )}
+
       <section className="query-desk__section" aria-labelledby="scope-heading">
         <h2 id="scope-heading" className="desk-label">Scope</h2>
         <div className="chips">
@@ -180,6 +203,12 @@ const QueryDesk: React.FC = () => {
             <button type="button" className="chip chip--on" onClick={() => desk.searchWithin(null)} title="Search the whole library again">
               within {desk.within.label} <span aria-hidden="true">×</span>
               <span className="sr-only">, remove</span>
+            </button>
+          )}
+          {desk.setAside.length > 0 && (
+            <button type="button" className="chip chip--on" onClick={() => desk.putAside(null)} title="Bring them back into the list">
+              {desk.setAside.length} item{desk.setAside.length === 1 ? "" : "s"} set aside <span aria-hidden="true">×</span>
+              <span className="sr-only">, bring back</span>
             </button>
           )}
           {manual.map((chip) => (
@@ -211,6 +240,25 @@ const QueryDesk: React.FC = () => {
         </div>
         {editing && <ScopeEditor onClose={() => setEditing(false)} />}
       </section>
+
+      {desk.clerk.alsoTry && desk.clerk.alsoTry.length > 0 && (
+        <section className="query-desk__section" aria-labelledby="also-heading">
+          <h2 id="also-heading" className="desk-label desk-label--split">
+            <span>Also try</span>
+            <span className="desk-label__aside">from your library</span>
+          </h2>
+          <ul className="also-try">
+            {desk.clerk.alsoTry.map((s) => (
+              <li key={s.term}>
+                <button type="button" className="also-try__term" onClick={() => desk.submit(s.term)}>
+                  <abbr className="also-try__rel" title={RELATION[s.relation].title}>{RELATION[s.relation].abbr}</abbr>
+                  <span>{s.term}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="query-desk__section" aria-labelledby="log-heading">
         <h2 id="log-heading" className="desk-label desk-label--split">

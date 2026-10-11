@@ -11,11 +11,15 @@ from backend.interface import ZoteroChatbot
 
 # --- endpoint -------------------------------------------------------------------
 
+SETTINGS = {"deskReadQuery": True, "deskReadTimeout": 5, "deskNotes": True, "deskAlsoTry": False, "deskThemes": False}
+
+
 @pytest.fixture
 def client(monkeypatch):
     bot = Mock()
     bot.search.return_value = {"query": "q", "items": [], "known_items": [], "scope": {}, "see_also_count": 0}
     monkeypatch.setattr(main, "chatbot", bot)
+    monkeypatch.setattr(main, "load_settings", lambda *a, **k: dict(SETTINGS))
     return TestClient(main.app), bot
 
 
@@ -40,6 +44,75 @@ def test_filters_are_cleaned_before_reaching_the_search(client):
     assert kwargs["manual_filters"] == {"year_min": 2015, "tags": ["Labour"], "collections": ["PhD"]}
     assert kwargs["use_metadata_filters"] is False
     assert kwargs["filter_item_ids"] == ["1", "2"]
+    assert kwargs["read_with_model"] is True and kwargs["read_timeout"] == 5.0
+
+
+def test_exclusions_and_excluded_items_reach_the_search(client):
+    c, bot = client
+    c.post("/api/search", json={"query": "q", "manual_filters": {"exclude": ["gig economy"]}, "exclude_item_ids": ["7", "8"]})
+    kwargs = bot.search.call_args.kwargs
+    assert kwargs["manual_filters"] == {"exclude": ["gig economy"]} and kwargs["exclude_item_ids"] == ["7", "8"]
+
+
+def test_annotate_streams_events_as_json_lines(client):
+    c, bot = client
+    bot.annotate.return_value = (e for e in [{"type": "note", "item_id": "1", "note": "Describes x.", "page": 3},
+                                             {"type": "done", "counts": {}}])
+    r = c.post("/api/annotate", json={"query": "q", "items": [
+        {"item_id": "1", "title": "T", "passages": [{"page": 3, "text": "x"}, {"page": "bad", "text": "y"}]}]})
+    import json
+    events = [json.loads(line) for line in r.text.splitlines()]
+    assert [e["type"] for e in events] == ["note", "done"]
+    args, kwargs = bot.annotate.call_args
+    assert args[1][0]["passages"][1]["page"] is None  # a non-integer page from the client is dropped
+    assert (kwargs["notes"], kwargs["also_try"], kwargs["themes"]) == (True, False, False)
+
+
+def test_annotate_needs_a_query(client):
+    c, _ = client
+    assert c.post("/api/annotate", json={"items": []}).status_code == 400
+
+
+def test_desk_model_reports_availability_and_measurements(client):
+    c, bot = client
+    from types import SimpleNamespace
+    bot.clerk.model.return_value = "lmstudio/never-measured-model"
+    bot.clerk.available.return_value = True
+    bot.provider_manager.get_active_provider.return_value = SimpleNamespace(requires_api_key=False)
+    body = c.get("/api/desk/model").json()
+    assert body == {"available": True, "model": "lmstudio/never-measured-model", "measured": None,
+                    "cloud": False, "cloud_allowed": False,
+                    "jobs": {"read_query": True, "notes": True, "also_try": False, "themes": False}}
+
+
+def test_annotate_refuses_a_body_not_sent_as_json(client):
+    c, bot = client
+    import json
+    r = c.post("/api/annotate", content=json.dumps({"query": "q", "items": []}), headers={"Content-Type": "text/plain"})
+    assert r.status_code == 422
+    bot.annotate.assert_not_called()
+
+
+def test_annotate_survives_odd_item_shapes_and_uses_one_worker_for_a_local_model(client):
+    from types import SimpleNamespace
+    c, bot = client
+    bot.provider_manager.get_active_provider.return_value = SimpleNamespace(requires_api_key=False)
+    bot.annotate.return_value = (e for e in [{"type": "done", "counts": {}}])
+    r = c.post("/api/annotate", json={"query": "q", "items": [
+        {"item_id": "1", "passages": "not a list", "tags": "x"}, {"item_id": "2", "passages": ["text", {"text": "ok"}]}]})
+    assert r.status_code == 200
+    args, kwargs = bot.annotate.call_args
+    assert args[1][0]["passages"] == [] and args[1][1]["passages"] == [{"page": None, "text": "ok"}]
+    assert kwargs["workers"] == 1
+
+
+def test_the_clerk_may_use_a_cloud_model_only_when_the_desk_allows_it(client, monkeypatch):
+    c, bot = client
+    c.post("/api/search", json={"query": "q"})
+    assert bot.clerk.allow_cloud is False
+    monkeypatch.setattr(main, "load_settings", lambda *a, **k: {**SETTINGS, "deskClerkCloud": True})
+    c.post("/api/search", json={"query": "q"})
+    assert bot.clerk.allow_cloud is True
 
 
 def test_bad_year_is_400(client):
@@ -87,7 +160,8 @@ def test_search_returns_a_ranked_bibliography_with_citations(bot):
     assert out["items"][0]["citation"]["item_key"] == "KEY2"
     assert out["items"][1]["band"] == "good"
     assert out["see_also_count"] == 0
-    assert out["scope"] == {"manual": {}, "extracted": {}, "extracted_ignored": False}
+    assert out["scope"] == {"manual": {}, "extracted": {}, "extracted_ignored": False,
+                            "topic": "riders", "read_by": "library", "read_reason": ""}
     assert bot.chroma.query_hybrid_rrf.call_args.kwargs["k"] == ZoteroChatbot.DESK_RETRIEVAL_K
     bot.provider_manager.chat.assert_not_called()
 
@@ -138,3 +212,107 @@ def test_chat_fallback_keeps_an_explicit_item_scope(bot):
     bot.chat("riders since 2015", filter_item_ids=["7"], use_metadata_filters=True)
     retry_where = bot.chroma.query_hybrid_rrf.call_args_list[1].kwargs["where"]
     assert retry_where == {"item_id": {"$in": ["7"]}}
+
+
+def test_the_model_reading_sets_topic_and_scope(bot):
+    from backend.clerk import Result
+    bot.chroma.query_hybrid_rrf.return_value = hits(("1", 0))
+    reading = {"topic": "riders", "year_min": 2015, "year_max": None, "author": None, "tags": [],
+               "collections": [], "item_types": [], "exclude": []}
+    bot.clerk = Mock()
+    bot.clerk.run.return_value = Result(reading, "model")
+    with patch("backend.interface.rerank_passages", rerank_in_order([2.0])):
+        out = bot.search("riders who struck since 2015", read_with_model=True, read_timeout=3)
+    assert bot.clerk.run.call_args.kwargs["timeout"] == 3
+    assert out["scope"]["read_by"] == "model" and out["scope"]["extracted"] == {"year_min": 2015}
+    assert bot.chroma.query_hybrid_rrf.call_args.kwargs["query"] == "riders"
+
+
+def test_a_failed_model_reading_falls_back_to_the_library_and_says_why(bot):
+    from backend.clerk import Result
+    bot.chroma.query_hybrid_rrf.return_value = hits(("1", 0))
+    bot.clerk = Mock()
+    bot.clerk.run.side_effect = lambda job, data, timeout=None: Result(data["library_reading"], "fallback", "timeout")
+    with patch("backend.interface.rerank_passages", rerank_in_order([2.0])):
+        out = bot.search("riders since 2015", read_with_model=True)
+    assert out["scope"]["read_by"] == "library" and out["scope"]["read_reason"] == "timeout"
+    assert out["scope"]["extracted"] == {"year_min": 2015}
+
+
+def test_excluded_terms_drop_matching_passages(bot):
+    bot.chroma.query_hybrid_rrf.return_value = {
+        "documents": [["riders and medical imaging", "riders on strike"]],
+        "metadatas": [[{"item_id": "1", "title": "A", "page": 1}, {"item_id": "2", "title": "B", "page": 1}]]}
+    with patch("backend.interface.rerank_passages", rerank_in_order([3.0, 2.0])):
+        out = bot.search("riders, not medical imaging")
+    assert [it["item_id"] for it in out["items"]] == ["2"]
+    assert out["scope"]["extracted"] == {"exclude": ["medical imaging"]}
+
+
+def test_excluded_items_are_filtered_out_in_the_search(bot):
+    bot.chroma.query_hybrid_rrf.return_value = hits(("1", 0))
+    with patch("backend.interface.rerank_passages", rerank_in_order([2.0])):
+        bot.search("riders", exclude_item_ids=["9"])
+    assert bot.chroma.query_hybrid_rrf.call_args.kwargs["where"] == {"item_id": {"$nin": ["9"]}}
+
+
+def test_annotate_queues_notes_for_the_top_rows_before_the_rest_of_the_work():
+    from types import SimpleNamespace
+    from backend.clerk import Result
+    from backend.interface import ZoteroChatbot
+
+    order = []
+
+    class FakeClerk:
+        def available(self):
+            return True
+
+        def model(self):
+            return "fake/model"
+
+        def run(self, job, data):
+            order.append(job.name if job.name != "note" else f"note:{data['title']}")
+            if job.name == "note":
+                return Result({"note": "Describes it.", "page": 1, "support": 0.9}, "model")
+            return Result([{"term": "Labour", "relation": "related"}], "model")
+
+    items = [{"item_id": str(i), "title": f"T{i}", "tags": ["Labour"], "band": "good",
+              "passages": [{"page": 1, "text": "x"}]} for i in range(5)]
+    items.append({"item_id": "s", "title": "Ts", "tags": [], "band": "see_also", "passages": [{"page": 1, "text": "x"}]})
+    me = SimpleNamespace(clerk=FakeClerk(), embedding_model_id="none")
+    events = list(ZoteroChatbot.annotate(me, "q", items, themes=False, workers=1))
+
+    assert order == ["note:T0", "note:T1", "note:T2", "also_try", "note:T3", "note:T4"]  # no note for see-also rows
+    assert [e["type"] for e in events].count("note") == 5 and events[-1]["type"] == "done"
+    assert events[-1]["counts"]["model"] == 6
+
+
+def test_one_failed_annotate_job_does_not_end_the_stream():
+    from types import SimpleNamespace
+    from backend.clerk import Result
+    from backend.interface import ZoteroChatbot
+
+    class Clerk:
+        def available(self):
+            return True
+
+        def model(self):
+            return "m"
+
+        def run(self, job, data):
+            if job.name == "also_try":
+                raise RuntimeError("embedding service down")
+            return Result({"note": "Describes it.", "page": 1, "support": 0.9}, "model")
+
+    items = [{"item_id": str(i), "title": "T", "tags": ["Labour"], "band": "good", "passages": [{"page": 1, "text": "x"}]}
+             for i in range(4)]
+    events = list(ZoteroChatbot.annotate(SimpleNamespace(clerk=Clerk(), embedding_model_id="x"), "q", items, themes=False, workers=1))
+    assert [e["type"] for e in events].count("note") == 4 and events[-1]["counts"]["reasons"] == {"error": 1}
+
+
+def test_an_item_set_aside_is_not_pinned_back_as_the_known_item(bot):
+    bot.chroma.query_hybrid_rrf.return_value = hits(("1", 0))
+    bot.zlib.find_items_by_creator_year.return_value = ["9"]
+    with patch("backend.interface.rerank_passages", rerank_in_order([2.0])):
+        assert [k["item_id"] for k in bot.search("Woodcock 2020")["known_items"]] == ["9"]
+        assert bot.search("Woodcock 2020", exclude_item_ids=["9"])["known_items"] == []

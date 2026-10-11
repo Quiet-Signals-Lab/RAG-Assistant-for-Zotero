@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The reference desk is the new default.** Instead of a chat that answers, the app returns a ranked bibliography of the items in your library that bear on a query, with the sentence that matched and its page under each reference, and the evidence one click away. Three panes: ask (query, scope chips, query log), browse (the bibliography) and verify (the passages, open at the page in Zotero's reader). Items are ranked by their best passage after hybrid search and cross-encoder reranking; relevance is shown as strong, good, weak or see also, never as a percentage. Design and sources: `docs/REFERENCE_DESK_PLAN.md`.
+- **Queries are read for their limits.** Years ("since 2015", "the 1970s", "pre-2000", "the last five years", and "depuis", "seit", "desde"), authors ("by Berlant", "Berlant's books"), tags, collections ("my thesis folder"), kinds of item ("chapters on …") and exclusions ("not about Deliveroo") are matched against your library's own names and shown as chips you can remove. Phrases the reader does not know stay in the search.
+- **Known items**: a DOI, ISBN, arXiv id, quoted title, or author and year pins that item above the list, with "search inside this".
+- **The desk clerk (optional).** With a model set up, the desk uses it for small jobs, each checked before it is shown: reading queries the desk's own reader cannot fully read, a one-line note on each item that must be entailed by its passages (labelled "Clerk's note"; otherwise the extract stays), next searches chosen from your own tags, and names for theme groups. Every job falls back to the desk's own work when the model is missing, slow, or fails a check. Measured on Qwen3-4B, Llama 3.2 3B and Qwen3 1.7B on an M1 Mac: `docs/DESK_CLERK.md`. The jobs are switched in the new Clerk room on the desk's rail. A cloud provider is used by the clerk only when you allow it there: a key set up for legacy chat does not send your passages on every search.
+- **Group and narrow**: group the list by decade, kind of item, collection, first author, journal or theme; narrow to the busiest decade or collection; set the top results aside; "more like this" from any item.
+- **References and citations** for any item from Semantic Scholar, with the works already in your library marked. Only the item's DOI (or title) is sent, and only when you ask.
+- **Export**: save the list as BibTeX, RIS, or a pathfinder (a Markdown subject guide with notes, extracts and pinned passages), besides copying APA references.
+- **Pins and the query log are kept per profile** in `desk.json` next to the profile's settings.
+- `scripts/eval_clerk.py` measures a model on the clerk's jobs; `scripts/eval_ranking.py` pools, scores and calibrates the ranking against your own relevance judgments.
+
+### Changed
+- **Legacy chat** is still available: Settings → General → Interface → Legacy chat. It shares the new look and otherwise works as before.
+- **A new look**, "Reading Room": paper and ink colours, hairlines instead of shadows, catalogue-card details, a dark "after hours" theme. Settings and legacy chat use it too.
+- Structured output for model providers: Ollama, OpenAI and LM Studio receive a JSON schema; Mistral, Groq and OpenRouter a JSON mode. Repetition penalties are off for these calls, since they penalise the quotes and braces JSON is made of.
+
+### Fixed
+- Legacy chat's evidence pane inserted PDF text as raw HTML; it is now shown as text.
+- Legacy chat's sources no longer show an invented relevance percentage or load site icons from Google.
+- Settings named the wrong licence; the project is GPL-3.0.
+
 ## [0.6.0] - 2026-10-10
 
 ### Fixed

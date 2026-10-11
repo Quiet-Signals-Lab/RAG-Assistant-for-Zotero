@@ -1,0 +1,186 @@
+{
+  "about": "Models the desk clerk has been measured with (scripts/eval_clerk.py --record). 'match' patterns are compared with the model name normalised by backend/clerk.py _normalise_model. Results are counts on backend/tests/fixtures/clerk_eval.json; see docs/DESK_CLERK.md for what they mean and their limits.",
+  "models": [
+    {
+      "label": "Qwen3-4B-Instruct-2507",
+      "match": [
+        "^qwen3-4b-instruct-2507$",
+        "^qwen3-4b-instruct$"
+      ],
+      "measured": "2026-10-11",
+      "hardware": "Apple M1, 16 GB, MLX 4-bit",
+      "results": {
+        "read_query": {
+          "cases": 54,
+          "model_asked": 20,
+          "model_used": 20,
+          "correct": 53,
+          "library_reader_correct": 42,
+          "by_group": {
+            "plain": {
+              "cases": 24,
+              "correct": 24,
+              "library_reader_correct": 23
+            },
+            "beyond": {
+              "cases": 10,
+              "correct": 10,
+              "library_reader_correct": 4
+            },
+            "trap": {
+              "cases": 6,
+              "correct": 6,
+              "library_reader_correct": 6
+            },
+            "heldout": {
+              "cases": 14,
+              "correct": 13,
+              "library_reader_correct": 9
+            }
+          },
+          "median_ms_when_asked": 5024,
+          "fallback_reasons": []
+        },
+        "note": {
+          "cases": 10,
+          "model_used": 9,
+          "median_ms": 3055,
+          "guard_catches": [
+            "guard: not supported by the passages (0.02)"
+          ]
+        },
+        "also_try": {
+          "cases": 4,
+          "model_used": 4,
+          "median_ms": 1960
+        },
+        "themes": {
+          "cases": 2,
+          "model_used": 2,
+          "median_ms": 4674
+        }
+      }
+    },
+    {
+      "label": "Llama 3.2 3B Instruct",
+      "match": [
+        "^llama-?3\\.2-3b(-instruct)?$",
+        "^llama3\\.2$"
+      ],
+      "measured": "2026-10-11",
+      "hardware": "Apple M1, 16 GB, MLX 4-bit",
+      "results": {
+        "read_query": {
+          "cases": 54,
+          "model_asked": 20,
+          "model_used": 18,
+          "correct": 49,
+          "library_reader_correct": 42,
+          "by_group": {
+            "plain": {
+              "cases": 24,
+              "correct": 23,
+              "library_reader_correct": 23
+            },
+            "beyond": {
+              "cases": 10,
+              "correct": 8,
+              "library_reader_correct": 4
+            },
+            "trap": {
+              "cases": 6,
+              "correct": 6,
+              "library_reader_correct": 6
+            },
+            "heldout": {
+              "cases": 14,
+              "correct": 12,
+              "library_reader_correct": 9
+            }
+          },
+          "median_ms_when_asked": 3240,
+          "fallback_reasons": [
+            "malformed"
+          ]
+        },
+        "note": {
+          "cases": 10,
+          "model_used": 10,
+          "median_ms": 2050,
+          "guard_catches": []
+        },
+        "also_try": {
+          "cases": 4,
+          "model_used": 4,
+          "median_ms": 1333
+        },
+        "themes": {
+          "cases": 2,
+          "model_used": 2,
+          "median_ms": 2430
+        }
+      }
+    },
+    {
+      "label": "Qwen3 1.7B",
+      "match": [
+        "^qwen3-1\\.7b$"
+      ],
+      "measured": "2026-10-11",
+      "hardware": "Apple M1, 16 GB, MLX 4-bit",
+      "results": {
+        "read_query": {
+          "cases": 54,
+          "model_asked": 20,
+          "model_used": 20,
+          "correct": 50,
+          "library_reader_correct": 42,
+          "by_group": {
+            "plain": {
+              "cases": 24,
+              "correct": 24,
+              "library_reader_correct": 23
+            },
+            "beyond": {
+              "cases": 10,
+              "correct": 9,
+              "library_reader_correct": 4
+            },
+            "trap": {
+              "cases": 6,
+              "correct": 6,
+              "library_reader_correct": 6
+            },
+            "heldout": {
+              "cases": 14,
+              "correct": 11,
+              "library_reader_correct": 9
+            }
+          },
+          "median_ms_when_asked": 2284,
+          "fallback_reasons": []
+        },
+        "note": {
+          "cases": 10,
+          "model_used": 7,
+          "median_ms": 1294,
+          "guard_catches": [
+            "guard: evaluative: showing",
+            "guard: not supported by the passages (0.02)",
+            "guard: not supported by the passages (0.25)"
+          ]
+        },
+        "also_try": {
+          "cases": 4,
+          "model_used": 4,
+          "median_ms": 962
+        },
+        "themes": {
+          "cases": 2,
+          "model_used": 2,
+          "median_ms": 1658
+        }
+      }
+    }
+  ]
+}

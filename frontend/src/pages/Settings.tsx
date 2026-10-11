@@ -591,7 +591,7 @@ const Settings: React.FC = () => {
           {activeTab === 'local' && (
             <Section
               title="Local providers"
-              description="Model servers on this computer. No key is needed and nothing leaves the machine. Used by legacy chat."
+              description="Model servers on this computer. No key is needed and nothing leaves the machine. Used by the desk clerk (optional) and by legacy chat."
             >
               {localProviders.map(provider => renderProviderCard(provider))}
             </Section>
@@ -600,7 +600,7 @@ const Settings: React.FC = () => {
           {activeTab === 'cloud' && (
             <Section
               title="Cloud providers"
-              description="External model services. They need an API key, and your question and passages are sent to them. Used by legacy chat."
+              description="External model services. They need an API key, and your query and passages are sent to them. Used by the desk clerk (optional) and by legacy chat."
             >
               {cloudProviders.map(provider => renderProviderCard(provider))}
             </Section>

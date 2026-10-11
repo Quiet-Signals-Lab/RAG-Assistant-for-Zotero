@@ -44,6 +44,14 @@ export interface Settings {
   theme?: 'light' | 'dark';
   /** 'desk' (the reference desk, default) or 'chat' (legacy chat mode). */
   interfaceMode?: 'desk' | 'chat';
+  /** The desk clerk's jobs (backend/clerk_jobs.py); each needs a model and falls back without one. */
+  deskReadQuery?: boolean;
+  deskReadTimeout?: number;
+  deskNotes?: boolean;
+  deskAlsoTry?: boolean;
+  deskThemes?: boolean;
+  /** Let the clerk use a cloud provider (queries and passages are sent to it). Off by default. */
+  deskClerkCloud?: boolean;
 }
 
 interface SettingsContextType {

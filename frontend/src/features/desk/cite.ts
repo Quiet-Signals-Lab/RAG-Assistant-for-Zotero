@@ -186,3 +186,8 @@ export function sortName(item: CitableItem): string {
   const first = item.citation ? primaryCreators(item.citation).list[0]?.last : item.authors.split(",")[0];
   return (first || item.citation?.title || item.title || "").trim().toLocaleLowerCase();
 }
+
+/** "journal article" from Zotero's "journalArticle". */
+export function itemTypeLabel(type: string): string {
+  return type.replace(/([a-z])([A-Z])/g, "$1 $2").toLocaleLowerCase();
+}

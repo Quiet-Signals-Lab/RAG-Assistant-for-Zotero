@@ -16,8 +16,10 @@ from backend.model_providers.base import (
 from backend.conversation_store import ConversationStore
 from backend.academic_prompts import AcademicPrompts, AcademicGenerationParams
 from backend.query_condenser import QueryCondenser
+from backend.clerk import Clerk
 import os
 import re
+from datetime import date
 from collections import OrderedDict
 from typing import Dict, Optional
 import threading
@@ -58,6 +60,11 @@ class ZoteroChatbot:
         
         # Initialize query condenser for follow-up question handling
         self.query_condenser = QueryCondenser(self.provider_manager)
+
+        # The reference desk's small-model jobs (backend/clerk.py)
+        self.clerk = Clerk(self.provider_manager)
+        self._vocab = None
+        self._vocab_at = 0.0
         
         # Indexing state for reporting progress via /index_status
         self.is_indexing = False
@@ -565,8 +572,13 @@ class ZoteroChatbot:
         use_metadata_filters=False,
         manual_filters=None,
         provider_manager=None,
+        extracted=None,
+        exclude_item_ids=None,
     ):
         """Combine item ids, manual filters and filters read from the query into one where clause.
+
+        `extracted` is a scope already read from the query (the desk reads it itself);
+        `exclude_item_ids` leaves those items out.
 
         `provider_manager=None` keeps extraction to the regex pass, so no model runs.
 
@@ -588,9 +600,10 @@ class ZoteroChatbot:
                 item_types=f.get("item_types"),
             )
 
-        extracted = None
         metadata_where = None
-        if use_metadata_filters:
+        if extracted:
+            metadata_where = clause(extracted)
+        elif use_metadata_filters:
             found = extract_metadata_filters(query, provider_manager)
             if found["has_filters"]:
                 extracted = found
@@ -601,7 +614,9 @@ class ZoteroChatbot:
             logger.debug(f"METADATA FILTERS (manual): {manual_filters}")
 
         item_where = {"item_id": {"$in": list(filter_item_ids)}} if filter_item_ids else None
-        return merge_where_clauses(item_where, metadata_where), extracted, item_where
+        if exclude_item_ids:
+            item_where = merge_where_clauses(item_where, {"item_id": {"$nin": list(exclude_item_ids)}})
+        return merge_where_clauses(item_where, metadata_where), extracted or None, item_where
 
     def _search_and_rerank(self, query, where, k, rerank_top_k, use_rrf=True, fallback_where=None):
         """Hybrid search under `where`, then cross-encoder rerank.
@@ -640,31 +655,63 @@ class ZoteroChatbot:
     DESK_MAX_ITEMS = 30
     DESK_MAX_KNOWN_ITEMS = 3
 
-    def search(self, query, manual_filters=None, use_metadata_filters=True, filter_item_ids=None):
-        """Reference desk search: a ranked bibliography with its evidence. No model is called.
+    def search(
+        self,
+        query,
+        manual_filters=None,
+        use_metadata_filters=True,
+        filter_item_ids=None,
+        exclude_item_ids=None,
+        read_with_model=False,
+        read_timeout=None,
+    ):
+        """Reference desk search: a ranked bibliography with its evidence.
 
-        Scope read from the query uses the regex pass only. If that scope matches
-        nothing it is dropped and the response says so, so the UI never shows a
-        chip that is silently not applied.
+        The request is read into topic and scope: by the clerk's model when
+        `read_with_model` and a model is available, otherwise by matching the
+        library's vocabulary. The search runs on the topic, the scope becomes
+        filters, and scope that matches nothing is dropped and reported, so the
+        UI never shows a chip that is silently not applied.
         """
-        from backend import desk
+        from backend import clerk_jobs, desk
 
         started = time.perf_counter()
         query = (query or "").strip()
-        where, extracted, _ = self._build_filter(
-            query, filter_item_ids=filter_item_ids,
-            use_metadata_filters=use_metadata_filters, manual_filters=manual_filters,
+        manual_filters = manual_filters or {}
+
+        reading, read_by, read_reason = None, None, ""
+        if use_metadata_filters:
+            data = clerk_jobs.read_query_input(query, self._vocabulary(), date.today())
+            if read_with_model:
+                result = self.clerk.run(clerk_jobs.READ_QUERY, data, timeout=read_timeout)
+                reading, read_reason = result.value, result.reason
+                read_by = "model" if result.source == "model" else "library"
+            else:
+                reading, read_by = data["library_reading"], "library"
+        read_done = time.perf_counter()
+
+        extracted = desk.extracted_scope(reading)
+        exclude = list(extracted.pop("exclude", [])) + list(manual_filters.get("exclude") or [])
+        topic = (reading or {}).get("topic") or query
+
+        where, extracted_or_none, _ = self._build_filter(
+            topic, filter_item_ids=filter_item_ids, manual_filters=manual_filters,
+            extracted=extracted, exclude_item_ids=exclude_item_ids,
         )
         base_where = where
         if extracted:
             base_where, _, _ = self._build_filter(
-                query, filter_item_ids=filter_item_ids, manual_filters=manual_filters,
+                topic, filter_item_ids=filter_item_ids, manual_filters=manual_filters,
+                exclude_item_ids=exclude_item_ids,
             )
-        topic = desk.topic_of(query) if extracted else query
         docs, metas, scores, fell_back = self._search_and_rerank(
             topic, where=where, k=self.DESK_RETRIEVAL_K,
             rerank_top_k=self.DESK_RERANK_K, fallback_where=base_where,
         )
+        if exclude:
+            kept = [i for i, (doc, meta) in enumerate(zip(docs, metas))
+                    if not desk.excluded(f"{(meta or {}).get('title', '')} {doc}", exclude)]
+            docs, metas, scores = [docs[i] for i in kept], [metas[i] for i in kept], [scores[i] for i in kept]
         retrieved = time.perf_counter()
 
         items = desk.build_bibliography(docs, metas, scores, topic, max_items=self.DESK_MAX_ITEMS)
@@ -673,6 +720,8 @@ class ZoteroChatbot:
         except Exception as e:
             logger.warning("Known-item lookup failed: %s", e)
             known = []
+        # An item set aside (the source of "more like this") is not pinned back on top.
+        known = [k for k in known if str(k["item_id"]) not in set(map(str, exclude_item_ids or []))]
         try:
             citations = self.zlib.get_bibliographic([it["item_id"] for it in items] + [k["item_id"] for k in known])
         except Exception as e:
@@ -681,21 +730,143 @@ class ZoteroChatbot:
         for entry in items + known:
             entry["citation"] = citations.get(entry["item_id"])
 
+        shown = dict(extracted)
+        if reading and reading.get("exclude"):
+            shown["exclude"] = reading["exclude"]
         return {
             "query": query,
             "scope": {
-                "manual": manual_filters or {},
-                "extracted": desk.extracted_scope(extracted),
+                "manual": manual_filters,
+                "extracted": shown,
                 "extracted_ignored": bool(extracted) and fell_back,
+                "topic": topic,
+                "read_by": read_by,
+                "read_reason": read_reason,
             },
             "known_items": known,
             "items": items,
             "see_also_count": sum(1 for it in items if it["band"] == desk.SEE_ALSO),
             "timing_ms": {
-                "retrieve": round((retrieved - started) * 1000),
+                "read": round((read_done - started) * 1000),
+                "retrieve": round((retrieved - read_done) * 1000),
                 "total": round((time.perf_counter() - started) * 1000),
             },
         }
+
+    VOCAB_TTL = 600  # seconds; tags and collections change rarely during a session
+
+    def _vocabulary(self):
+        """The library's names a request can refer to: authors, tags, collections, item types."""
+        if self._vocab is not None and time.time() - self._vocab_at < self.VOCAB_TTL:
+            return self._vocab
+        try:
+            vocab = {
+                "authors": self.zlib.get_creator_last_names(),
+                "tags": self.zlib.get_all_tags(),
+                "collections": [c["name"] for c in self.zlib.get_all_collections()],
+                "item_types": [t["name"] for t in self.zlib.get_all_item_types()],
+            }
+        except Exception as e:
+            logger.warning("Could not read the library's vocabulary: %s", e)
+            vocab = {"authors": [], "tags": [], "collections": [], "item_types": []}
+        self._vocab, self._vocab_at = vocab, time.time()
+        return vocab
+
+    def annotate(self, query, items, notes=True, also_try=True, themes=True, workers=2):
+        """The clerk's work on a result list, yielded as each piece finishes.
+
+        Events: {"type": "note"} per item, {"type": "also_try"} and {"type": "themes"},
+        in order of completion, then {"type": "done"} with counts. Work is queued by
+        what the reader sees first: notes for the top three rows, the next searches,
+        the theme labels, then the remaining notes; a local server takes one call at a
+        time, so the order is what the reader waits for. Closing the generator cancels
+        work that has not started.
+        """
+        import concurrent.futures
+        from backend import clerk_jobs
+        from backend.embed_utils import get_embeddings_batch
+
+        started = time.perf_counter()
+        counts = {"model": 0, "fallback": 0, "reasons": {}}
+        listed = [it for it in items if it.get("band") != "see_also"]
+
+        def note_task(item):
+            def run():
+                result = self.clerk.run(clerk_jobs.NOTE, clerk_jobs.note_input(query, item))
+                event = {"type": "note", "item_id": item["item_id"], **result.value} if result.source == "model" and result.value else None
+                return result, event
+            return run
+
+        def also_try_task():
+            data = clerk_jobs.also_try_input(query, items)
+            if not data["candidates"]:
+                return None, None
+            result = self.clerk.run(clerk_jobs.ALSO_TRY, data)
+            return result, {"type": "also_try", "suggestions": result.value, "source": result.source}
+
+        def themes_task():
+            groups = clerk_jobs.cluster_items(listed, embed=lambda texts: get_embeddings_batch(texts, self.embedding_model_id))
+            if not groups:
+                return None, None
+            result = self.clerk.run(clerk_jobs.THEMES, {"groups": groups})
+            return result, {
+                "type": "themes",
+                "source": result.source,
+                "groups": [{"label": result.value.get(g["id"]), "item_ids": g["item_ids"]} for g in groups],
+            }
+
+        noted = [note_task(it) for it in listed if it.get("passages")] if notes and self.clerk.available() else []
+        tasks = noted[:3] + ([also_try_task] if also_try else []) + ([themes_task] if themes else []) + noted[3:]
+
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="annotate")
+        futures = [pool.submit(task) for task in tasks]
+        try:
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result, event = future.result()
+                except Exception as e:  # one failed job (an embedding error, say) must not end the others
+                    logger.warning("Annotate job failed: %s", e)
+                    counts["reasons"]["error"] = counts["reasons"].get("error", 0) + 1
+                    continue
+                if result is not None:
+                    counts[result.source] += 1
+                    if result.reason:
+                        kind = result.reason.split(":")[0]
+                        counts["reasons"][kind] = counts["reasons"].get(kind, 0) + 1
+                if event is not None:
+                    yield event
+        finally:
+            for future in futures:
+                future.cancel()
+            pool.shutdown(wait=False, cancel_futures=True)
+
+        yield {"type": "done", "counts": counts, "model": self.clerk.model(), "ms": round((time.perf_counter() - started) * 1000)}
+
+    def citation_chain(self, item_id):
+        """An item's references and the works citing it (Semantic Scholar), the reader's own copies marked.
+
+        None when the item is not in the library; {"found": False} when Semantic
+        Scholar does not know it. Network errors propagate for the endpoint to explain.
+        """
+        from backend import desk
+        from backend.external_api_utils import fetch_citation_chain
+
+        citation = self.zlib.get_bibliographic([item_id]).get(str(item_id))
+        if not citation:
+            return None
+        doi = re.sub(r"^https?://(dx\.)?doi\.org/", "", citation.get("doi") or "", flags=re.I).strip()
+        chain = fetch_citation_chain(doi=doi or None, title=None if doi else citation.get("title"))
+        if chain is None:
+            return {"found": False}
+        dois, titles = self.zlib.get_doi_and_title_index()
+        for relation in ("references", "cited_by"):
+            chain[relation] = desk.mark_owned(chain[relation], dois, titles)
+        owned = {e["owned_item_id"] for r in ("references", "cited_by") for e in chain[r] if e["owned_item_id"]}
+        citations = self.zlib.get_bibliographic(owned) if owned else {}
+        for relation in ("references", "cited_by"):
+            for entry in chain[relation]:
+                entry["citation"] = citations.get(entry["owned_item_id"]) if entry["owned_item_id"] else None
+        return {"found": True, **chain}
 
     def _known_items(self, query):
         """Items the query names directly: DOI, ISBN, arXiv id, a title, or author and year."""

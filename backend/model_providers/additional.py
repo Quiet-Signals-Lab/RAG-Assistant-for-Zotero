@@ -14,6 +14,8 @@ os.environ['GRPC_TRACE'] = ''
 
 from typing import Dict, Any, List
 from .base import (
+    structured_request,
+    repetition_penalty,
     BaseProvider, Message, ChatResponse, ModelInfo,
     ProviderError, ProviderAuthenticationError, ProviderConnectionError,
     ProviderRateLimitError, ProviderContextError,
@@ -200,6 +202,7 @@ class MistralProvider(BaseProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=mapped_params.get("top_p", 0.9),
+                **structured_request(kwargs, mode="json_object"),
             )
             
             content = response.choices[0].message.content or ""
@@ -831,7 +834,8 @@ class GroqProvider(BaseProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=mapped_params.get("top_p", 0.9),
-                frequency_penalty=mapped_params.get("frequency_penalty", 0.3),
+                frequency_penalty=repetition_penalty(kwargs, mapped_params.get("frequency_penalty", 0.3)),
+                **structured_request(kwargs, mode="json_object"),
             )
             
             content = response.choices[0].message.content or ""
@@ -1029,7 +1033,8 @@ class OpenRouterProvider(BaseProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=mapped_params.get("top_p", 0.9),
-                frequency_penalty=mapped_params.get("frequency_penalty", 0.3),
+                frequency_penalty=repetition_penalty(kwargs, mapped_params.get("frequency_penalty", 0.3)),
+                **structured_request(kwargs, mode="json_object"),
             )
             
             content = response.choices[0].message.content or ""

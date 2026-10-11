@@ -209,3 +209,63 @@ def _match_paper_by_author(results: List[Any], authors_str: Union[str, List[str]
     logger.info("No author match found, using first search result")
     return results[0]
 
+
+
+S2_GRAPH = "https://api.semanticscholar.org/graph/v1"
+_S2_ENTRY = ("title", "year", "authors", "externalIds", "url")
+_S2_FIELDS = ",".join(["title", "year", "url"] + [f"{rel}.{f}" for rel in ("references", "citations") for f in _S2_ENTRY])
+
+
+def _s2_entry(paper: Dict[str, Any]) -> Dict[str, Any]:
+    ids = paper.get("externalIds") or {}
+    return {
+        "title": paper.get("title") or "",
+        "year": paper.get("year"),
+        "authors": [a.get("name") for a in (paper.get("authors") or []) if a.get("name")],
+        "doi": (ids.get("DOI") or "").lower() or None,
+        "url": paper.get("url") or (f"https://doi.org/{ids['DOI']}" if ids.get("DOI") else ""),
+    }
+
+
+def _s2_get(url: str, params: Dict[str, Any], headers: Dict[str, str], timeout: float):
+    """GET with one retry on 429: the keyless API is a shared, often busy pool."""
+    import time
+    r = requests.get(url, params=params, headers=headers, timeout=timeout)
+    if r.status_code == 429:
+        wait = r.headers.get("Retry-After", "")
+        time.sleep(min(float(wait), 5.0) if wait.replace(".", "", 1).isdigit() else 1.5)
+        r = requests.get(url, params=params, headers=headers, timeout=timeout)
+    return r
+
+
+def fetch_citation_chain(doi: Optional[str] = None, title: Optional[str] = None, timeout: float = 15.0) -> Optional[Dict[str, Any]]:
+    """An item's references and the works that cite it, from the Semantic Scholar Graph API.
+
+    One request by DOI, or a title match first when there is no DOI. Sends only the
+    DOI or title. Returns None when the paper is not found; raises on network errors
+    and rate limits (HTTP 429), so the caller can say which happened.
+    """
+    key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+    headers = {"x-api-key": key} if key else {}
+    paper_id = f"DOI:{doi}" if doi else None
+    if not paper_id and title:
+        r = _s2_get(f"{S2_GRAPH}/paper/search/match", {"query": title, "fields": "paperId"}, headers, timeout)
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        matches = r.json().get("data") or []
+        paper_id = matches[0].get("paperId") if matches else None
+    if not paper_id:
+        return None
+    r = _s2_get(f"{S2_GRAPH}/paper/{paper_id}", {"fields": _S2_FIELDS}, headers, timeout)
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    data = r.json()
+    return {
+        "title": data.get("title") or "",
+        "year": data.get("year"),
+        "url": data.get("url") or "",
+        "references": [_s2_entry(p) for p in data.get("references") or [] if p.get("title")],
+        "cited_by": [_s2_entry(p) for p in data.get("citations") or [] if p.get("title")],
+    }

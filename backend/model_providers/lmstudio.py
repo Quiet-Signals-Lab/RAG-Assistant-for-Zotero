@@ -8,6 +8,8 @@ sending data to external services.
 
 from typing import Dict, Any, List, Optional
 from .base import (
+    structured_request,
+    repetition_penalty,
     BaseProvider, Message, ChatResponse, ModelInfo,
     ProviderError, ProviderAuthenticationError, ProviderConnectionError,
     ProviderRateLimitError, ProviderContextError,
@@ -127,8 +129,9 @@ class LMStudioProvider(BaseProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=mapped_params.get("top_p", 0.9),
-                frequency_penalty=mapped_params.get("frequency_penalty", 0.3),
+                frequency_penalty=repetition_penalty(kwargs, mapped_params.get("frequency_penalty", 0.3)),
                 presence_penalty=kwargs.get("presence_penalty", 0.0),
+                **structured_request(kwargs),
             )
             
             # Extract response

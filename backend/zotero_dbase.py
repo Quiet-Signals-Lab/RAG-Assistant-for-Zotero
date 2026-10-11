@@ -366,6 +366,38 @@ class ZoteroLibrary:
             """, (f"{_like_escape(last_name)}%", f"{int(year)}%", limit))
             return [str(row[0]) for row in cur.fetchall()]
 
+    def get_doi_and_title_index(self):
+        """Every parent item's DOI and title, for marking the references a reader already owns.
+
+        Returns ({doi: item_id}, {title: item_id}) with DOIs lowercased and titles as
+        they are stored; callers normalise titles their own way.
+        """
+        dois, titles = {}, {}
+        with self._cursor() as cur:
+            cur.execute(f"""
+                SELECT i.itemID, f.fieldName, v.value
+                FROM items i
+                JOIN itemTypes t ON t.itemTypeID = i.itemTypeID
+                JOIN itemData d ON d.itemID = i.itemID
+                JOIN fields f ON f.fieldID = d.fieldID
+                JOIN itemDataValues v ON v.valueID = d.valueID
+                WHERE f.fieldName IN ('DOI', 'title')
+                  AND {self._PARENT_TYPES_SQL}
+                  AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
+            """)
+            for item_id, field, value in cur.fetchall():
+                if field == "DOI" and value:
+                    dois.setdefault(str(value).strip().lower(), str(item_id))
+                elif value:
+                    titles.setdefault(str(value), str(item_id))
+        return dois, titles
+
+    def get_creator_last_names(self):
+        """Every creator surname in the library, for reading "by X" in a search request."""
+        with self._cursor() as cur:
+            cur.execute("SELECT DISTINCT lastName FROM creators WHERE lastName IS NOT NULL AND lastName != ''")
+            return [row[0] for row in cur.fetchall()]
+
     def close(self):
         """Close thread-local connections. Call this on shutdown."""
         if hasattr(self._local, 'conn') and self._local.conn is not None:

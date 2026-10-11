@@ -332,11 +332,23 @@ def topic_of(query: str) -> str:
     return topic or (query or "").strip()
 
 
+def excluded(text: str, terms: Sequence[str]) -> bool:
+    """True when `text` mentions any excluded term: every content word of the term, by stem."""
+    if not terms:
+        return False
+    words = {stem(w) for w in _WORD.findall((text or "").lower())}
+    for term in terms:
+        stems = {stem(w) for w in title_words(term)}
+        if stems and stems <= words:
+            return True
+    return False
+
+
 def extracted_scope(extracted: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """The parts of an extracted filter worth showing as chips, without empty keys."""
     if not extracted:
         return {}
-    keys = ("year_min", "year_max", "tags", "collections", "author", "title", "item_types")
+    keys = ("year_min", "year_max", "tags", "collections", "author", "title", "item_types", "exclude")
     return {k: extracted[k] for k in keys if extracted.get(k)}
 
 
@@ -414,3 +426,18 @@ def detect_known_item(query: str) -> Optional[Dict[str, Any]]:
     if len(title_words(q)) >= 2 and len(q.split()) <= 25:
         return {"kind": "title", "title": q, "quoted": False}
     return None
+
+
+def _title_key(title: str) -> str:
+    return " ".join(re.findall(r"\w+", (title or "").lower()))
+
+
+def mark_owned(entries: List[Dict[str, Any]], dois: Dict[str, str], titles: Dict[str, str]) -> List[Dict[str, Any]]:
+    """Mark the works a reader already has in Zotero, by DOI, else by exact title (case and
+    punctuation aside). Owned works come first; otherwise the source's order is kept."""
+    by_title = {_title_key(t): i for t, i in titles.items()}
+    for entry in entries:
+        doi = (entry.get("doi") or "").lower()
+        entry["owned_item_id"] = dois.get(doi) if doi else None
+        entry["owned_item_id"] = entry["owned_item_id"] or by_title.get(_title_key(entry.get("title", "")))
+    return sorted(entries, key=lambda e: e["owned_item_id"] is None)

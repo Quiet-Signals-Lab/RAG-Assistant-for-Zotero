@@ -137,6 +137,9 @@
 .desk__ask,
 .desk__browse,
 .desk__verify {
+  /* Each pane contains its absolutely placed descendants (the .sr-only labels): otherwise
+     they overflow .desk__body, and the whole window scrolls, header and all. */
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
@@ -188,9 +191,11 @@
 
 .panel-head__tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 14px;
+  gap: 6px 14px;
   font-size: 12px;
+  min-width: 0;
 }
 
 .panel-head--rule {
@@ -334,6 +339,30 @@ mark {
 
 .chip__note {
   color: var(--ink-4);
+}
+
+.chip--suggest {
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+}
+
+.chip--suggest:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.refine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.refine__label {
+  font: 11px var(--font-mono);
+  color: var(--ink-4);
+  margin-right: 2px;
 }
 
 .chip--add {
@@ -887,6 +916,56 @@ mark {
   color: var(--ink-3);
 }
 
+/* ---- References and citations -------------------------------------------- */
+
+.chain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.chain__hint,
+.chain__empty,
+.chain__source {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.chain__list ol {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.chain__entry {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  font: 13px/1.4 var(--font-serif);
+  color: var(--ink-2);
+}
+
+.chain__mark {
+  color: var(--stamp);
+  font-size: 10px;
+  line-height: 1.9;
+}
+
+.chain__byline {
+  color: var(--ink-3);
+}
+
+.chain__entry a,
+.chain__source a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+
 /* ---- About ---------------------------------------------------------------- */
 
 .about {
@@ -986,7 +1065,8 @@ mark {
     display: inline-flex;
   }
 
-  .desk__index {
+  .desk__index,
+  .desk__clerk {
     display: none;
   }
 }
@@ -1058,4 +1138,183 @@ mark {
   .desk__verify {
     transition: none;
   }
+}
+
+/* ---- The desk clerk -------------------------------------------------------- */
+
+.clerk-note {
+  font: 13.5px/1.45 var(--font-serif);
+  color: var(--ink-2);
+}
+
+.clerk-note__label {
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--stamp);
+  border: 1px solid var(--stamp);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  margin-right: 4px;
+  vertical-align: 1px;
+}
+
+.clerk-note__page {
+  margin-left: 4px;
+  font-size: 11px;
+}
+
+.evidence__note {
+  margin: 0;
+}
+
+.query-desk__reading {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.query-desk__reading q {
+  color: var(--ink);
+}
+
+.query-desk__reader {
+  font: 11px var(--font-mono);
+  color: var(--ink-4);
+}
+
+.also-try {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.also-try__term {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 3px 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  font: 13px/1.35 var(--font-sans);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.also-try__term:hover span:last-child {
+  text-decoration: underline;
+  text-decoration-color: var(--brass);
+  text-underline-offset: 3px;
+}
+
+.also-try__rel {
+  flex: none;
+  width: 2.2em;
+  font: 11px var(--font-mono);
+  color: var(--catalogue-blue);
+  text-decoration: none;
+}
+
+.rows__group + .rows__group {
+  margin-top: 14px;
+}
+
+.rows__group-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 6px 0;
+  border-bottom: 2px solid var(--ink);
+  font: 600 12px/1.3 var(--font-sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.rows__group-count {
+  font: 400 11px var(--font-mono);
+  letter-spacing: 0;
+  color: var(--ink-4);
+}
+
+.desk__clerk {
+  font-size: 11px;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+  background: none;
+  border: 0;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.desk__clerk:hover {
+  color: var(--ink);
+}
+
+.clerk-room {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.clerk-room__intro {
+  margin: 0;
+}
+
+.clerk-room__status {
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--brass);
+  font-size: 12.5px;
+}
+
+.clerk-room__privacy {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--notice);
+}
+
+.clerk-room__jobs {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.clerk-job {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.clerk-job input {
+  margin-top: 3px;
+  accent-color: var(--ink);
+}
+
+.clerk-job__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.clerk-job__label {
+  color: var(--ink);
+}
+
+.clerk-job__hint {
+  font-size: 12px;
+  color: var(--ink-3);
 }

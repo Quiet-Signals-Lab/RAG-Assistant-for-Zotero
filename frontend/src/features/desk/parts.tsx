@@ -1,6 +1,6 @@
 /** Small presentational pieces shared by the desk's panels. */
 import React from "react";
-import type { Band, Citation, DeskItem, Span } from "../../types/desk";
+import type { Band, Citation, ClerkNote, DeskItem, Span } from "../../types/desk";
 import { buildZoteroOpenPdfUri, buildZoteroSelectUri, openLocalPdf, tryOpenZoteroUri } from "../../utils/zotero";
 import { reference, type CitableItem } from "./cite";
 
@@ -23,6 +23,23 @@ export const Reference: React.FC<{ item: CitableItem; maxAuthors?: number }> = (
   <>
     {reference(item, maxAuthors).map((s, i) => (s.italic ? <i key={i}>{s.text}</i> : <React.Fragment key={i}>{s.text}</React.Fragment>))}
   </>
+);
+
+/**
+ * A note the clerk wrote, always labelled as such (plan: the note replaces the
+ * extract only when it passed both checks, and never goes unlabelled).
+ */
+export const ClerkNoteLine: React.FC<{ note: ClerkNote; onPage?: (page: number) => void }> = ({ note, onPage }) => (
+  <span className="clerk-note" title="Written by the model from this item's passages and checked against them. Read the passages before you rely on it.">
+    <span className="clerk-note__label">Clerk’s note</span> {note.note}
+    {note.page ? (
+      onPage ? (
+        <button type="button" className="link-button mono clerk-note__page" onClick={() => onPage(note.page as number)}>p. {note.page}</button>
+      ) : (
+        <span className="row__page"> p. {note.page}</span>
+      )
+    ) : null}
+  </span>
 );
 
 const BAND_LABEL: Record<Band, string> = { strong: "Strong", good: "Good", weak: "Weak", see_also: "See also" };
@@ -69,6 +86,4 @@ export function showInZotero(c: Citation | null): void {
   if (c) tryOpenZoteroUri(buildZoteroSelectUri(c.item_key, c.group_id));
 }
 
-export function itemTypeLabel(type: string): string {
-  return type.replace(/([a-z])([A-Z])/g, "$1 $2").toLocaleLowerCase();
-}
+export { itemTypeLabel } from "./cite";
