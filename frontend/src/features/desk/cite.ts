@@ -155,8 +155,13 @@ export function reference(item: CitableItem, maxAuthors = 20): Segment[] {
     }
   }
 
-  if (c.doi) seg.push({ text: ` https://doi.org/${c.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")}` });
+  if (c.doi) seg.push({ text: ` https://doi.org/${doiOf(c.doi)}` });
   return tidy(seg);
+}
+
+/** The bare DOI from Zotero's field, which may hold a resolver URL or a "doi:" prefix. */
+export function doiOf(doi: string): string {
+  return doi.replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)/i, "").trim();
 }
 
 export function plain(segments: Segment[]): string {

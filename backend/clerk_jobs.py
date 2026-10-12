@@ -46,9 +46,10 @@ def _words(text: str) -> set:
 _TIME_WORDS = re.compile(
     r"\d{4}|\b\d0['’]?s\b|decades?|century|centuries|\byears?\b|this year|"
     r"\b(?:twen|thir|for|fif|six|seven|eigh|nine)ties\b|\b(?:pre|post)-?\d|\b(?:older|oldest|newest|latest|earliest)\b", re.I)
+# The reader's own type words, plus "conference" alone and the other languages it does not read.
 _TYPE_WORDS = re.compile(
-    r"\b(books?|monographs?|chapters?|thes[ie]s|dissertations?|conference|proceedings|preprints?|reports?|"
-    r"working papers?|journal articles?|livres?|thèses|chapitres?|bücher|buch|kapitel|libros?|tesis|capítulos?)\b", re.I)
+    r"\b(" + "|".join(query_reader.TYPE_WORDS.values()) +
+    r"|conference|livres?|thèses|chapitres?|bücher|buch|kapitel|libros?|tesis|capítulos?)\b", re.I)
 _COLLECTION_WORDS = re.compile(r"\b(?:collections?|folders?)\b|\bin \"", re.I)
 _TAG_WORDS = re.compile(r"\btag(?:ged|s)?\b|#\w", re.I)
 # Exclusion markers. Bare "not" and "without" are left out: "why workers do not join
@@ -242,6 +243,7 @@ READ_QUERY = Job(
 
 def read_query_input(query: str, vocab: Dict[str, Any], today: date) -> Dict[str, Any]:
     """Everything READ_QUERY needs: the request, the library reading and the shortlist to choose from."""
+    query = " ".join((query or "").split())  # the reader's spans index this form of the request
     library_reading, spans = query_reader.read(query, vocab, today, with_spans=True)
     return {
         "query": query,

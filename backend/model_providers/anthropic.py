@@ -289,6 +289,8 @@ class AnthropicProvider(BaseProvider):
             
             if system_message:
                 request_params["system"] = system_message
+            if kwargs.get("timeout"):
+                request_params["timeout"] = float(kwargs["timeout"])  # the clerk's budget frees its worker thread
             
             response = client.messages.create(**request_params)
             

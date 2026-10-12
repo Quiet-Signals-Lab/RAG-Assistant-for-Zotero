@@ -152,6 +152,14 @@ def rerank_in_order(scores):
     return lambda query, docs, top_k=None: list(enumerate(scores))[:top_k]
 
 
+def test_filters_off_still_keeps_scope_phrases_out_of_the_search_text(bot):
+    bot.chroma.query_hybrid_rrf.return_value = hits(("1", 0))
+    with patch("backend.interface.rerank_passages", rerank_in_order([3.0])):
+        out = bot.search("riders since 2015", use_metadata_filters=False)
+    assert out["scope"]["topic"] == "riders" and out["scope"]["extracted"] == {} and out["scope"]["read_by"] is None
+    assert bot.chroma.query_hybrid_rrf.call_args.kwargs["query"] == "riders"
+
+
 def test_search_returns_a_ranked_bibliography_with_citations(bot):
     bot.chroma.query_hybrid_rrf.return_value = hits(("1", 0), ("2", 0), ("1", 0))
     with patch("backend.interface.rerank_passages", rerank_in_order([2.0, 6.0, -6.0])):

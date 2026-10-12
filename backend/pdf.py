@@ -170,18 +170,23 @@ class PDF:
         def key(text):
             return re.sub(r"\d+", "#", " ".join(text.split()))
 
-        # A line that recurs on many pages is a running header or footer: any line in
-        # the margins, or a short one wherever it sits (some journals set them lower).
+        # A line that recurs on many pages is a running header or footer when it sits in
+        # the margins or, if short, in the page's first or last block (some journals set
+        # them lower). "Proof." or "where" between equations mid-page is left alone.
+        def running(i, n, text, bbox, height):
+            return in_margin(bbox, height) or (len(text) <= 60 and i in (0, n - 1))
+
         seen = collections.Counter()
         for _, height, blocks in pages:
-            seen.update({key(t) for lines in blocks for t, _, _, bb in lines if len(t) <= 60 or in_margin(bb, height)})
+            seen.update({key(t) for i, lines in enumerate(blocks) for t, _, _, bb in lines
+                         if running(i, len(blocks), t, bb, height)})
         repeated = {k for k, n in seen.items() if n >= max(3, 0.3 * len(pages))}
 
         out = []
         for page_num, height, blocks in pages:
-            for lines in blocks:
+            for i, lines in enumerate(blocks):
                 kept = [ln for ln in lines
-                        if key(ln[0]) not in repeated and not (in_margin(ln[3], height) and ln[0].isdigit())]
+                        if not (running(i, len(blocks), ln[0], ln[3], height) and (key(ln[0]) in repeated or ln[0].isdigit()))]
                 if not kept:
                     continue
                 out.append({"page": page_num, "text": " ".join(t for t, _, _, _ in kept),

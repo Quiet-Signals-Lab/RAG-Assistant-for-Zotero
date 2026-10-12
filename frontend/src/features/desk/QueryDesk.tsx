@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { request } from "../../api/client";
 import type { Relation, ScopeFilters } from "../../types/desk";
+import { itemTypeLabel } from "./cite";
 import { useDesk, withoutScope } from "./DeskContext";
 
 type Vocabulary = { tags: string[]; collections: string[]; itemTypes: string[] };
@@ -37,7 +38,7 @@ function chipsFor(scope: ScopeFilters): Chip[] {
   else if (hi) chips.push({ key: "year_max", label: `until ${hi}` });
   scope.tags?.forEach((t) => chips.push({ key: "tags", value: t, label: `tag ${t}` }));
   scope.collections?.forEach((c) => chips.push({ key: "collections", value: c, label: `in ${c}` }));
-  scope.item_types?.forEach((t) => chips.push({ key: "item_types", value: t, label: t.replace(/([a-z])([A-Z])/g, "$1 $2").toLocaleLowerCase() }));
+  scope.item_types?.forEach((t) => chips.push({ key: "item_types", value: t, label: itemTypeLabel(t) }));
   if (scope.author) chips.push({ key: "author", label: `by ${scope.author}` });
   if (scope.title) chips.push({ key: "title", label: `title “${scope.title}”` });
   scope.exclude?.forEach((x) => chips.push({ key: "exclude", value: x, label: `not ${x}` }));
@@ -109,7 +110,7 @@ const ScopeEditor: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       <label htmlFor={`${id}-type`}>Item type</label>
       <select id={`${id}-type`} value={itemType} onChange={(e) => setItemType(e.target.value)}>
         <option value="">Any type</option>
-        {vocab.itemTypes.map((t) => <option key={t} value={t}>{t.replace(/([a-z])([A-Z])/g, "$1 $2").toLocaleLowerCase()}</option>)}
+        {vocab.itemTypes.map((t) => <option key={t} value={t}>{itemTypeLabel(t)}</option>)}
       </select>
       <label htmlFor={`${id}-author`}>Author</label>
       <input id={`${id}-author`} value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Last name" />

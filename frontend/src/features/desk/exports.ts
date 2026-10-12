@@ -5,7 +5,7 @@
  */
 import type { Citation, ClerkNote, Creator, DeskItem } from "../../types/desk";
 // .ts extension: the node checks (scripts/desk.check.mjs) load this file without a bundler.
-import { plain, primaryCreators, reference, type CitableItem } from "./cite.ts";
+import { doiOf, plain, primaryCreators, reference, type CitableItem } from "./cite.ts";
 
 export type { CitableItem };
 
@@ -24,7 +24,7 @@ const RIS_TYPE: Record<string, string> = {
 export function fields(item: CitableItem): Citation {
   if (item.citation) return item.citation;
   const creators = item.authors
-    .split(/;|,(?=\s*[A-Z][^,]*$)/)
+    .split(/[;,]/)
     .map((name) => name.trim())
     .filter(Boolean)
     .map((name): Creator => ({ first: "", last: name, role: "author" }));
@@ -33,10 +33,6 @@ export function fields(item: CitableItem): Citation {
     short_title: "", date: "", year: item.year, container: "", volume: "", issue: "", pages: "", publisher: "",
     place: "", edition: "", report_number: "", thesis_type: "", doi: "", isbn: "", url: "",
   };
-}
-
-function doiOf(doi: string): string {
-  return doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim();
 }
 
 function name(c: Creator): string {

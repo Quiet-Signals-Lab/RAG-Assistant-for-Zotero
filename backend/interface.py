@@ -660,14 +660,18 @@ class ZoteroChatbot:
         manual_filters = manual_filters or {}
 
         reading, read_by, read_reason = None, None, ""
+        data = clerk_jobs.read_query_input(query, self._vocabulary(), date.today())
         if use_metadata_filters:
-            data = clerk_jobs.read_query_input(query, self._vocabulary(), date.today())
             if read_with_model:
                 result = self.clerk.run(clerk_jobs.READ_QUERY, data, timeout=read_timeout)
                 reading, read_reason = result.value, result.reason
                 read_by = "model" if result.source == "model" else "library"
             else:
                 reading, read_by = data["library_reading"], "library"
+        else:
+            # Filters off (the reader removed a chip): the scope phrases still leave the search
+            # text, since left in they cost the best passage most of its reranker score.
+            reading = {"topic": data["library_reading"].get("topic")}
         read_done = time.perf_counter()
 
         extracted = desk.extracted_scope(reading)
@@ -834,7 +838,7 @@ class ZoteroChatbot:
         citation = self.zlib.get_bibliographic([item_id]).get(str(item_id))
         if not citation:
             return None
-        doi = re.sub(r"^https?://(dx\.)?doi\.org/", "", citation.get("doi") or "", flags=re.I).strip()
+        doi = re.sub(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", "", citation.get("doi") or "", flags=re.I).strip()
         chain = fetch_citation_chain(doi=doi or None, title=None if doi else citation.get("title"))
         if chain is None:
             return {"found": False}

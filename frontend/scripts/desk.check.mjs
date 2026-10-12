@@ -97,6 +97,10 @@ assert.equal(ris([item(section)]), [
   "PY  - 2021", "SP  - 177", "EP  - 192", "PB  - Edward Elgar", "ER  - ",
 ].join("\r\n"));
 assert.match(ris([{ citation: null, title: "Untitled draft", authors: "Woodcock", year: 2019 }]), /^TY  - GEN\r\nAU  - Woodcock\r\nTI  - Untitled draft\r\nPY  - 2019/);
+// The index's authors field is comma-separated surnames; each becomes an author.
+assert.match(bibtex([{ citation: null, title: "Three authors", authors: "Woodcock,Graham,de Beauvoir", year: 2019 }]),
+  /author = \{Woodcock and Graham and de Beauvoir\}/);
+assert.equal(plain(reference(item({ ...base, item_type: "journalArticle", title: "T", year: 2020, creators: [author("J", "W")], doi: "doi: 10.1/x" }))).endsWith("https://doi.org/10.1/x"), true);
 
 // Refinements: busiest decade, most common collection, set the top rows aside
 const listed = [2011, 2014, 2016, 2003, 2021, 2012].map((year, i) =>

@@ -170,14 +170,6 @@ def test_title_match_is_symmetric_overlap():
     assert topical < desk.TITLE_MATCH_MIN
 
 
-def test_topic_drops_the_phrases_read_as_scope():
-    assert desk.topic_of("courier strikes since 2015") == "courier strikes"
-    assert desk.topic_of('riders between 2010 and 2020 tagged "Labour" in "PhD"') == "riders"
-    assert desk.topic_of("riders 2015-2020") == "riders"
-    assert desk.topic_of("since 2015") == "since 2015"  # nothing left: keep the query
-    assert desk.topic_of("from Turin to London") == "from Turin to London"
-
-
 def test_a_passage_that_follows_another_drops_the_repeated_words():
     first = " ".join(f"w{i}" for i in range(100))
     second = " ".join(f"w{i}" for i in range(60, 100)) + " fresh words follow here"

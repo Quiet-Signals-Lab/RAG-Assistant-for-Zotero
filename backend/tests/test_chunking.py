@@ -111,6 +111,8 @@ def paper(tmp_path):
         else:
             page.insert_text((72, y), "References", fontsize=11, fontname="hebo"); y += 20
             page.insert_text((72, y), "[1] J. Smith. A study. In Proc. ACL, pages 1-10, 2019.", fontsize=10)
+        page.insert_text((72, 400), "Proof.", fontsize=10)  # a short mid-page line on every page
+        page.insert_text((72, 430), "More body text follows the proof on every page.", fontsize=10)
     path = tmp_path / "paper.pdf"
     doc.save(str(path))
     return str(path)
@@ -122,6 +124,7 @@ def test_extract_blocks_cleans_and_marks_structure(paper):
     joined = " ".join(texts)
     assert "JOURNAL OF TESTING" not in joined and "arXiv:" not in joined
     assert not any(t in {"1", "2", "3"} for t in texts), "page numbers are dropped"
+    assert texts.count("Proof.") == 3, "a recurring short line mid-page is body text, not a running header"
     assert "classification of interpretability" in joined, "line-break hyphen joined"
     headings = [b["text"] for b in blocks if b["heading"]]
     assert headings == ["A Paper About Testing", "Abstract", "1 Introduction", "References"]

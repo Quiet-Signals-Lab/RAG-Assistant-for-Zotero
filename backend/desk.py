@@ -314,27 +314,6 @@ def _fold_duplicates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return kept
 
 
-# The phrases backend/metadata_extractor.py reads as scope. Keep the two in step.
-_SCOPE_PHRASES = re.compile(
-    r"\b(?:from|between)\s+\d{4}\s+(?:to|and)\s+\d{4}\b"
-    r"|\b\d{4}\s*[-\u2013]\s*\d{4}\b"
-    r"|\b(?:after|since|from|before|until)\s+\d{4}\b"
-    r"|\btagged\s+\"[^\"]+\""
-    r"|\bin\s+\"[^\"]+\"",
-    re.I,
-)
-
-
-def topic_of(query: str) -> str:
-    """The query without the phrases read as scope ("since 2015", 'in "PhD"').
-
-    Scope is applied as a filter; left in the text it also skews retrieval and
-    the reranker (on a real library "since 2010" took the best score from 5.3 to -4.2).
-    """
-    topic = " ".join(_SCOPE_PHRASES.sub(" ", query or "").split())
-    return topic or (query or "").strip()
-
-
 def excluded(text: str, terms: Sequence[str]) -> bool:
     """True when `text` mentions any excluded term: every content word of the term, by stem."""
     if not terms:

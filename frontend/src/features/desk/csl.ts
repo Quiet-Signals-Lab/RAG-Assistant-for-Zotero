@@ -5,7 +5,7 @@
  */
 import CSL from "citeproc";
 import type { Citation } from "../../types/desk";
-import { plain, reference } from "./cite.ts";
+import { doiOf, plain, reference } from "./cite.ts";
 import { fields, type CitableItem } from "./exports.ts";
 
 const CSL_TYPE: Record<string, string> = {
@@ -37,7 +37,7 @@ export function toCsl(item: CitableItem, id: string): Record<string, unknown> {
   const text: [string, string][] = [
     ["container-title", c.container], ["volume", c.volume], ["issue", c.issue], ["page", c.pages], ["publisher", c.publisher],
     ["publisher-place", c.place], ["edition", c.edition], ["number", c.report_number], ["genre", c.thesis_type],
-    ["DOI", c.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")], ["ISBN", c.isbn], ["URL", c.url], ["title-short", c.short_title],
+    ["DOI", doiOf(c.doi)], ["ISBN", c.isbn], ["URL", c.url], ["title-short", c.short_title],
   ];
   for (const [key, value] of text) if (value) out[key] = value;
   return out;

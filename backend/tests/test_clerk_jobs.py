@@ -40,6 +40,14 @@ def guard_read(query, **model_out):
 
 # --- READ_QUERY ---------------------------------------------------------------
 
+def test_spans_index_the_request_as_the_guard_sees_it():
+    """A double space or pasted newline in the request must not shift the spans the guard cuts."""
+    d = jobs.read_query_input("courier  strikes\nsince 2015 by Berlant", VOCAB, TODAY)
+    assert d["query"] == "courier strikes since 2015 by Berlant"
+    assert all(d["query"][a:b] == d["query"][a:b].strip() and d["query"][a:b] for a, b in d["library_spans"])
+    assert guard_read("courier  strikes since 2015 by Berlant", author="Berlant")["topic"] == "courier strikes"
+
+
 def test_read_query_input_carries_the_library_reading_and_a_shortlist():
     d = jobs.read_query_input("what does Berlant argue about security", VOCAB, TODAY)
     assert d["today"] == "2026-10-11"
