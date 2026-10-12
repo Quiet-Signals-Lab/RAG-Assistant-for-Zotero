@@ -2,6 +2,7 @@
 # uvicorn backend.main:app --reload
 
 import os
+import re
 import sys
 import logging
 
@@ -33,6 +34,7 @@ logging.getLogger('google.auth').setLevel(logging.WARNING)
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Body, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from typing import Optional
 from backend.zoteroitem import ZoteroItem
 from backend.external_api_utils import fetch_semantic_scholar_data
@@ -932,6 +934,37 @@ def db_health():
         raise
     except Exception as e:
         raise _fail(e)
+
+
+def _zotero_styles_dir() -> Path:
+    """Zotero keeps the CSL styles a user installs next to its database."""
+    return Path(chatbot.zlib.db_path).parent / "styles"
+
+
+@app.get("/api/csl/styles")
+def csl_styles():
+    """The CSL styles installed in Zotero, offered as drop-in styles for the desk's references."""
+    folder = _zotero_styles_dir()
+    styles = []
+    for path in sorted(folder.glob("*.csl")) if folder.is_dir() else []:
+        try:
+            head = path.read_text(encoding="utf-8", errors="ignore")[:4000]
+        except OSError:
+            continue
+        title = re.search(r"<title>([^<]+)</title>", head)
+        styles.append({"file": path.name, "title": title.group(1).strip() if title else path.stem})
+    return {"styles": styles}
+
+
+@app.get("/api/csl/styles/{name}")
+def csl_style(name: str):
+    """One installed style's XML. The name is a bare file name; nothing outside the folder is served."""
+    if name != Path(name).name or not name.endswith(".csl"):
+        raise HTTPException(status_code=400, detail="Not a style file name")
+    path = _zotero_styles_dir() / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="No such style")
+    return PlainTextResponse(path.read_text(encoding="utf-8", errors="ignore"), media_type="application/xml")
 
 
 @app.get("/api/index_stats")

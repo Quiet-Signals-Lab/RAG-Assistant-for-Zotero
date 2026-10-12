@@ -7,6 +7,8 @@ import type { Citation, ClerkNote, Creator, DeskItem } from "../../types/desk";
 // .ts extension: the node checks (scripts/desk.check.mjs) load this file without a bundler.
 import { plain, primaryCreators, reference, type CitableItem } from "./cite.ts";
 
+export type { CitableItem };
+
 const BIBTEX_TYPE: Record<string, string> = {
   journalArticle: "article", magazineArticle: "article", newspaperArticle: "article",
   book: "book", bookSection: "incollection", conferencePaper: "inproceedings",
@@ -19,7 +21,7 @@ const RIS_TYPE: Record<string, string> = {
 };
 
 /** The citation, or one made from what the index knows. */
-function fields(item: CitableItem): Citation {
+export function fields(item: CitableItem): Citation {
   if (item.citation) return item.citation;
   const creators = item.authors
     .split(/;|,(?=\s*[A-Z][^,]*$)/)

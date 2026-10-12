@@ -174,6 +174,8 @@ For complete build instructions, see [docs/BUILD_CHECKLIST.md](docs/BUILD_CHECKL
 
 GNU General Public License v3.0 or later. See [LICENSE](LICENSE).
 
+References are formatted by [citeproc-js](https://github.com/Juris-M/citeproc-js) (CPAL 1.0 / AGPL) with styles from the [Citation Style Language project](https://citationstyles.org/) (`frontend/src/assets/csl`, CC BY-SA 3.0): APA 7th, Chicago 18th, and the en-US locale. Styles installed in your Zotero are read from its styles folder.
+
 This project was licensed under Apache 2.0 through v0.5.1; releases from v0.5.2 onward are GPLv3.
 
 ## Contributing

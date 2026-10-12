@@ -3,6 +3,9 @@ import type { Citation, ClerkNote, DeskItem, KnownItem, ScopeFilters } from "../
 import { plain, reference, shortCite, sortName } from "./cite";
 import { useDesk, type Sort } from "./DeskContext";
 import { bibtex, pathfinder, ris } from "./exports";
+import { formatReferences } from "./csl";
+import { BUNDLED_STYLES, LOCALE_EN_US } from "./styles";
+import { apiFetch, request } from "../../api/client";
 import { FACETS, groupBy, refinements, type Facet, type Refinement } from "./facets";
 import { BandMark, ClerkNoteLine, Highlighted, itemTypeLabel, openPdf, pageSpan, Reference, showInZotero } from "./parts";
 
@@ -179,6 +182,18 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
   const [showSeeAlso, setShowSeeAlso] = useState(false);
   const [facet, setFacet] = useState<Facet>("none");
   const [copied, setCopied] = useState<string | null>(null);
+  const [style, setStyle] = useState<string>(() => { try { return localStorage.getItem("desk.cslStyle") || "apa"; } catch { return "apa"; } });
+  const [zoteroStyles, setZoteroStyles] = useState<{ file: string; title: string }[]>([]);
+  useEffect(() => {
+    request<{ styles: { file: string; title: string }[] }>("/api/csl/styles").then((r) => setZoteroStyles(r.styles)).catch(() => setZoteroStyles([]));
+  }, []);
+
+  /** The visible list in the chosen CSL style: a bundled one, or one installed in Zotero. */
+  async function references(): Promise<string> {
+    const bundled = BUNDLED_STYLES.find((s) => s.id === style);
+    const xml = bundled ? bundled.xml : await apiFetch(`/api/csl/styles/${encodeURIComponent(style.replace(/^zotero:/, ""))}`).then((r) => r.text());
+    return formatReferences(visible, xml, LOCALE_EN_US).join("\n");
+  }
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
 
   const sorted = useMemo(() => sortItems(result?.items ?? [], desk.sort), [result, desk.sort]);
@@ -223,7 +238,8 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
 
   function saveAs(format: string) {
     const stem = fileStem(result?.query ?? "");
-    if (format === "bib") saveFile(`${stem}.bib`, bibtex(visible), "application/x-bibtex");
+    if (format === "txt") references().then((text) => saveFile(`${stem}.txt`, text, "text/plain")).catch(() => setCopied("This style could not be read"));
+    else if (format === "bib") saveFile(`${stem}.bib`, bibtex(visible), "application/x-bibtex");
     else if (format === "ris") saveFile(`${stem}.ris`, ris(visible), "application/x-research-info-systems");
     else if (format === "pathfinder" && result) {
       const text = pathfinder({
@@ -240,8 +256,13 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
   }
 
   async function copyBibliography() {
-    const text = visible.map((it) => plain(reference(it))).join("\n");
-    setCopied((await copyText(text)) ? `Copied ${visible.length} references` : "Could not reach the clipboard");
+    let note: string;
+    try {
+      note = (await copyText(await references())) ? `Copied ${visible.length} references` : "Could not reach the clipboard";
+    } catch {
+      note = "This style could not be read";
+    }
+    setCopied(note);
     window.setTimeout(() => setCopied(null), 2500);
   }
 
@@ -287,11 +308,23 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
                 ))}
               </select>
             </label>
+            <label className="tool">
+              <span>Style</span>
+              <select value={style} onChange={(e) => { setStyle(e.target.value); try { localStorage.setItem("desk.cslStyle", e.target.value); } catch { /* per-viewer convenience only */ } }}>
+                {BUNDLED_STYLES.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+                {zoteroStyles.length > 0 && (
+                  <optgroup label="Installed in Zotero">
+                    {zoteroStyles.map((s) => <option key={s.file} value={`zotero:${s.file}`}>{s.title}</option>)}
+                  </optgroup>
+                )}
+              </select>
+            </label>
             <button type="button" className="tool-button" onClick={copyBibliography}>Copy references</button>
             <label className="tool">
               <span className="sr-only">Save the list as</span>
               <select value="" onChange={(e) => saveAs(e.target.value)} aria-label="Save the list as a file">
                 <option value="" disabled>Save as…</option>
+                <option value="txt">References in this style (.txt)</option>
                 <option value="bib">BibTeX (.bib)</option>
                 <option value="ris">RIS (.ris)</option>
                 <option value="pathfinder">Pathfinder (.md)</option>
