@@ -128,6 +128,19 @@ def get_embedding_dimension(model_id: Optional[str] = None) -> int:
     """Get the embedding dimension for a specific model (local or cloud)."""
     return get_model_config(model_id)['dimension']
 
+def model_device() -> str:
+    """Where the embedder, reranker and NLI model run: an NVIDIA GPU if there is one, else the CPU.
+
+    Never Apple's GPU (MPS). Its allocator keeps a cached block for every batch shape and
+    does not reuse them: indexing grew it ~0.7 GB per item until a 16 GB Mac ran out of
+    memory at about 20 items and swapped to disk, and every later item failed. It was only
+    1.5x faster than the CPU (bge-base on an M1), and its memory is shared with the RAM
+    a local LLM for the desk clerk needs.
+    """
+    import torch
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 def load_embedding_model(model_id: Optional[str] = None) -> SentenceTransformer:
     """Load the local SentenceTransformer model, reusing cached instance if same model."""
     global _current_model, _current_model_id
@@ -141,7 +154,7 @@ def load_embedding_model(model_id: Optional[str] = None) -> SentenceTransformer:
     # Load new model with explicit cache directory
     config = get_model_config(target_model_id)
     logger.info("Loading embedding model: %s (%s)", config['name'], config['description'])
-    _current_model = SentenceTransformer(config['name'], cache_folder=MODELS_CACHE_DIR)
+    _current_model = SentenceTransformer(config['name'], cache_folder=MODELS_CACHE_DIR, device=model_device())
     _current_model_id = target_model_id
 
     return _current_model
@@ -157,7 +170,7 @@ def _get_reranker() -> CrossEncoder:
     global _reranker
     with _reranker_lock:
         if _reranker is None:
-            _reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', cache_folder=MODELS_CACHE_DIR)
+            _reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', cache_folder=MODELS_CACHE_DIR, device=model_device())
         return _reranker
 
 
@@ -285,7 +298,7 @@ def entailment(premises: list[str], hypothesis: str) -> float:
         return 0.0
     with _nli_lock:
         if _nli is None:
-            _nli = CrossEncoder(NLI_MODEL, cache_folder=MODELS_CACHE_DIR)
+            _nli = CrossEncoder(NLI_MODEL, cache_folder=MODELS_CACHE_DIR, device=model_device())
         model = _nli
     labels = {v.lower(): k for k, v in model.config.id2label.items()}
     scores = model.predict([(p, hypothesis) for p in premises], apply_softmax=True)

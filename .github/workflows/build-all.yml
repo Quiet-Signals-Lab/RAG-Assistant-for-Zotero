@@ -388,8 +388,9 @@ jobs:
   # We previously used vedantmgoyal9/winget-releaser, which wraps both halves.
   # Its submit step began failing with "aahepburn does not have the correct
   # permissions to execute `CreateRef`" even though the same token creates refs
-  # on the fork fine over REST (verified: HTTP 201). Root cause never identified;
-  # regenerating the token and widening its scope to `repo` did not help. Since
+  # on the fork fine over REST (verified: HTTP 201). The cause, found at v0.6.0:
+  # syncing or branching the fork copies upstream workflow files, which needs
+  # the PAT's `workflow` scope (see docs/WINGET_SUBMISSION.md). Since
   # komac's manifest generation was always correct, we keep that and drive the
   # git side with `gh`, which is what the manual v0.5.2 submission used.
   publish-winget:

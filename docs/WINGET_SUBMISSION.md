@@ -32,7 +32,35 @@ Relevant facts:
 The token has to belong to `aahepburn` because the fork does. `GITHUB_TOKEN`
 cannot be used: it is scoped to this repository and cannot write to the fork.
 
-## The 2026-09-09 failure (unresolved)
+## Root cause found (2026-10-10)
+
+The v0.6.0 release failed at the first `gh` call, the fork sync, with a message
+that names the cause:
+
+```
+gh: refusing to allow a Personal Access Token to create or update workflow
+`.github/workflows/domain-validation-assist.lock.yml` without `workflow` scope (HTTP 422)
+```
+
+`microsoft/winget-pkgs` changes files under `.github/workflows/`. GitHub refuses
+to let a personal access token write workflow files without the `workflow`
+scope, and that includes copying upstream's workflow changes into the fork,
+whether by syncing it or by creating a branch at an upstream commit. The
+`WINGET_TOKEN` has `public_repo` (later `repo`) but not `workflow`.
+
+This almost certainly explains the 2026-09-09 `CreateRef` failure below: the
+action created its branch from upstream's head, which carried workflow changes
+the fork did not have. It fits every item in the "ruled out" table, including why
+`repo` did not help (it is a separate scope) and why the same token could create
+a ref at the fork's own head (HTTP 201). It also explains why both manual
+submissions worked: they ran under the maintainer's `gh` login, which has
+`workflow`.
+
+**Fix:** give `WINGET_TOKEN` the `workflow` scope (classic PAT: `public_repo` +
+`workflow`). Until then, submit by hand as below; v0.6.0 was submitted that way
+in [PR 450264](https://github.com/microsoft/winget-pkgs/pull/450264).
+
+## The 2026-09-09 failure (now explained above)
 
 During the v0.5.2 release, `publish-winget` failed three times with:
 
@@ -186,3 +214,4 @@ gh pr create --repo microsoft/winget-pkgs --base master \
 | 2026-03-22 | 0.4.5 | First manual submission |
 | 2026-07-29 | 0.5.1 | winget-releaser action, succeeded |
 | 2026-09-09 | 0.5.2 | Action failed 3× on `CreateRef`; submitted by hand ([PR 432197](https://github.com/microsoft/winget-pkgs/pull/432197)); action replaced with komac + `gh` |
+| 2026-10-10 | 0.6.0 | komac + `gh` job failed on the fork sync (`workflow` scope); submitted by hand ([PR 450264](https://github.com/microsoft/winget-pkgs/pull/450264)) with license and release notes corrected |

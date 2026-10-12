@@ -29,6 +29,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Failures that come from the machine, not the PDF: when these repeat, every
+# remaining item would fail the same way, so indexing stops and says why.
+_SYSTEMIC_FAILURES = ("Embedding generation failed", "Unexpected embedding dimension", "Failed to add to ChromaDB")
+_STOP_AFTER_SYSTEMIC = 5
+
+
+def _failure_summary(reasons, total):
+    """The error for a run where nothing was indexed: the commonest real reason, not a guess."""
+    from collections import Counter
+    kinds = Counter(r.split(": ", 1)[-1].split(" - ")[0] for r in reasons)
+    kind, n = kinds.most_common(1)[0]
+    example = next(r.split(": ", 1)[-1] for r in reasons if r.split(": ", 1)[-1].startswith(kind))
+    return f"All {total} items failed to index. Most common reason ({n} of {len(reasons)}): {example[:300]}"
+
+
 class _SkipItem(Exception):
     """Raised inside _index_one with the reason an item could not be indexed."""
 
@@ -395,6 +410,7 @@ class ZoteroChatbot:
                 return
             logger.info("Indexing %d items (%s mode)", len(raw_items), progress.get("mode"))
 
+            streak, stopped = 0, None
             for item in raw_items:
                 if self._cancel_indexing:
                     break
@@ -406,15 +422,22 @@ class ZoteroChatbot:
                         self.chroma.delete_item(item_id)
                     n = self._index_one(item)
                     logger.info("Indexed item %s with %d chunks", item_id, n)
+                    streak = 0
                 except _SkipItem as skip:
                     reason = f"Item {item_id}: {skip}"
                     logger.warning("Skipped %s", reason)
                     progress["skip_reasons"].append(reason)
+                    streak = streak + 1 if str(skip).startswith(_SYSTEMIC_FAILURES) else 0
+                    if streak >= _STOP_AFTER_SYSTEMIC:
+                        stopped = (f"Indexing stopped: {streak} items in a row failed the same way, so the rest "
+                                   f"would too. Your PDFs are not the problem. Last error: {str(skip)[:300]}")
                 progress["processed_items"] += 1
                 elapsed = time.time() - progress["start_time"]
                 progress["elapsed_seconds"] = int(elapsed)
                 done, total = progress["processed_items"], progress["total_items"]
                 progress["eta_seconds"] = int(elapsed / done * (total - done))
+                if stopped:
+                    break
 
             successful = progress["processed_items"] - len(progress["skip_reasons"])
             if successful > 0:
@@ -424,11 +447,11 @@ class ZoteroChatbot:
             logger.info("Total items attempted: %d", progress["total_items"])
             logger.info("Successfully indexed: %d", successful)
             logger.info("Skipped/Failed: %d", len(progress["skip_reasons"]))
-            if successful == 0 and progress["total_items"] > 0:
-                progress["error"] = (
-                    f"All {progress['total_items']} items failed to index. Common causes: "
-                    "PDFs not found (check storage path), network drive issues, or file permissions."
-                )
+            if stopped:
+                progress["error"] = stopped
+                logger.error(stopped)
+            elif successful == 0 and progress["skip_reasons"]:
+                progress["error"] = _failure_summary(progress["skip_reasons"], progress["total_items"])
                 logger.error(progress["error"])
             for reason in progress["skip_reasons"][:10]:
                 logger.info("  - %s", reason)

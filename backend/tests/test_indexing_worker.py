@@ -95,11 +95,42 @@ def test_incremental_mode_skips_indexed_items(bot):
     assert bot.chroma.add_chunks.call_args.kwargs["ids"] == ["2:0"]
 
 
-def test_all_items_failing_sets_error(bot):
-    bot.zlib.search_parent_items_with_pdfs.return_value = [_item(1, "/a.pdf")]
-    _run(bot, incremental=False, pages_by_path={"/a.pdf": []})
-    assert "All 1 items failed" in bot.index_progress["error"]
+def test_all_items_failing_names_the_commonest_reason(bot):
+    bot.zlib.search_parent_items_with_pdfs.return_value = [_item(1, "/a.pdf"), _item(2, "/b.pdf"), _item(3, "/c.pdf")]
+    _run(bot, incremental=False, pages_by_path={"/a.pdf": [], "/b.pdf": []}, exists=lambda p: p != "/c.pdf")
+    error = bot.index_progress["error"]
+    assert error.startswith("All 3 items failed to index. Most common reason (2 of 3): PDF has no extractable text")
     bot.chroma.build_bm25_index.assert_not_called()
+
+
+def test_a_repeated_machine_failure_stops_indexing_early(bot):
+    """The out-of-memory run: 958 items each failed the same way, one by one."""
+    bot.zlib.search_parent_items_with_pdfs.return_value = [_item(i, f"/{i}.pdf") for i in range(20)]
+
+    def out_of_memory(chunks, mid):
+        raise RuntimeError("MPS backend out of memory")
+
+    _run(bot, incremental=False, pages_by_path={f"/{i}.pdf": [{"page_num": 1, "text": "Some text."}] for i in range(20)},
+         embed=out_of_memory)
+    p = bot.index_progress
+    assert p["processed_items"] == 5 and p["total_items"] == 20
+    assert p["error"].startswith("Indexing stopped: 5 items in a row failed the same way")
+    assert "MPS backend out of memory" in p["error"] and bot.is_indexing is False
+
+
+def test_problems_with_single_pdfs_never_stop_indexing(bot):
+    bot.zlib.search_parent_items_with_pdfs.return_value = [_item(i, f"/{i}.pdf") for i in range(8)]
+    _run(bot, incremental=False, pages_by_path={f"/{i}.pdf": [] for i in range(7)} | {"/7.pdf": [{"page_num": 1, "text": "Text."}]})
+    p = bot.index_progress
+    assert p["processed_items"] == 8 and p["error"] is None
+
+
+def test_models_never_run_on_apples_gpu():
+    from backend.embed_utils import model_device
+    with patch("torch.cuda.is_available", return_value=False), patch("torch.backends.mps.is_available", return_value=True):
+        assert model_device() == "cpu"
+    with patch("torch.cuda.is_available", return_value=True):
+        assert model_device() == "cuda"
 
 
 def test_locked_database_is_reported(bot):
