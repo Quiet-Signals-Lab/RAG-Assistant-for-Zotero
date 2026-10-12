@@ -24,7 +24,7 @@ Pure, testable desk logic lives in a new `backend/desk.py`. The class keeps orch
   - Query-biased extract: the sentence from the best passage with the most query terms, trimmed, with page.
 - [x] **1.3 Deterministic known-item detection.** Quoted title, DOI, ISBN, arXiv id, author + year. Matched against item metadata (Zotero SQLite, read-only). Result pinned above the list, never replaces it.
 - [x] **1.4 Bibliographic hydration.** `ZoteroLibrary.get_bibliographic(item_ids)`: item key, type, creators with roles, title, date, container, volume, issue, pages, publisher, DOI, URL. One batched read-only query per search; no reindex needed.
-- [x] **1.5 `ZoteroChatbot.search()` and `POST /api/search`.** Desk retrieval limits independent of the chat model's context window (retrieve 60, rerank 40, up to 30 items, 3 passages each). Response shape as in the plan, plus `scope.extracted` so the UI can show what was read from the query.
+- [x] **1.5 `ZoteroChatbot.search()` and `POST /api/search`.** Desk retrieval limits independent of the chat model's context window (retrieve 100, rerank 60 since the 2026-10 pipeline rebuild — was 60/40 —, up to 30 items, 3 passages each). Response shape as in the plan, plus `scope.extracted` so the UI can show what was read from the query.
 - [x] **1.6 `interfaceMode` setting** (`"desk"` | `"chat"`, default `"desk"`) in backend default settings.
 - [x] **1.7 Tests.** `test_desk.py` (dedupe, MaxP, bands, extract, known-item patterns, false-positive set), `test_zotero_bibliographic.py` (in-memory SQLite with the Zotero tables it touches), `test_search_api.py` (shape, no provider configured, filters passed through, 400 on empty query and empty scope).
 
@@ -53,7 +53,7 @@ A throwaway index of 599 items built from Zotero abstracts, real reranker, real 
 
 ## Stage 3 · Desk depth
 - [x] Query log and pins persisted per profile on the backend (`desk.json` next to `sessions.json`, `GET/PUT /api/profiles/{id}/desk`; browser-stored ones are moved over once)
-- [x] Export: BibTeX and RIS (`features/desk/exports.ts`), besides copying APA references. Chicago is not done: a second hand-written style is the point at which citeproc-js and CSL earn their place
+- [x] Export: BibTeX and RIS (`features/desk/exports.ts`), besides copying APA references. CSL styles via citeproc-js (`features/desk/csl.ts`): APA 7th and Chicago 18th bundled, plus every style installed in Zotero (`GET /api/csl/styles`, read from Zotero's styles folder). Copy, or save as .txt. Only the en-US locale is bundled; the row display keeps the hand-written APA. Done 2026-10-12 by the owner's decision
 - [x] More like this: the item's title as the query, the item itself set aside (pearl growing). Not an item-level vector: the title search needs no index change and shows the reader what was searched
 - [ ] Metadata-only browse (empty query + scope). Skipped: Zotero already browses by collection and tag, and a desk list without relevance would need rows with no band rather than a made-up one
 - [x] Refinement chips: narrow to the busiest decade or the most common collection, set the top 3 aside
@@ -61,9 +61,9 @@ A throwaway index of 599 items built from Zotero abstracts, real reranker, real 
 - [ ] Rocchio-style re-rank by pins (optional, model-free): not started
 
 ## Stage 4 · Index and measurement
-- [ ] Contextual chunk headers (`{title} — {authors, year}`) and item key + DOI in chunk metadata, via a metadata-version migration. Waits for the test collection: it costs every user a full reindex, so it should ship with a measured gain
+- [x] Contextual chunk headers (`{title} — {first author et al., year} — {section}`) for the embedder and the reranker, and item key + section in chunk metadata, as part of the PDF pipeline rebuild (layout-aware extraction, section-aware chunks, reference lists left out). No migration: an old index keeps working and a full reindex applies the new pipeline. DOI not added (nothing reads it). Measured with `scripts/eval_retrieval.py` on the owner's library before shipping
 - [x] Test collection harness: `scripts/eval_ranking.py` pools queries (with intents), scores nDCG@10, P@5 and MRR, compares two runs with a sign test. The 40 judged queries themselves need the library's owner; judgments stay in the profile folder
-- [x] Platt calibration fit (`eval_ranking.py calibrate`); replacing the fixed band cut-offs waits for real judgments
+- [x] Platt calibration fit (`eval_ranking.py calibrate`, and in-process in `eval_retrieval.py calibrate`); band cut-offs set from the 2026-10-12 test set on the owner's library (judgments by Claude from titles and abstracts, not by the owner)
 - [ ] Measure local fan-out latency (`llama-server -np 8`, 4B model) and record it. Measured instead through mlx_lm.server, one call at a time: see `docs/DESK_CLERK.md`
 
 ## Stage 5 · The desk clerk (tier 1, opt-in)
