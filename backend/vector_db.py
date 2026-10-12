@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import sqlite3
+import unicodedata
 from contextlib import contextmanager
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
@@ -43,6 +44,7 @@ def _tokenize_for_bm25(text: str) -> list:
     the whitespace split produces individual character tokens. Mixed text is
     handled correctly because only CJK characters are expanded.
     """
+    text = unicodedata.normalize("NFKC", text).replace("­", "")  # ligatures (ﬁ) and soft hyphens
     return _CJK_RE.sub(r' \g<0> ', text.lower()).split()
 
 

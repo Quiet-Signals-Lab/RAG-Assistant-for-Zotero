@@ -34,7 +34,11 @@ Multiple embedding models are supported, each creating a separate ChromaDB colle
 
 ## Document Processing
 
-PDFs are extracted with page-level granularity, preserving page numbers throughout the chunking process. Text is split into approximately 800-character chunks with 200-character overlap, using sentence boundaries to avoid mid-sentence cuts. Each chunk stores metadata including item ID, title, authors, year, tags, collections, item type, PDF path, and page number, enabling both filtering and citation generation.
+PDFs are read page by page with their layout (`backend/pdf.py`): hyphenated line breaks are joined and ligatures expanded, rotated stamps and boilerplate lines are dropped, and short lines that recur across pages (running headers, footers, page numbers) are removed. Headings are recognised from font size and weight, so every passage knows its section.
+
+Chunking (`backend/chunking.py`) packs whole sentences within a section to about 1,100 characters (hard cap 1,600 for runs with no sentence breaks, such as tables), with no overlap; a chunk may cross a page break and records the page it starts on. Reference lists (by heading or by citation density) and number-only tables are not indexed. The embedding and the reranker see each passage with a context header naming the work, first author, year and section; the stored text, which the desk shows, does not. Each chunk stores item ID, item key, title, authors, year, tags, collections, item type, PDF path, page and section. Changing the pipeline does not break an existing index; a full reindex applies it to items indexed earlier.
+
+The effect of a pipeline change is measured with `scripts/eval_retrieval.py` against a test set in the profile folder, before and after, on a copy of the index.
 
 ## Implementation Notes
 

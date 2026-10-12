@@ -33,21 +33,21 @@ def bot():
     return b
 
 
-def _run(bot, incremental, pages_by_path, exists=lambda p: True):
+def _run(bot, incremental, pages_by_path, exists=lambda p: True, embed=None):
     """Run the worker synchronously with PDF text and embeddings mocked."""
     def pdf_factory(path):
         m = Mock()
         pages = pages_by_path[path]
         if isinstance(pages, Exception):
-            m.extract_text_with_pages.side_effect = pages
+            m.extract_blocks.side_effect = pages
         else:
-            m.extract_text_with_pages.return_value = pages
+            m.extract_blocks.return_value = [{"page": p["page_num"], "text": p["text"], "heading": False} for p in pages]
         return m
 
     with patch("backend.interface.PDF", side_effect=pdf_factory), \
          patch("backend.interface.os.path.exists", side_effect=exists), \
          patch("backend.interface.get_embeddings_batch",
-               side_effect=lambda chunks, mid: [np.zeros(4, dtype=np.float32) for _ in chunks]), \
+               side_effect=embed or (lambda chunks, mid: [np.zeros(4, dtype=np.float32) for _ in chunks])), \
          patch("backend.interface.get_embedding_dimension", return_value=4):
         bot._index_library_worker(incremental)
 
