@@ -154,7 +154,7 @@ def rerank_in_order(scores):
 
 def test_search_returns_a_ranked_bibliography_with_citations(bot):
     bot.chroma.query_hybrid_rrf.return_value = hits(("1", 0), ("2", 0), ("1", 0))
-    with patch("backend.interface.rerank_passages", rerank_in_order([1.0, 5.0, -6.0])):
+    with patch("backend.interface.rerank_passages", rerank_in_order([2.0, 6.0, -6.0])):
         out = bot.search("riders")
     assert [it["item_id"] for it in out["items"]] == ["2", "1"]
     assert out["items"][0]["citation"]["item_key"] == "KEY2"

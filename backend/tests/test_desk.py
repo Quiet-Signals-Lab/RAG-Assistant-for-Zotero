@@ -63,8 +63,8 @@ def test_extract_without_matches_still_returns_text():
 # --- bands, dedupe, ranking -------------------------------------------------
 
 def test_bands_follow_the_cutoffs():
-    assert [desk.band_for(s) for s in (5, 3, 1, 0, -2, -4, -9)] == [
-        "strong", "strong", "good", "good", "weak", "weak", "see_also"]
+    assert [desk.band_for(s) for s in (6, 5.4, 3, 1.8, 0, -1.9, -2, -9)] == [
+        "strong", "strong", "good", "good", "weak", "weak", "see_also", "see_also"]
 
 
 def test_dedupe_drops_repeated_text_but_keeps_overlapping_neighbours():

@@ -14,7 +14,10 @@ from typing import Any, Dict, List, Optional, Sequence
 # shortcut: fixed cut-offs on the raw cross-encoder logit (ms-marco-MiniLM-L-6-v2
 # has no output activation); replace with per-reranker calibration fitted on the
 # test collection (roadmap Stage 4).
-BAND_CUTOFFS = ((3.0, "strong"), (0.0, "good"), (-4.0, "weak"))
+# Reranker (ms-marco-MiniLM-L-6-v2) logits at P(relevant) = 0.8, 0.5 and 0.2, from a Platt
+# fit on 412 judged results of the 2026-10-12 test set (`eval_retrieval.py calibrate`):
+# sigmoid(0.381 * score - 0.672). Before the fit the cut-offs were 3.0 / 0.0 / -4.0.
+BAND_CUTOFFS = ((5.4, "strong"), (1.8, "good"), (-1.9, "weak"))
 SEE_ALSO = "see_also"
 
 # Bonus for items with several good passages. Off: MaxP alone is the
