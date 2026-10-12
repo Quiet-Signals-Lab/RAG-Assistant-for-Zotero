@@ -11,6 +11,7 @@ import { useDesk, type Pane, type Room } from "./DeskContext";
 import Evidence from "./Evidence";
 import QueryDesk from "./QueryDesk";
 import RoomHeader from "../../components/layout/RoomHeader";
+import buyMeACoffee from "../../assets/buymeacoffee.png";
 
 type IndexStats = { indexed_items: number; total_chunks: number; current_embedding_model: string };
 
@@ -43,23 +44,29 @@ const About: React.FC = () => {
       <div className="panel-head"><span className="panel-head__title">About</span></div>
       <div className="about__mark" aria-hidden="true" />
       <h2 className="about__name">RAG Assistant for Zotero</h2>
-      <p>A reference desk for your Zotero library. Ranked sources with the evidence open at the page. No answers. Nothing leaves this computer unless you set it to.</p>
-      <p className="mono about__meta">{version ? `Version ${version} · ` : ""}Free and open source · Made by Quiet Signals Lab</p>
+      <p className="mono about__meta">{version ? `Version ${version} · ` : ""}Made by Quiet Signals Lab in the Netherlands</p>
       <QslLine />
-      <h3 className="desk-label">What this desk will never do</h3>
-      <ul className="about__never">
-        <li>Answer your question for you, or write a summary across papers.</li>
-        <li>Send your PDFs anywhere.</li>
-        <li>Write to your Zotero database.</li>
-        <li>Require an account or an API key.</li>
-      </ul>
       <p className="about__links">
+        <a href="https://quietsignalslab.com/" target="_blank" rel="noreferrer">Website</a>
+        <a href="https://www.linkedin.com/company/quiet-signals-lab" target="_blank" rel="noreferrer">LinkedIn</a>
+        <a href="mailto:support@quietsignalslab.com" target="_blank" rel="noreferrer">support@quietsignalslab.com</a>
         <a href={REPO} target="_blank" rel="noreferrer">Source code</a>
         <a href={`${REPO}/blob/master/docs/REFERENCE_DESK_PLAN.md`} target="_blank" rel="noreferrer">Design rationale and sources</a>
       </p>
+      <p>RAG Assistant is made by a small independet software studio. It is and will remain free. If you find my work useful, please consider supporting it via the link below.</p>
+      <p>
+        <a href="https://buymeacoffee.com/aahepburn" target="_blank" rel="noreferrer">
+          <img src={buyMeACoffee} alt="Buy Me A Coffee" height="40" />
+        </a>
+      </p>
       <p className="about__credit">
         The desk borrows its methods from library science: Cutter's catalogue, Ranganathan's five laws, Taylor's reference
-        interview and Bates' berrypicking. It does the catalogue's job, not the librarian's.
+        interview and Bates' berrypicking.
+      </p>
+      <p className="about__credit">
+        © 2025–2026 Alexander Hepburn · Licensed under the{" "}
+        <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noreferrer">GNU General Public License v3.0</a>.
+        You may share and modify it under the same licence; it comes with no warranty.
       </p>
     </div>
   );
@@ -84,7 +91,7 @@ const DeskShell: React.FC = () => {
 
   return (
     <div className="desk" data-pane={desk.pane}>
-      <RoomHeader title="Reference desk">
+      <RoomHeader title="RAG Assistant for Zotero">
         <nav className="desk__panes" aria-label="Panes">
           {PANES.map((p) => (
             <button key={p.id} type="button" aria-pressed={desk.pane === p.id} onClick={() => desk.setPane(p.id)}>

@@ -10,10 +10,16 @@ function byline(e: ChainEntry): string {
   return [names, e.year ? `(${e.year})` : ""].filter(Boolean).join(" ");
 }
 
-const Entries: React.FC<{ entries: ChainEntry[]; label: string }> = ({ entries, label }) => {
+function matches(e: ChainEntry, words: string[], ownedOnly: boolean): boolean {
+  if (ownedOnly && !e.owned_item_id) return false;
+  const text = [e.title, e.year ?? "", ...e.authors].join(" ").toLocaleLowerCase();
+  return words.every((w) => text.includes(w));
+}
+
+const Entries: React.FC<{ entries: ChainEntry[]; label: string; filtering: boolean }> = ({ entries, label, filtering }) => {
   const [all, setAll] = useState(false);
   const owned = entries.filter((e) => e.owned_item_id).length;
-  if (!entries.length) return <p className="chain__empty">{label}: none listed.</p>;
+  if (!entries.length) return <p className="chain__empty">{label}: {filtering ? "none match the filter" : "none listed"}.</p>;
   return (
     <section className="chain__list" aria-label={label}>
       <h3 className="desk-label desk-label--split">
@@ -56,6 +62,8 @@ const Entries: React.FC<{ entries: ChainEntry[]; label: string }> = ({ entries, 
  */
 const Chain: React.FC<{ item: DeskItem }> = ({ item }) => {
   const [state, setState] = useState<{ status: "idle" | "loading" | "done" | "error"; data?: ChainResponse; error?: string }>({ status: "idle" });
+  const [filter, setFilter] = useState("");
+  const [ownedOnly, setOwnedOnly] = useState(false);
   const inflight = useRef<AbortController | null>(null);
   useEffect(() => () => inflight.current?.abort(), []);
 
@@ -88,17 +96,32 @@ const Chain: React.FC<{ item: DeskItem }> = ({ item }) => {
       {state.status === "done" && state.data && !state.data.found && (
         <p className="chain__empty">Semantic Scholar does not list this item.</p>
       )}
-      {state.status === "done" && state.data?.found && (
-        <>
-          <Entries entries={state.data.references ?? []} label="References" />
-          <Entries entries={state.data.cited_by ?? []} label="Cited by" />
+      {state.status === "done" && state.data?.found && (() => {
+        const words = filter.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        const filtering = words.length > 0 || ownedOnly;
+        const keep = (list?: ChainEntry[]) => (list ?? []).filter((e) => matches(e, words, ownedOnly));
+        return <>
+          <div className="chain__filter">
+            <input
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter by title, author or year"
+              aria-label="Filter references and citations"
+            />
+            <label>
+              <input type="checkbox" checked={ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} /> Only in my library
+            </label>
+          </div>
+          <Entries entries={keep(state.data.references)} label="References" filtering={filtering} />
+          <Entries entries={keep(state.data.cited_by)} label="Cited by" filtering={filtering} />
           {state.data.url && (
             <p className="chain__source">
               From <a href={state.data.url} target="_blank" rel="noreferrer">Semantic Scholar</a>. Its lists can be incomplete.
             </p>
           )}
-        </>
-      )}
+        </>;
+      })()}
     </section>
   );
 };

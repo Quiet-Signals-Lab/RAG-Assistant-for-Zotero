@@ -125,7 +125,7 @@ function openExternalUrl(url: string): void {
     shell.openExternal(parsed.href).catch((err) => console.error('openExternal failed:', err));
     return;
   }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'mailto:') {
     console.warn(`Refusing to open external URL with scheme ${parsed.protocol}: ${url}`);
     return;
   }

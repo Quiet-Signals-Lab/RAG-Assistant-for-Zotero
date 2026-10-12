@@ -841,7 +841,7 @@ mark {
 
 .passage__text {
   margin: 0 0 8px;
-  font: 13.5px/1.55 var(--font-serif);
+  font: 13.5px/1.55 var(--font-sans);
   color: var(--ink);
   overflow-wrap: anywhere;
 }
@@ -923,6 +923,26 @@ mark {
   flex-direction: column;
   gap: 8px;
   margin-top: 16px;
+}
+
+.chain__filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.chain__filter input[type="search"] {
+  flex: 1 1 180px;
+  font: 13px var(--font-sans);
+  color: var(--ink);
+  background: var(--page);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  min-width: 0;
 }
 
 .chain__hint,
@@ -1010,20 +1030,14 @@ mark {
   margin-top: 8px;
 }
 
-.about__never {
-  margin: 0;
-  padding-left: 1.1em;
-  display: grid;
-  gap: 4px;
-}
-
 .about__links {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
 }
 
-.about__links a {
+.about__links a,
+.about__credit a {
   color: var(--ink);
   text-decoration: underline;
   text-decoration-color: var(--brass);
