@@ -24,6 +24,8 @@ Nothing to run. Your index keeps working as it is; the new PDF pipeline applies 
 - **Filter the references and citations** fetched from Semantic Scholar by title, author or year, or to the works already in your library.
 
 ### Fixed
+- **Limits by author, tag or collection held on a large library.** They were applied to the few hundred passages retrieved first, so when the matching items were not among them the limit was quietly set aside (on a 61,000-passage library, "everything Pearl wrote before 2015" found nothing). The limit is now resolved to the matching items before retrieval. An author limit also matches a whole last name: "Pearl" no longer selects Pearlmutter.
+- **A preprint and its published version show as one result** when title and authors agree and the years are within two.
 - **No model chosen meant no model at all.** With Ollama selected and no model picked, jobs were sent to Ollama's nominal default `llama3.2`, which a machine that pulled `llama3.2:3b` does not have; every job failed quietly while the app reported a model. The first installed model is used instead, and a server with nothing installed is reported as no model.
 
 ### Changed

@@ -110,9 +110,9 @@ def test_the_same_paper_stored_twice_is_one_row():
     docs = ["adversarial passage one", "adversarial passage two", "other"]
     metas = [meta("1", title="Explaining and Harnessing Adversarial Examples", year=2015),
              meta("2", title="Explaining and harnessing adversarial examples.", year=2015),
-             meta("3", title="Explaining and Harnessing Adversarial Examples", year=2014)]
+             meta("3", title="Explaining and Harnessing Adversarial Examples", year=2010)]
     items = desk.build_bibliography(docs, metas, [5.0, 4.0, 1.0], "adversarial")
-    assert [it["item_id"] for it in items] == ["1", "3"]  # a different year is a different item
+    assert [it["item_id"] for it in items] == ["1", "3"]  # years far apart: a different work
     assert items[0]["duplicates"] == ["2"] and items[1]["duplicates"] == []
     assert [it["rank"] for it in items] == [1, 2]
 
@@ -199,3 +199,22 @@ def test_owned_works_are_marked_by_doi_or_title_and_listed_first():
                {"title": "Other", "doi": "10.1/ABC"}]
     out = mark_owned(entries, {"10.1/abc": "9"}, {"Riders on the storm": "2"})
     assert [(e["title"], e["owned_item_id"]) for e in out] == [("Riders on the Storm.", "2"), ("Other", "9"), ("Elsewhere", None)]
+
+
+def test_versions_of_one_work_fold_but_short_titles_need_the_same_year():
+    def item(i, title, year, authors="Lipton"):
+        return {"item_id": str(i), "title": title, "year": year, "authors": authors}
+    folded = desk._fold_duplicates([item(1, "The Mythos of Model Interpretability", 2017),
+                                    item(2, "The Mythos of Model Interpretability", 2016),
+                                    item(3, "Introduction", 2010, "Smith"), item(4, "Introduction", 2012, "Smith"),
+                                    item(5, "The Mythos of Model Interpretability", 2021)])
+    assert [it["item_id"] for it in folded] == ["1", "3", "4", "5"]
+    assert folded[0]["duplicates"] == ["2"]
+
+
+def test_author_limit_matches_a_whole_last_name():
+    from backend.metadata_utils import build_metadata_where_clause, _matches_where_clause
+    where = build_metadata_where_clause(author="Pearl")
+    assert _matches_where_clause({"authors": "Pearl,Bareinboim"}, where)
+    assert _matches_where_clause({"authors": "Bareinboim,pearl"}, where)
+    assert not _matches_where_clause({"authors": "Lang,Pearlmutter,Price"}, where)

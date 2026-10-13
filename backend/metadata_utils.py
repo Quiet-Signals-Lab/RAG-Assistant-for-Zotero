@@ -36,7 +36,7 @@ def build_metadata_where_clause(
         tags: List of tags to match (any tag matches)
         collections: List of collections to match (any collection matches)
         title: Title substring to match (case-insensitive)
-        author: Author substring to match (case-insensitive)
+        author: A creator's last name, matched whole (case-insensitive)
         item_types: List of item types to match (any type matches, uses $in - ChromaDB compatible)
     
     Returns:
@@ -87,7 +87,8 @@ def build_metadata_where_clause(
     
     # Author condition (substring match) - uses $contains which requires client-side filtering
     if author:
-        conditions.append({"authors": {"$contains": author}})
+        # A whole last name in the comma-joined creators: "Pearl" must not select Pearlmutter.
+        conditions.append({"authors": {"$contains_item": author}})
     
     # Item type conditions (any type matches) - uses $in which is ChromaDB-compatible
     if item_types:

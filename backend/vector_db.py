@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import sqlite3
+import time
 import unicodedata
 from contextlib import contextmanager
 from typing import Any, Dict, Iterable, Iterator, List, Optional
@@ -294,6 +295,7 @@ class ChromaClient:
         the keyword index. Long books exceed Chroma's maximum batch size, so the
         add is split into batches the client accepts (issue #86).
         """
+        self.__dict__.pop("_item_ids_cache", None)
         step = self._max_batch_size()
         for start in range(0, len(ids), step):
             sl = slice(start, start + step)
@@ -307,6 +309,7 @@ class ChromaClient:
                 self._fts_add(conn, ids[sl], documents[sl])
 
     def delete_item(self, item_id: str) -> int:
+        self.__dict__.pop("_item_ids_cache", None)
         """
         Delete all chunks associated with an item from the database.
 
@@ -345,6 +348,9 @@ class ChromaClient:
 
         # Separate ChromaDB-compatible and client-side filters
         chroma_where, client_where = separate_where_clauses(where)
+        chroma_where, client_where = self._prefilter(chroma_where, client_where)
+        if chroma_where is False:
+            return {'ids': [[]], 'documents': [[]], 'metadatas': [[]], 'distances': [[]]}
 
         # Embed query using the configured embedding model
         query_embedding = get_embedding(query, model_id=embedding_model_id)
@@ -397,6 +403,38 @@ class ChromaClient:
             'distances': [[0.0] * len(combined_ids)]  # Placeholder, will be re-ranked
         }
 
+    # Filters Chroma cannot evaluate (a whole tag, collection or author in a comma-joined
+    # field) used to be applied to the top few hundred retrieved chunks only, so on a
+    # large library the matching items were often not in that pool at all and the limit
+    # was set aside. They are now resolved to item ids first, which Chroma pre-filters on.
+    _ITEM_IDS_TTL = 600.0
+
+    def _prefilter(self, chroma_where, client_where):
+        """(chroma_where with the client-side filters folded in as item ids, None), or
+        (False, None) when nothing matches them."""
+        if not client_where:
+            return chroma_where, client_where
+        from backend.metadata_utils import merge_where_clauses
+        ids = self._item_ids_matching(client_where)
+        if not ids:
+            return False, None
+        return merge_where_clauses(chroma_where, {"item_id": {"$in": sorted(ids)}}), None
+
+    def _item_ids_matching(self, client_where) -> set:
+        """Item ids whose chunks satisfy a client-side where clause; cached per clause,
+        cleared on every write."""
+        import json as _json
+        key = _json.dumps(client_where, sort_keys=True)
+        cache = self.__dict__.setdefault("_item_ids_cache", {})
+        hit = cache.get(key)
+        if hit and time.monotonic() - hit[0] < self._ITEM_IDS_TTL:
+            return hit[1]
+        ids = set()
+        for page in self._iter_metadatas():
+            ids.update(m["item_id"] for m in page if m and self._matches_where_clause(m, client_where))
+        cache[key] = (time.monotonic(), ids)
+        return ids
+
     def query_hybrid_rrf(
         self,
         query: str,
@@ -426,6 +464,9 @@ class ChromaClient:
 
         # Separate ChromaDB-compatible and client-side filters
         chroma_where, client_where = separate_where_clauses(where)
+        chroma_where, client_where = self._prefilter(chroma_where, client_where)
+        if chroma_where is False:
+            return {'ids': [[]], 'documents': [[]], 'metadatas': [[]], 'distances': [[]]}
 
         # Get dense (semantic) results with ChromaDB-compatible filters only
         query_embedding = get_embedding(query, model_id=embedding_model_id)

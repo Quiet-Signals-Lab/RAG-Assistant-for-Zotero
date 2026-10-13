@@ -138,3 +138,23 @@ def test_query_hybrid_rrf_fuses_dense_and_keyword(client, monkeypatch):
     filtered = client.query_hybrid_rrf("dogs bark", k=2, where={"item_id": {"$in": ["1"]}},
                                        embedding_model_id="test-model")
     assert set(filtered["ids"][0]) <= {"1:0"}
+
+
+def test_author_and_tag_limits_are_resolved_to_items_before_retrieval(client, monkeypatch):
+    """A limit Chroma cannot evaluate must not depend on the item being in the retrieved pool."""
+    _add_items(client, {
+        "1": (["causal diagrams"], {"authors": "Pearl,Bareinboim", "tags": "Causality"}),
+        "2": (["grammar induction"], {"authors": "Lang,Pearlmutter,Price", "tags": "Learning"}),
+        "3": (["unrelated text"], {"authors": "Smith", "tags": "Causality,Other"}),
+    })
+    import backend.embed_utils as eu
+    monkeypatch.setattr(eu, "get_embedding", lambda q, model_id=None: np.array(_vec(2), dtype=np.float32))
+    by_author = client.query_hybrid_rrf("anything", k=5, where={"authors": {"$contains_item": "Pearl"}}, embedding_model_id="test-model")
+    assert by_author["ids"][0] == ["1:0"], "Pearlmutter is not Pearl"
+    by_tag = client.query_hybrid_rrf("anything", k=5, where={"tags": {"$contains_item": "Causality"}}, embedding_model_id="test-model")
+    assert set(by_tag["ids"][0]) == {"1:0", "3:0"}
+    none = client.query_hybrid_rrf("anything", k=5, where={"authors": {"$contains_item": "Nobody"}}, embedding_model_id="test-model")
+    assert none["ids"][0] == []
+    assert client._item_ids_matching({"authors": {"$contains_item": "Pearl"}}) == {"1"}
+    _add_items(client, {"4": (["more causal"], {"authors": "Pearl", "tags": ""})})
+    assert client._item_ids_matching({"authors": {"$contains_item": "Pearl"}}) == {"1", "4"}, "cache cleared on write"

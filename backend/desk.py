@@ -294,22 +294,31 @@ def build_bibliography(
 def _fold_duplicates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Show an item stored twice in Zotero as one row.
 
-    Same title (case and punctuation aside), same year and same authors, so two
-    different chapters called "Introduction" stay apart. Expects items sorted
-    best first; the best copy stays and lists the others.
+    Same title (case and punctuation aside) and same authors, and the same year
+    unless the title is long enough to be one work's (four words or more) and the
+    years are within two: a preprint and its published version, or two arXiv
+    versions, fold; two chapters called "Introduction" stay apart. Expects items
+    sorted best first; the best copy stays and lists the others.
     """
     kept: List[Dict[str, Any]] = []
-    seen: Dict[Any, Dict[str, Any]] = {}
+    seen: List[tuple] = []  # (title, authors, year, item)
     for item in items:
         title = " ".join(_WORD.findall(item["title"].lower()))
         authors = frozenset(a.strip().lower() for a in re.split(r"[,;]", item["authors"]) if a.strip())
-        key = (title, item["year"], authors) if title else None
-        if key is not None and key in seen:
-            seen[key]["duplicates"].append(item["item_id"])
+        year = item["year"]
+        match = None
+        if title:
+            for t, a, y, first in seen:
+                if t == title and a == authors and (y == year or (
+                        len(title.split()) >= 4 and y is not None and year is not None and abs(y - year) <= 2)):
+                    match = first
+                    break
+        if match is not None:
+            match["duplicates"].append(item["item_id"])
             continue
         item["duplicates"] = []
-        if key is not None:
-            seen[key] = item
+        if title:
+            seen.append((title, authors, year, item))
         kept.append(item)
     return kept
 
