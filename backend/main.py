@@ -44,7 +44,6 @@ from backend.pdf import PDF
 from fastapi.middleware.cors import CORSMiddleware
 from backend.interface import ZoteroChatbot
 from backend.vector_db import ChromaClient
-from backend.embed_utils import get_embedding
 from backend.profile_manager import ProfileManager
 from backend.metadata_version import check_metadata_compatibility
 from backend.metadata_migration import MetadataMigration
@@ -75,6 +74,10 @@ async def lifespan(_app: FastAPI):
         raise RuntimeError("Failed to initialize profile system")
     logger.info("Active profile: %s - %s", active_profile['id'], active_profile['name'])
     chatbot = initialize_chatbot()
+    # The first search otherwise waits ~15 s for the embedder and reranker to load.
+    import threading
+    from backend.embed_utils import warm_up
+    threading.Thread(target=warm_up, args=(chatbot.embedding_model_id,), daemon=True, name="warm-up").start()
     yield
 
 
@@ -141,7 +144,6 @@ def load_settings(profile_id: str = None):
         # The desk's model jobs (backend/clerk_jobs.py). Each runs only when a model is set.
         "deskReadQuery": True,   # read the request with the model before searching
         "deskReadTimeout": 8,    # seconds to wait for that reading before using the library's
-        "deskNotes": True,       # one indicative note per result, after the list appears
         "deskAlsoTry": True,     # next searches chosen from the results' terms
         "deskThemes": True,      # group the results into labelled themes
         "deskClerkCloud": False, # let the clerk use a cloud provider: queries and passages are sent to it
@@ -833,7 +835,6 @@ async def annotate(request: Request, payload: dict = Body(...)):
     provider = chatbot.provider_manager.get_active_provider() if chatbot.provider_manager else None
     events = chatbot.annotate(
         query, items,
-        notes=bool(settings.get("deskNotes", True)),
         also_try=bool(settings.get("deskAlsoTry", True)),
         themes=bool(settings.get("deskThemes", True)),
         # A local server answers one call at a time: a second worker only queues work
@@ -912,7 +913,6 @@ def desk_model():
         "measured": measured(model) if model else None,
         "jobs": {
             "read_query": bool(settings.get("deskReadQuery", True)),
-            "notes": bool(settings.get("deskNotes", True)),
             "also_try": bool(settings.get("deskAlsoTry", True)),
             "themes": bool(settings.get("deskThemes", True)),
         },
@@ -1219,21 +1219,15 @@ def diagnose_unindexed():
             elif not os.path.exists(pdf_path):
                 diagnosis["issues"].append(f"PDF file not found at: {pdf_path}")
             else:
-                # Try to extract text
+                # The same extraction indexing uses, so the diagnosis matches what indexing would see.
                 try:
-                    from backend.pdf import PDF
-                    pdf = PDF(pdf_path)
-                    pages = pdf.extract_text_with_pages()
-                    if not pages:
-                        diagnosis["issues"].append("PDF has no extractable pages")
+                    blocks = PDF(pdf_path).extract_blocks()
+                    if not blocks:
+                        diagnosis["issues"].append("PDF has no extractable text")
                     else:
-                        text = "\\n".join([p['text'] for p in pages])
-                        if not text.strip():
-                            diagnosis["issues"].append("PDF pages exist but contain no text")
-                        else:
-                            diagnosis["text_length"] = len(text)
-                            diagnosis["page_count"] = len(pages)
-                            diagnosis["issues"].append("PDF appears valid - may need manual reindex")
+                        diagnosis["text_length"] = sum(len(b["text"]) for b in blocks)
+                        diagnosis["page_count"] = blocks[-1]["page"]
+                        diagnosis["issues"].append("PDF appears valid - may need manual reindex")
                 except Exception as e:
                     diagnosis["issues"].append(f"PDF extraction error: {str(e)}")
             
@@ -1264,7 +1258,7 @@ def list_embedding_collections():
         # Create a temporary ChromaDB client to list collections
         import chromadb
         from chromadb.config import Settings
-        client = chromadb.PersistentClient(path=chroma_path, settings=Settings())
+        client = chromadb.PersistentClient(path=chroma_path, settings=Settings(anonymized_telemetry=False))
         
         collections = client.list_collections()
         

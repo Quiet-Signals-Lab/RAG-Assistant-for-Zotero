@@ -78,22 +78,6 @@
   border: 1px solid var(--ink);
 }
 
-.desk__panes button {
-  font: 500 12px/1 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 7px 11px;
-  background: none;
-  border: 0;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.desk__panes button[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--paper);
-}
-
 .icon-button {
   width: 32px;
   height: 32px;
@@ -1168,45 +1152,30 @@ mark {
 
 /* ---- The desk clerk -------------------------------------------------------- */
 
-.clerk-note {
-  font: 13.5px/1.45 var(--font-serif);
+.reading {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
   color: var(--ink-2);
 }
 
-.clerk-note__label {
-  font: 600 11px/1 var(--font-mono);
+.reading dt {
+  font: 500 11px/1.6 var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--stamp);
-  border: 1px solid var(--stamp);
-  border-radius: var(--radius-sm);
-  padding: 1px 4px;
-  margin-right: 4px;
-  vertical-align: 1px;
-}
-
-.clerk-note__page {
-  margin-left: 4px;
-  font-size: 12px;
-}
-
-.evidence__note {
-  margin: 0;
-}
-
-.query-desk__reading {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--ink-3);
-}
-
-.query-desk__reading q {
-  color: var(--ink);
-}
-
-.query-desk__reader {
-  font: 12px var(--font-mono);
   color: var(--ink-4);
+}
+
+.reading dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.reading q {
+  color: var(--ink);
 }
 
 .also-try {

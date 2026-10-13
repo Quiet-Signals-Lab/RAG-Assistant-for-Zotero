@@ -122,7 +122,12 @@ right against 21 for the library reader alone. The model missed date phrases the
 regular expressions catch, wrote "until this year" into open ranges, and read
 people the request asked about as authors.
 
-### Indicative note (`NOTE`): after the list
+### Indicative note (`NOTE`): not run since 2026-10-13
+
+Dropped from the desk by the owner's decision: one model call and an entailment
+check per result (some four seconds each on a 4B model) cost more than the notes
+were worth, and few passed the checks on real searches. The job, its guard and
+its measurements stay for `eval_clerk.py`; the row shows its extract.
 
 One sentence on what an item's passages say about the search, so the reader can
 decide whether to open it. Indicative, not informative or evaluative (ANSI/NISO
@@ -160,7 +165,10 @@ MiniLM model is 316 MB and loads lazily on the first note.
 
 Next searches (Bates' berrypicking; pearl growing). Candidates come from the
 results' own tags, or from two-word phrases their titles share when the library
-has few tags, ordered by how many results carry them. The model only chooses up
+has few tags, ordered by how many results carry them. Tags on 1% or more of the
+library (at least ten items) are left out: on a library of arXiv papers every
+result carried "Computer Science - Machine Learning", and those categories were
+the suggestions for every search (2026-10-13 trace). The model only chooses up
 to four of them. The fallback is the three most common.
 
 The relation shown (BT, NT, RT, after ISO 25964) comes from the words, not the
@@ -180,10 +188,10 @@ shares, else its most common title word.
 ### Order of work
 
 After the list appears, the frontend asks `POST /api/annotate` for the clerk's
-work and receives it as newline-delimited JSON as each piece finishes. Work is
-queued by what the reader sees first: notes for the top three rows, then the next
-searches, then theme labels, then the remaining notes. A new search aborts the
-stream, and work that has not started is cancelled.
+work and receives it as newline-delimited JSON as each piece finishes. The next
+searches come first, then theme labels. A new search aborts the stream, and work
+that has not started is cancelled. What the query reader (the model or the
+library reader) made of the request is shown under the query box.
 
 ## Measurement
 

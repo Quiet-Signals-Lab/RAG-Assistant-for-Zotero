@@ -19,6 +19,10 @@ CREATE TABLE itemCreators (itemID INT, creatorID INT, creatorTypeID INT, orderIn
 CREATE TABLE groups (groupID INTEGER PRIMARY KEY, libraryID INT, name TEXT);
 CREATE TABLE deletedItems (itemID INTEGER PRIMARY KEY);
 CREATE TABLE itemAttachments (itemID INTEGER PRIMARY KEY, parentItemID INT, contentType TEXT, path TEXT);
+CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT);
+CREATE TABLE itemTags (itemID INT, tagID INT, type INT);
+CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, collectionName TEXT);
+CREATE TABLE collectionItems (collectionID INT, itemID INT, orderIndex INT);
 """
 
 
@@ -73,8 +77,28 @@ def zlib(tmp_path):
     lib.conn.execute("INSERT INTO deletedItems VALUES (5)")
     lib.add(6, "journalArticle", "GROUP001", {"title": "Group paper 100% real", "date": "2019"},
             [("Ann", "Woodcock", "author")], library=2)
+    lib.add(8, "report", "NOAUTHOR", {"title": "Anonymous report", "date": "2018"})
+    lib.add(9, "attachment", "ATTACH08", {"title": "Report PDF"})
+    lib.conn.execute("INSERT INTO itemAttachments VALUES (9, 8, 'application/pdf', 'storage:report.pdf')")
     lib.conn.commit()
     return ZoteroLibrary(str(path))
+
+
+def test_common_tags_are_those_on_a_share_of_the_pdf_items(zlib):
+    conn = sqlite3.connect(zlib.db_path)
+    conn.execute("INSERT INTO tags VALUES (1, 'to read'), (2, 'Riders')")
+    conn.execute("INSERT INTO itemTags VALUES (1, 1, 0), (8, 1, 0), (1, 2, 0)")
+    conn.commit()
+    assert zlib.get_common_tags(share=0.5, min_items=2) == {"to read"}
+    assert zlib.get_common_tags() == set()  # fewer than ten items carry any tag
+
+
+def test_items_with_pdfs_include_those_without_a_creator(zlib):
+    items = {it["item_id"]: it for it in zlib.search_parent_items_with_pdfs()}
+    assert set(items) == {"1", "8"}
+    assert items["1"]["authors"] == "Woodcock,Graham" and items["8"]["authors"] is None
+    assert items["8"]["pdf_path"].endswith("/NOAUTHOR/report.pdf") is False  # path is under the attachment's key
+    assert items["8"]["pdf_path"].endswith("/ATTACH08/report.pdf")
 
 
 def test_bibliographic_flattens_fields_and_keeps_creator_order(zlib):

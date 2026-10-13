@@ -97,6 +97,9 @@ class ZoteroLibrary:
         implemented — the filter block was a stub, so any caller passing them
         silently got the whole library back. No caller passed them; filtering
         happens downstream on the indexed metadata instead. See issue #75.
+
+        Creators are a left join: an inner join left out every item without a
+        creator (12 in one real library), which could then never be indexed.
         """
         query = """
         SELECT 
@@ -112,8 +115,8 @@ class ZoteroLibrary:
             itemType.typeName AS item_type
         FROM items i
         JOIN itemTypes itemType ON i.itemTypeID = itemType.itemTypeID
-        JOIN itemCreators ic ON i.itemID = ic.itemID
-        JOIN creators cr ON ic.creatorID = cr.creatorID
+        LEFT JOIN itemCreators ic ON i.itemID = ic.itemID
+        LEFT JOIN creators cr ON ic.creatorID = cr.creatorID
         JOIN itemData d_title ON i.itemID = d_title.itemID AND d_title.fieldID = (SELECT fieldID FROM fields WHERE fieldName = 'title')
         JOIN itemDataValues v_title ON d_title.valueID = v_title.valueID
         LEFT JOIN itemData d_date ON i.itemID = d_date.itemID AND d_date.fieldID = (SELECT fieldID FROM fields WHERE fieldName = 'date')
@@ -199,6 +202,22 @@ class ZoteroLibrary:
             """)
             return [row[0] for row in cur.fetchall() if row[0]]
     
+    def get_common_tags(self, share=0.01, min_items=10):
+        """Tags on at least `share` of the items with PDFs (and `min_items` of them): a
+        classification or housekeeping tag ("notion", "to read"), not a subject."""
+        with self._cursor() as cur:
+            cur.execute("""
+                SELECT t.name, COUNT(DISTINCT it.itemID)
+                FROM tags t JOIN itemTags it ON it.tagID = t.tagID
+                WHERE it.itemID IN (SELECT parentItemID FROM itemAttachments WHERE contentType = 'application/pdf')
+                GROUP BY t.name
+            """)
+            counts = cur.fetchall()
+            cur.execute("SELECT COUNT(DISTINCT parentItemID) FROM itemAttachments WHERE contentType = 'application/pdf'")
+            total = cur.fetchone()[0]
+        floor = max(min_items, share * total)
+        return {name for name, n in counts if name and n >= floor}
+
     def get_all_collections(self):
         """Get all collections with item counts."""
         with self._cursor() as cur:

@@ -111,14 +111,13 @@ assert.deepEqual(refinements(listed, {})[0], { kind: "decade", label: "only the 
 assert.deepEqual(refinements(listed, {})[2].item_ids, ["0", "1", "2"]);
 assert.deepEqual(refinements(listed.slice(0, 3), { year_min: 2010, collections: ["ML"] }), []);
 
-// Pathfinder: groups, the note labelled as a model's, else the extract; pinned passages last
+// Pathfinder: groups, each entry with its extract when it has one; pinned passages last
 const a = { ...row("a", article), extract: { text: "Couriers  used WhatsApp", page: 3, highlights: [] } };
 const b = { ...row("b", book), extract: { text: "", page: null, highlights: [] } };
 const md = pathfinder({ query: "courier strikes", scope: "since 2015", date: "11 October 2026",
   groups: [{ label: "Strikes", items: [a] }, { label: "Platforms", items: [b] }],
-  notes: { b: { note: "Describes platform work.", page: 9, support: 0.9 } },
   pins: [{ label: "Tassinari et al. (2020)", page: 3, text: "Couriers used WhatsApp" }] });
 assert.match(md, /^# Pathfinder: courier strikes\n\nSearched 11 October 2026 in my Zotero library, since 2015\./);
 assert.match(md, /## Strikes\n\n1\. Tassinari, A\.[^\n]*\n   - “Couriers used WhatsApp” \(p\. 3\)/);
-assert.match(md, /## Platforms\n\n2\. Woodcock[^\n]*\n   - Clerk's note \(written by a model, checked against the passages\): Describes platform work\. \(p\. 9\)/);
+assert.match(md, /## Platforms\n\n2\. Woodcock[^\n]*\n\n## Pinned passages/);
 assert.match(md, /## Pinned passages\n\n- Tassinari et al\. \(2020\), p\. 3: “Couriers used WhatsApp”/);

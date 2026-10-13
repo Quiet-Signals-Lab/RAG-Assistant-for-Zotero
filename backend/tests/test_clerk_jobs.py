@@ -241,6 +241,22 @@ def test_also_try_candidates_come_from_the_results_tags_most_common_first():
                                          {"term": "Gig economy", "relation": "related"}]
 
 
+def test_read_query_is_not_asked_about_a_request_that_names_an_item():
+    from datetime import date
+    vocab = {"authors": ["Domingos"], "tags": [], "collections": [], "item_types": []}
+    for query in ("Domingos 2012", "10.1177/14614448251348251", "arXiv:2310.06825", "ISBN 978-1-5095-3636-8"):
+        assert jobs.READ_QUERY.skip(jobs.read_query_input(query, vocab, date(2026, 10, 13))) == "the request names an item", query
+    assert jobs.READ_QUERY.skip(jobs.read_query_input("Domingos on machine learning since 2012", vocab, date(2026, 10, 13))) == ""
+
+
+def test_also_try_leaves_out_library_wide_and_arxiv_category_tags():
+    d = jobs.also_try_input("courier organising", ITEMS, common={"Labour"})
+    assert "Labour" not in d["candidates"] and d["candidates"][0] == "Platforms"
+    arxiv = [{"item_id": "1", "title": "A", "tags": ["Computer Science - Machine Learning", "Statistics - Methodology", "Riders"]},
+             {"item_id": "2", "title": "B", "tags": ["Computer Science - Machine Learning", "Riders"]}]
+    assert jobs.also_try_input("couriers", arxiv)["candidates"] == ["Riders"]
+
+
 def test_also_try_guard_drops_repeats_and_the_search_itself():
     d = {"query": "labour", "candidates": ["Labour", "Platforms", "Strikes"]}
     out = jobs.ALSO_TRY.guard({"terms": ["Labour", "Strikes", "Strikes"]}, d)

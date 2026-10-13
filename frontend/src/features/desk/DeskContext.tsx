@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { request } from "../../api/client";
 import { annotate, search } from "../../api/search";
 import { useProfile } from "../../contexts/ProfileContext";
-import type { ClerkNote, DeskItem, Passage, ScopeFilters, SearchResponse, Suggestion, Theme } from "../../types/desk";
+import type { DeskItem, Passage, ScopeFilters, SearchResponse, Suggestion, Theme } from "../../types/desk";
 import { shortCite } from "./cite";
 
 export type Sort = "relevance" | "year" | "author";
@@ -10,13 +10,12 @@ export type Room = "desk" | "library" | "clerk" | "about";
 
 /** The clerk's work on the current results; empty until it arrives, and with no model. */
 export interface ClerkWork {
-  notes: Record<string, ClerkNote>;
   alsoTry: Suggestion[] | null;
   themes: Theme[] | null;
   working: boolean;
 }
 
-const NO_CLERK_WORK: ClerkWork = { notes: {}, alsoTry: null, themes: null, working: false };
+const NO_CLERK_WORK: ClerkWork = { alsoTry: null, themes: null, working: false };
 
 /** A passage the reader kept: the reading list. */
 export interface Pin {
@@ -293,10 +292,7 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     annotate(
       { query: res.scope.topic || res.query, items },
       (event) => {
-        if (event.type === "note") {
-          const { note, page, support } = event;
-          apply((prev) => ({ ...prev, notes: { ...prev.notes, [event.item_id]: { note, page, support } } }));
-        } else if (event.type === "also_try") apply((prev) => ({ ...prev, alsoTry: event.suggestions }));
+        if (event.type === "also_try") apply((prev) => ({ ...prev, alsoTry: event.suggestions }));
         else if (event.type === "themes") apply((prev) => ({ ...prev, themes: event.groups }));
       },
       controller.signal,

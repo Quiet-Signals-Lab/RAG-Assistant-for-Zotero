@@ -32,6 +32,8 @@ class ConversationStore:
     Designed for easy migration to persistent storage (database/files) later.
     """
     
+    MAX_SESSIONS = 200  # oldest sessions are forgotten first; the UI keeps its own copy on disk
+
     def __init__(self):
         # Maps session_id -> ConversationHistory
         self._sessions: Dict[str, ConversationHistory] = {}
@@ -51,6 +53,8 @@ class ConversationStore:
             List of messages in chronological order, including system prompt
         """
         if session_id not in self._sessions:
+            while len(self._sessions) >= self.MAX_SESSIONS:  # the store lives as long as the process
+                del self._sessions[next(iter(self._sessions))]
             # Get provider-specific system prompt if available
             system_prompt = AcademicPrompts.get_system_prompt(provider_id)
             

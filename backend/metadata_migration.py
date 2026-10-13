@@ -148,6 +148,7 @@ class MetadataMigration:
                         self.progress["processed_chunks"] += 1
                         continue
                     cache[item_id] = fetched
+                    self.chroma.upsert_item(item_id, fetched)  # the item table the scope filters read
 
                 updated_item_meta = cache[item_id]
                 

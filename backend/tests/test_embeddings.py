@@ -109,13 +109,33 @@ def test_query_methods():
         "query_hybrid_rrf should NOT use query_texts parameter!"
     print("✓ query_hybrid_rrf uses manual embeddings")
     
-    # Check query_hybrid source
-    query_hybrid_source = inspect.getsource(ChromaClient.query_hybrid)
-    assert 'query_embeddings' in query_hybrid_source, \
-        "query_hybrid should use query_embeddings, not query_texts!"
-    assert 'query_texts' not in query_hybrid_source or 'not query_texts' in query_hybrid_source, \
-        "query_hybrid should NOT use query_texts parameter!"
-    print("✓ query_hybrid uses manual embeddings")
+
+
+def test_local_embeddings_take_the_lock_one_batch_at_a_time(monkeypatch):
+    import numpy as np
+    """A whole book under one lock made a search wait ~17 s for its query embedding."""
+    from backend import embed_utils
+    calls = []
+
+    class FakeModel:
+        def encode(self, texts):
+            assert embed_utils._inference_lock.locked()
+            calls.append(len(texts))
+            return np.zeros((len(texts), 384), dtype=np.float32)
+
+    monkeypatch.setattr(embed_utils, "load_embedding_model", lambda mid=None: FakeModel())
+    monkeypatch.setattr(embed_utils, "_touch", lambda: None)
+    out = embed_utils.get_embeddings_batch(["t"] * 70, "minilm-l3")
+    assert len(out) == 70 and calls == [32, 32, 6]
+
+
+def test_unload_models_drops_every_loaded_model(monkeypatch):
+    from backend import embed_utils
+    monkeypatch.setattr(embed_utils, "_current_model", object())
+    monkeypatch.setattr(embed_utils, "_reranker", object())
+    monkeypatch.setattr(embed_utils, "_nli", object())
+    embed_utils.unload_models()
+    assert embed_utils._current_model is embed_utils._reranker is embed_utils._nli is None
 
 
 def main():

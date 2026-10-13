@@ -122,24 +122,22 @@ class ZoteroChatbot:
         """
         Get the context window size of the currently active model.
 
+        Asked of the provider once per model: this runs two or three times per
+        chat turn, and for a cloud provider each ask was a network call.
+
         Returns:
             Context length in tokens, or None if not available
         """
         try:
             provider = self.provider_manager.get_active_provider()
             model_id = self.provider_manager.get_active_model()
-            creds = self.provider_manager.get_credentials(self.provider_manager.active_provider_id)
-
-            # Get available models from provider
-            models = provider.list_models(creds)
-
-            # Find the active model
-            model_info = next(
-                (m for m in models if m.id == model_id),
-                None
-            )
-
-            return model_info.context_length if model_info else None
+            key = (self.provider_manager.active_provider_id, model_id)
+            known = self.__dict__.setdefault("_context_lengths", {})
+            if key not in known:
+                creds = self.provider_manager.get_credentials(self.provider_manager.active_provider_id)
+                model_info = next((m for m in provider.list_models(creds) if m.id == model_id), None)
+                known[key] = model_info.context_length if model_info else None
+            return known[key]
         except Exception as e:
             # Log but don't fail - fall back to conservative defaults
             logger.debug(f"Could not determine model context length: {e}")
@@ -593,8 +591,8 @@ class ZoteroChatbot:
             item_where = merge_where_clauses(item_where, {"item_id": {"$nin": list(exclude_item_ids)}})
         return merge_where_clauses(item_where, metadata_where), extracted or None, item_where
 
-    def _search_and_rerank(self, query, where, k, rerank_top_k, use_rrf=True, fallback_where=None):
-        """Hybrid search under `where`, then cross-encoder rerank.
+    def _search_and_rerank(self, query, where, k, rerank_top_k, fallback_where=None):
+        """Hybrid search (RRF) under `where`, then cross-encoder rerank.
 
         When the search finds nothing and `fallback_where` differs from `where`, it
         retries once under `fallback_where`. Pass `fallback_where=where` for no fallback.
@@ -602,7 +600,7 @@ class ZoteroChatbot:
         Returns (docs, metas, scores, fell_back), with `scores` the reranker's raw
         logits in the same order as `docs`.
         """
-        search = self.chroma.query_hybrid_rrf if use_rrf else self.chroma.query_hybrid
+        search = self.chroma.query_hybrid_rrf
         search_prompt = self.build_search_prompt(query)
 
         def run(w):
@@ -749,22 +747,22 @@ class ZoteroChatbot:
                 "tags": self.zlib.get_all_tags(),
                 "collections": [c["name"] for c in self.zlib.get_all_collections()],
                 "item_types": [t["name"] for t in self.zlib.get_all_item_types()],
+                "common_tags": self.zlib.get_common_tags(),
             }
         except Exception as e:
             logger.warning("Could not read the library's vocabulary: %s", e)
-            vocab = {"authors": [], "tags": [], "collections": [], "item_types": []}
+            vocab = {"authors": [], "tags": [], "collections": [], "item_types": [], "common_tags": set()}
         self._vocab, self._vocab_at = vocab, time.time()
         return vocab
 
-    def annotate(self, query, items, notes=True, also_try=True, themes=True, workers=2):
+    def annotate(self, query, items, also_try=True, themes=True, workers=2):
         """The clerk's work on a result list, yielded as each piece finishes.
 
-        Events: {"type": "note"} per item, {"type": "also_try"} and {"type": "themes"},
-        in order of completion, then {"type": "done"} with counts. Work is queued by
-        what the reader sees first: notes for the top three rows, the next searches,
-        the theme labels, then the remaining notes; a local server takes one call at a
-        time, so the order is what the reader waits for. Closing the generator cancels
-        work that has not started.
+        Events: {"type": "also_try"} and {"type": "themes"} in order of completion,
+        then {"type": "done"} with counts. Closing the generator cancels work that
+        has not started. The per-item note (clerk_jobs.NOTE) is not run since
+        2026-10-13: one model call and an entailment check per result cost more
+        than the notes were worth; the row keeps its extract.
         """
         import concurrent.futures
         from backend import clerk_jobs
@@ -774,15 +772,10 @@ class ZoteroChatbot:
         counts = {"model": 0, "fallback": 0, "reasons": {}}
         listed = [it for it in items if it.get("band") != "see_also"]
 
-        def note_task(item):
-            def run():
-                result = self.clerk.run(clerk_jobs.NOTE, clerk_jobs.note_input(query, item))
-                event = {"type": "note", "item_id": item["item_id"], **result.value} if result.source == "model" and result.value else None
-                return result, event
-            return run
-
         def also_try_task():
-            data = clerk_jobs.also_try_input(query, items)
+            # From the listed rows only: on a list of weak "see also" matches the suggestions
+            # were those items' tags ("climate change" for medieval agriculture).
+            data = clerk_jobs.also_try_input(query, listed, common=self._vocabulary()["common_tags"])
             if not data["candidates"]:
                 return None, None
             result = self.clerk.run(clerk_jobs.ALSO_TRY, data)
@@ -799,8 +792,7 @@ class ZoteroChatbot:
                 "groups": [{"label": result.value.get(g["id"]), "item_ids": g["item_ids"]} for g in groups],
             }
 
-        noted = [note_task(it) for it in listed if it.get("passages")] if notes and self.clerk.available() else []
-        tasks = noted[:3] + ([also_try_task] if also_try else []) + ([themes_task] if themes else []) + noted[3:]
+        tasks = ([also_try_task] if also_try else []) + ([themes_task] if themes else [])
 
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="annotate")
         futures = [pool.submit(task) for task in tasks]
@@ -817,7 +809,7 @@ class ZoteroChatbot:
                     if result.reason:
                         kind = result.reason.split(":")[0]
                         counts["reasons"][kind] = counts["reasons"].get(kind, 0) + 1
-                        # The first full reason of each kind, so "why no notes" can be answered.
+                        # The first full reason of each kind, so "why the fallback" can be answered.
                         counts.setdefault("detail", {}).setdefault(kind, result.reason)
                 if event is not None:
                     yield event
@@ -928,7 +920,7 @@ class ZoteroChatbot:
                 - year_max: int
                 - tags: list of strings
                 - collections: list of strings
-            use_rrf: Whether to use RRF hybrid search (default True)
+            use_rrf: Accepted for older clients; retrieval is always RRF hybrid search.
             
         Returns:
             Dictionary with summary, citations, and snippets
@@ -989,7 +981,6 @@ class ZoteroChatbot:
             where=db_filter,
             k=limits["retrieval_k"],
             rerank_top_k=limits["rerank_top_k"],
-            use_rrf=use_rrf,
             fallback_where=item_where if (use_metadata_filters and not manual_filters) else db_filter,
         )
 

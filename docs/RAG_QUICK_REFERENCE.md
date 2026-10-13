@@ -22,7 +22,7 @@ def chat(self, query, filter_item_ids=None, session_id=None):
         retrieval_query = self.query_condenser.condense_query(query, conversation_history)
     
     # STEP 3: RETRIEVE using condensed query
-    results = self.chroma.query_hybrid(
+    results = self.chroma.query_hybrid_rrf(
         query=retrieval_query,  # ← Use standalone query!
         k=15
     )
@@ -103,11 +103,11 @@ standalone = condense_query(query, history)
 # → "Is there an overlap between multi-task learning in NLP and causal inference approaches?"
 
 # Retrieval uses standalone query:
-results = chroma.query_hybrid(query=standalone, k=15)
+results = chroma.query_hybrid_rrf(query=standalone, k=15)
 #  Retrieves papers about BOTH MTL AND causal inference
 
 # Without condensation:
-results = chroma.query_hybrid(query="Is there an overlap", k=15)
+results = chroma.query_hybrid_rrf(query="Is there an overlap", k=15)
 #  Retrieves random papers containing "overlap"
 ```
 
@@ -270,7 +270,7 @@ When follow-ups fail, check:
 
 3.  **Is retrieval using condensed query?**
    ```
-   Verify: retrieval_query = condense_query(...) used in query_hybrid()
+   Verify: retrieval_query = condense_query(...) used in query_hybrid_rrf()
    ```
 
 4.  **Is follow-up message plain?**

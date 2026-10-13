@@ -39,8 +39,7 @@ class OpenAIProvider(BaseProvider):
             supports_streaming=True,
             requires_api_key=True,
         )
-        self._client = None
-    
+
     def _get_client(self, credentials: Dict[str, Any]):
         """Get or create OpenAI client with credentials."""
         try:
@@ -55,8 +54,8 @@ class OpenAIProvider(BaseProvider):
             raise ProviderAuthenticationError("OpenAI API key is required")
         
         # For custom endpoints - only use if non-empty and non-whitespace
-        base_url = credentials.get("base_url", "").strip()
-        return OpenAI(api_key=api_key, base_url=base_url if base_url else None)
+        base_url = credentials.get("base_url", "").strip() or None
+        return self._cached((api_key, base_url), lambda: OpenAI(api_key=api_key, base_url=base_url))
     
     def validate_credentials(self, credentials: Dict[str, Any]) -> bool:
         """Validate OpenAI API key by making a test request."""

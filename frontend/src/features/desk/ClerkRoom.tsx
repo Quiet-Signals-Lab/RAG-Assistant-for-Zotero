@@ -4,18 +4,13 @@ import { useSettings, type Settings } from "../../contexts/SettingsContext";
 import ActiveModelPanel from "../models/ActiveModelPanel";
 import type { DeskModel } from "../../types/desk";
 
-type JobKey = "deskReadQuery" | "deskNotes" | "deskAlsoTry" | "deskThemes" | "deskClerkCloud";
+type JobKey = "deskReadQuery" | "deskAlsoTry" | "deskThemes" | "deskClerkCloud";
 
 const JOBS: { key: JobKey; label: string; hint: string }[] = [
   {
     key: "deskReadQuery",
     label: "Read limits from my query",
     hint: "Only when the app's own reader leaves a phrase unread, such as “anything Woodcock has written”. A local 4B model adds about five seconds to those searches.",
-  },
-  {
-    key: "deskNotes",
-    label: "A one-line note on each result",
-    hint: "One sentence on what the passages cover, checked against them. Where a note fails the checks, the row keeps its extract.",
   },
   {
     key: "deskAlsoTry",
@@ -61,15 +56,14 @@ const ClerkRoom: React.FC = () => {
 
   const measured = info?.measured;
   const reading = share(measured?.results.read_query, "correct");
-  const notes = share(measured?.results.note, "model_used");
 
   return (
     <div className="clerk-room">
       <div className="panel-head"><h2 className="panel-head__title">Language model</h2></div>
       <p className="clerk-room__intro">
-        Optional. A language model can add to search results: it can read limits out of your query, write a one-line
-        note on each result, suggest next searches and name groups. It never answers your question, and each job falls
-        back to the app's own method when the model is missing, slow, or fails a check.
+        Optional. A language model can add to search results: it can read limits out of your query, suggest next
+        searches and name groups. What it read from your query is shown under the search box. It never answers your
+        question, and each job falls back to the app's own method when the model is missing, slow, or fails a check.
       </p>
 
       <div className="clerk-room__status" role="status">
@@ -78,16 +72,15 @@ const ClerkRoom: React.FC = () => {
         ) : info.cloud && !info.cloud_allowed ? (
           <span>
             <strong>{info.model.split("/").pop()}</strong> is a cloud model. It is used only if you allow it below;
-            until then the app reads queries itself and shows extracts instead of notes.
+            until then the app reads queries itself.
           </span>
         ) : !info.available ? (
-          <span>No model set up. The app reads queries itself and shows extracts instead of notes.</span>
+          <span>No model set up. The app reads queries itself.</span>
         ) : measured ? (
           <span>
             <strong>{measured.label}</strong> · measured for these jobs on {measured.measured}
             {measured.hardware ? ` (${measured.hardware})` : ""}
-            {reading ? `: read ${reading} test queries right` : ""}
-            {notes ? `, ${notes} notes passed the checks` : ""}.
+            {reading ? `: read ${reading} test queries right` : ""}.
           </span>
         ) : (
           <span>
@@ -107,7 +100,7 @@ const ClerkRoom: React.FC = () => {
           <span className="clerk-job__text">
             <span className="clerk-job__label">Allow {provider.label} for these jobs</span>
             <span className="clerk-job__hint clerk-room__privacy">
-              {provider.label} is a cloud service: your queries, and up to three passages for each note, would be sent to it.
+              {provider.label} is a cloud service: your queries, and the titles and tags of your results, would be sent to it.
             </span>
           </span>
         </label>

@@ -11,7 +11,7 @@ from backend.interface import ZoteroChatbot
 
 # --- endpoint -------------------------------------------------------------------
 
-SETTINGS = {"deskReadQuery": True, "deskReadTimeout": 5, "deskNotes": True, "deskAlsoTry": False, "deskThemes": False}
+SETTINGS = {"deskReadQuery": True, "deskReadTimeout": 5, "deskAlsoTry": False, "deskThemes": False}
 
 
 @pytest.fixture
@@ -56,16 +56,16 @@ def test_exclusions_and_excluded_items_reach_the_search(client):
 
 def test_annotate_streams_events_as_json_lines(client):
     c, bot = client
-    bot.annotate.return_value = (e for e in [{"type": "note", "item_id": "1", "note": "Describes x.", "page": 3},
+    bot.annotate.return_value = (e for e in [{"type": "also_try", "suggestions": [], "source": "model"},
                                              {"type": "done", "counts": {}}])
     r = c.post("/api/annotate", json={"query": "q", "items": [
         {"item_id": "1", "title": "T", "passages": [{"page": 3, "text": "x"}, {"page": "bad", "text": "y"}]}]})
     import json
     events = [json.loads(line) for line in r.text.splitlines()]
-    assert [e["type"] for e in events] == ["note", "done"]
+    assert [e["type"] for e in events] == ["also_try", "done"]
     args, kwargs = bot.annotate.call_args
     assert args[1][0]["passages"][1]["page"] is None  # a non-integer page from the client is dropped
-    assert (kwargs["notes"], kwargs["also_try"], kwargs["themes"]) == (True, False, False)
+    assert (kwargs["also_try"], kwargs["themes"]) == (False, False)
 
 
 def test_annotate_needs_a_query(client):
@@ -82,7 +82,7 @@ def test_desk_model_reports_availability_and_measurements(client):
     body = c.get("/api/desk/model").json()
     assert body == {"available": True, "model": "lmstudio/never-measured-model", "measured": None,
                     "cloud": False, "cloud_allowed": False,
-                    "jobs": {"read_query": True, "notes": True, "also_try": False, "themes": False}}
+                    "jobs": {"read_query": True, "also_try": False, "themes": False}}
 
 
 def test_annotate_refuses_a_body_not_sent_as_json(client):
@@ -264,7 +264,7 @@ def test_excluded_items_are_filtered_out_in_the_search(bot):
     assert bot.chroma.query_hybrid_rrf.call_args.kwargs["where"] == {"item_id": {"$nin": ["9"]}}
 
 
-def test_annotate_queues_notes_for_the_top_rows_before_the_rest_of_the_work():
+def test_annotate_runs_next_searches_and_writes_no_notes():
     from types import SimpleNamespace
     from backend.clerk import Result
     from backend.interface import ZoteroChatbot
@@ -279,20 +279,22 @@ def test_annotate_queues_notes_for_the_top_rows_before_the_rest_of_the_work():
             return "fake/model"
 
         def run(self, job, data):
-            order.append(job.name if job.name != "note" else f"note:{data['title']}")
-            if job.name == "note":
-                return Result({"note": "Describes it.", "page": 1, "support": 0.9}, "model")
+            order.append(job.name)
             return Result([{"term": "Labour", "relation": "related"}], "model")
 
     items = [{"item_id": str(i), "title": f"T{i}", "tags": ["Labour"], "band": "good",
               "passages": [{"page": 1, "text": "x"}]} for i in range(5)]
-    items.append({"item_id": "s", "title": "Ts", "tags": [], "band": "see_also", "passages": [{"page": 1, "text": "x"}]})
-    me = SimpleNamespace(clerk=FakeClerk(), embedding_model_id="none")
+    items.append({"item_id": "s", "title": "Ts", "tags": ["Weak only"], "band": "see_also", "passages": [{"page": 1, "text": "x"}]})
+    me = SimpleNamespace(clerk=FakeClerk(), embedding_model_id="none", _vocabulary=lambda: {"common_tags": {"Common"}})
     events = list(ZoteroChatbot.annotate(me, "q", items, themes=False, workers=1))
 
-    assert order == ["note:T0", "note:T1", "note:T2", "also_try", "note:T3", "note:T4"]  # no note for see-also rows
-    assert [e["type"] for e in events].count("note") == 5 and events[-1]["type"] == "done"
-    assert events[-1]["counts"]["model"] == 6
+    assert order == ["also_try"]
+    assert [e["type"] for e in events] == ["also_try", "done"]
+    assert events[-1]["counts"]["model"] == 1
+    # Nothing listed (only "see also" rows): no next searches are suggested from their tags.
+    order.clear()
+    events = list(ZoteroChatbot.annotate(me, "q", items[5:], themes=False, workers=1))
+    assert order == [] and [e["type"] for e in events] == ["done"]
 
 
 def test_one_failed_annotate_job_does_not_end_the_stream():
@@ -310,12 +312,14 @@ def test_one_failed_annotate_job_does_not_end_the_stream():
         def run(self, job, data):
             if job.name == "also_try":
                 raise RuntimeError("embedding service down")
-            return Result({"note": "Describes it.", "page": 1, "support": 0.9}, "model")
+            return Result({1: "Labour"}, "model")
 
-    items = [{"item_id": str(i), "title": "T", "tags": ["Labour"], "band": "good", "passages": [{"page": 1, "text": "x"}]}
-             for i in range(4)]
-    events = list(ZoteroChatbot.annotate(SimpleNamespace(clerk=Clerk(), embedding_model_id="x"), "q", items, themes=False, workers=1))
-    assert [e["type"] for e in events].count("note") == 4 and events[-1]["counts"]["reasons"] == {"error": 1}
+    items = [{"item_id": str(i), "title": f"T{i} labour", "tags": ["Labour"], "band": "good", "passages": [{"page": 1, "text": "x"}]}
+             for i in range(9)]
+    me = SimpleNamespace(clerk=Clerk(), embedding_model_id="x", _vocabulary=lambda: {"common_tags": set()})
+    with patch("backend.clerk_jobs.cluster_items", return_value=[{"id": 1, "item_ids": ["0"], "titles": ["T0"], "tags": [[]]}]):
+        events = list(ZoteroChatbot.annotate(me, "q", items, workers=1))
+    assert [e["type"] for e in events] == ["themes", "done"] and events[-1]["counts"]["reasons"] == {"error": 1}
 
 
 def test_an_item_set_aside_is_not_pinned_back_as_the_known_item(bot):

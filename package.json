@@ -22,6 +22,7 @@
     "dev:electron:only": "npm run build:electron && npm run dev:electron",
     "dev": "npm run build:electron && concurrently -n frontend,backend,electron -c blue,green,magenta \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:electron\"",
     "build:frontend": "cd frontend && npm run build",
+    "smoke:ui": "env -u ELECTRON_RUN_AS_NODE electron scripts/smoke-ui.cjs",
     "build:electron": "tsc -p electron/tsconfig.json",
     "generate:icons": "node scripts/generate-icons.js",
     "build": "npm run build:frontend && npm run build:electron",

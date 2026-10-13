@@ -39,6 +39,8 @@ _MAX_RETRIES = 5
 _BACKOFF_BASE = 2.0   # seconds
 _BACKOFF_JITTER = 1.0 # seconds of random jitter added to each wait
 
+_clients: dict[tuple, Any] = {}
+
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
     """Embedding provider backed by the OpenAI Embeddings API."""
@@ -79,7 +81,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             )
 
         base_url = credentials.get("base_url", "").strip() or None
-        client = OpenAI(api_key=api_key, base_url=base_url)
+        if _clients.get((api_key, base_url)) is None:  # one connection pool per credentials
+            _clients[(api_key, base_url)] = OpenAI(api_key=api_key, base_url=base_url)
+        client = _clients[(api_key, base_url)]
 
         all_vectors: list[list[float]] = []
 

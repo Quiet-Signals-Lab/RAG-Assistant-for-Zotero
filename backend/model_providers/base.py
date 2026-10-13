@@ -398,6 +398,14 @@ class BaseProvider:
     def requires_api_key(self) -> bool:
         return self._requires_api_key
     
+    def _cached(self, key: tuple, make):
+        """One SDK client per credentials: each one owns a connection pool, and a new
+        one per call opened a fresh TLS connection for every clerk job."""
+        clients = self.__dict__.setdefault("_clients", {})
+        if key not in clients:
+            clients[key] = make()
+        return clients[key]
+
     def _check_credentials(self, credentials: Dict[str, Any], required_keys: List[str]):
         """Helper to validate required credential keys are present."""
         missing = [key for key in required_keys if not credentials.get(key)]

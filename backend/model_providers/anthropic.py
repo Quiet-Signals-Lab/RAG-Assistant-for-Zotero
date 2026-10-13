@@ -43,7 +43,7 @@ class AnthropicProvider(BaseProvider):
         if not api_key:
             raise ProviderAuthenticationError("Anthropic API key is required")
         
-        return Anthropic(api_key=api_key)
+        return self._cached((api_key,), lambda: Anthropic(api_key=api_key))
     
     def validate_credentials(self, credentials: Dict[str, Any]) -> bool:
         """Validate Anthropic API key by making a minimal test request.

@@ -28,8 +28,7 @@ class LMStudioProvider(BaseProvider):
             supports_streaming=True,
             requires_api_key=False,  # Local service, no API key needed
         )
-        self._client = None
-    
+
     def _get_client(self, credentials: Dict[str, Any]):
         """Get or create OpenAI-compatible client for LM Studio."""
         try:
@@ -46,7 +45,7 @@ class LMStudioProvider(BaseProvider):
         
         # LM Studio doesn't require an API key, but the OpenAI client expects one
         # We pass a dummy key to satisfy the client initialization
-        return OpenAI(api_key="lm-studio", base_url=base_url)
+        return self._cached((base_url,), lambda: OpenAI(api_key="lm-studio", base_url=base_url))
     
     def validate_credentials(self, credentials: Dict[str, Any]) -> bool:
         """Validate LM Studio connection by checking if server is running."""

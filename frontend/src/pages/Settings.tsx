@@ -104,7 +104,8 @@ const Settings: React.FC = () => {
         setAvailableModels(prev => ({ ...prev, [providerId]: data.models || [] }));
       }
     } catch (err) {
-      console.error(`Failed to load models for ${providerId}:`, err);
+      // A local server that is not running is a normal state for an optional provider.
+      console.warn(`${providerId} is not reachable; its models will load once it is running.`, err);
     } finally {
       setLoadingModels(prev => ({ ...prev, [providerId]: false }));
     }

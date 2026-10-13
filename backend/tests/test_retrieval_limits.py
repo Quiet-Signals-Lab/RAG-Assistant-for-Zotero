@@ -187,6 +187,9 @@ class TestRetrievalLimits(unittest.TestCase):
         # Verify
         self.assertEqual(context_length, 128000)
         mock_provider.list_models.assert_called_once()
+        # Asked once per model: this runs several times per chat turn.
+        self.assertEqual(self.chatbot.get_active_model_context_length(), 128000)
+        mock_provider.list_models.assert_called_once()
 
     def test_get_active_model_context_length_no_match(self):
         """Test when active model is not in the provider's model list."""

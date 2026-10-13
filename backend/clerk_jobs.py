@@ -2,6 +2,8 @@
 
 READ_QUERY  reads a request into topic and scope, choosing from the library's vocabulary.
 NOTE        writes one indicative sentence about an item's passages, checked by entailment.
+            Not run by the desk since 2026-10-13 (too costly per result); kept for
+            scripts/eval_clerk.py and the measured-model register.
 ALSO_TRY    picks next searches from terms on the results; their relation comes from their words.
 THEMES      names clusters of results, with a label drawn from their titles.
 
@@ -13,13 +15,20 @@ answer against the job's own input; docs/DESK_CLERK.md records why each rule exi
 import re
 from collections import Counter
 from datetime import date
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from backend import query_reader
 from backend.clerk import GuardFailure, Job
 from backend.desk import query_terms, stem, title_words
 
 _STRINGS = {"type": "array", "items": {"type": "string"}}
+# Zotero's arXiv translator tags papers with their categories as "Archive - Subject".
+# They are what a paper is filed under, not something to search next, however few
+# papers carry one ("Computer Science - Information Retrieval" on 8 of 986).
+_ARXIV_CATEGORY = re.compile(
+    r"^(?:Computer Science|Statistics|Mathematics|Physics|Quantitative Biology|Quantitative Finance|Economics|"
+    r"Electrical Engineering and Systems Science|Astrophysics|Condensed Matter|Nonlinear Sciences|Quantum Physics|"
+    r"Mathematical Physics|General Relativity and Quantum Cosmology|High Energy Physics - \w+|Nuclear \w+) - ")
 
 
 def _choice(values: List[str], many: bool, limit: int = 6) -> Dict[str, Any]:
@@ -65,7 +74,9 @@ def _scope_hint(text: str, authors: List[str]) -> bool:
     if _TIME_WORDS.search(text) or _TYPE_WORDS.search(text) or _COLLECTION_WORDS.search(text) or _TAG_WORDS.search(text) or \
             re.search(_EXCLUDE_MARKER, text, re.I):
         return True
-    return any(re.search(rf"\b{re.escape(a)}\b", text, re.I) for a in authors)
+    # A surname as written, capitalised: matched without regard to case, "Input", "Path"
+    # and "Line" sent every plain query that used those words to the model for five seconds.
+    return any(re.search(rf"\b{re.escape(a)}\b", text) for a in authors if a[:1].isupper())
 
 
 def _read_query_prompt(d: Dict[str, Any]) -> str:
@@ -110,7 +121,19 @@ def _read_query_schema(d: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _read_query_skip(d: Dict[str, Any]) -> str:
-    """Ask the model only when the library reader left a possible limit in the topic."""
+    """Ask the model only when the library reader left a possible limit in the topic.
+
+    A request that names one item (a DOI, ISBN, arXiv id, or author and year) has no
+    limits to read: asked anyway, the model read "Domingos 2012" as the years 2012-2012
+    and a DOI's digits as 2013-2025 (2026-10-13 trace).
+    """
+    from backend.desk import detect_known_item
+    hint = detect_known_item(d["query"])
+    # Author and year only with capitalised names: the detector also reads "surveillance
+    # chapters before 2000" as one, and that request does have a limit to read.
+    if hint and (hint["kind"] in ("doi", "isbn", "arxiv")
+                 or (hint["kind"] == "author_year" and all(n[:1].isupper() for n in hint["authors"]))):
+        return "the request names an item"
     if _scope_hint(d["library_reading"]["topic"], d["candidates"]["authors"]):
         return ""
     return "the library reader found every limit"
@@ -431,26 +454,33 @@ ALSO_TRY = Job(
 )
 
 
-def also_try_input(query: str, items: List[Dict[str, Any]], limit: int = 20) -> Dict[str, Any]:
+def also_try_input(query: str, items: List[Dict[str, Any]], limit: int = 20, common: Iterable[str] = ()) -> Dict[str, Any]:
     """Next-search candidates from the results: their tags, else phrases their titles share.
 
     Drawn from the library so every suggestion leads somewhere; ordered by how many
-    results carry them, so the fallback is the most common ones.
+    results carry them, so the fallback is the most common ones. `common` holds the
+    tags on a sizeable share of the library (ZoteroLibrary.get_common_tags): on a
+    library of arXiv papers every result carried "Computer Science - Machine Learning",
+    so the categories were the suggestions for every search, whatever it was about.
     """
     query_words = _words(query)
+    common = set(common)
     counts: Counter = Counter()
     for item in items:
-        for tag in set(item.get("tags") or []):
-            if not (_words(tag) and _words(tag) == query_words):
+        for tag in set(item.get("tags") or []) - common:
+            if not (_words(tag) and _words(tag) == query_words) and not _ARXIV_CATEGORY.match(tag):
                 counts[tag] += 1
+    phrases: set = set()
     if len(counts) < 5:  # a library with few tags: use two-word phrases the titles share
         for item in items:
             words = re.findall(r"[a-z][a-z\-]+", (item.get("title") or "").lower())
-            phrases = {f"{a} {b}" for a, b in zip(words, words[1:]) if title_words(a) and title_words(b)}
-            for phrase in phrases:
+            for phrase in {f"{a} {b}" for a, b in zip(words, words[1:]) if title_words(a) and title_words(b)}:
                 if not _words(phrase) <= query_words:  # a phrase from the search itself leads nowhere new
                     counts[phrase] += 1
-    terms = [t for t, n in counts.most_common() if n >= 2 or len(items) < 4][:limit]
+                    phrases.add(phrase)
+    # A tag is a subject however few results carry it; a title phrase only when two or more
+    # results share it: from a single result, its title in fragments ("gaze worldview") is no next search.
+    terms = [t for t, n in counts.most_common() if n >= 2 or t not in phrases][:limit]
     return {"query": query, "candidates": terms}
 
 

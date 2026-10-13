@@ -1,12 +1,14 @@
 # embed_utils.py
 
-from sentence_transformers import SentenceTransformer, CrossEncoder
+# sentence_transformers (and torch under it) is imported where a model is first
+# loaded: at module level it cost 4.3 s and 430 MB before the API answered /health.
+import gc
 import numpy as np
 import os
 import sys
 import logging
 import threading
-from typing import Optional
+from typing import Any, Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -81,7 +83,8 @@ EMBEDDING_MODELS = {
 # Default model configuration
 DEFAULT_MODEL_ID = 'bge-base'
 _current_model_id = DEFAULT_MODEL_ID
-_current_model: Optional[SentenceTransformer] = None
+_current_model: Optional[Any] = None  # a SentenceTransformer
+_load_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Cloud credential store
@@ -142,31 +145,34 @@ def model_device() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def load_embedding_model(model_id: Optional[str] = None) -> SentenceTransformer:
+def load_embedding_model(model_id: Optional[str] = None):
     """Load the local SentenceTransformer model, reusing cached instance if same model."""
     global _current_model, _current_model_id
 
     target_model_id = model_id or DEFAULT_MODEL_ID
-
-    # Return cached model if already loaded and same
-    if _current_model is not None and _current_model_id == target_model_id:
+    with _load_lock:  # the warm-up thread and a first search must not both load it
+        if _current_model is not None and _current_model_id == target_model_id:
+            return _current_model
+        from sentence_transformers import SentenceTransformer
+        config = get_model_config(target_model_id)
+        logger.info("Loading embedding model: %s (%s)", config['name'], config['description'])
+        _current_model = SentenceTransformer(config['name'], cache_folder=MODELS_CACHE_DIR, device=model_device())
+        _current_model_id = target_model_id
         return _current_model
-
-    # Load new model with explicit cache directory
-    config = get_model_config(target_model_id)
-    logger.info("Loading embedding model: %s (%s)", config['name'], config['description'])
-    _current_model = SentenceTransformer(config['name'], cache_folder=MODELS_CACHE_DIR, device=model_device())
-    _current_model_id = target_model_id
-
-    return _current_model
 
 # Cross-encoder for re-ranking retrieved passages. Loaded on first use so
 # importing this module (and anything that imports it, such as the API) has
 # no network or model-loading side effects.
-_reranker: Optional[CrossEncoder] = None
-_reranker_lock = threading.Lock()
-# Serialises every model inference on the CPU (embedding, reranking, entailment).
+_reranker: Optional[Any] = None  # a CrossEncoder
+# Serialises every model inference on the CPU (embedding, reranking, entailment),
+# and the loading and unloading of the reranker and NLI model.
 _inference_lock = threading.Lock()
+# Models not used for this long are unloaded, as Ollama does with the clerk's model
+# (keep_alive 30m): about 800 MB comes back while the app sits open unused.
+IDLE_UNLOAD_SECONDS = 30 * 60
+ENCODE_BATCH = 32  # sentence-transformers' own default batch
+_idle_timer: Optional[threading.Timer] = None
+_idle_lock = threading.Lock()
 
 
 def release_memory() -> None:
@@ -185,12 +191,49 @@ def release_memory() -> None:
         pass
 
 
-def _get_reranker() -> CrossEncoder:
+def _get_reranker():
+    """Call with _inference_lock held."""
     global _reranker
-    with _reranker_lock:
-        if _reranker is None:
-            _reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', cache_folder=MODELS_CACHE_DIR, device=model_device())
-        return _reranker
+    if _reranker is None:
+        from sentence_transformers import CrossEncoder
+        _reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', cache_folder=MODELS_CACHE_DIR, device=model_device())
+    return _reranker
+
+
+def _touch() -> None:
+    """A model was used: unload them all after IDLE_UNLOAD_SECONDS without another use."""
+    global _idle_timer
+    with _idle_lock:
+        if _idle_timer is not None:
+            _idle_timer.cancel()
+        _idle_timer = threading.Timer(IDLE_UNLOAD_SECONDS, unload_models)
+        _idle_timer.daemon = True
+        _idle_timer.start()
+
+
+def unload_models() -> None:
+    """Drop the embedder, reranker and NLI model; each loads again on its next use."""
+    global _current_model, _reranker, _nli
+    with _inference_lock:
+        if _current_model is None and _reranker is None and _nli is None:
+            return
+        logger.info("Unloading idle models")
+        _current_model = _reranker = _nli = None
+    gc.collect()
+    release_memory()
+
+
+def warm_up(model_id: Optional[str] = None) -> None:
+    """Load the embedder and reranker ahead of the first search, which otherwise waited ~15 s for them."""
+    from backend.embedding_providers import is_cloud_model
+    try:
+        if not is_cloud_model(model_id or _current_model_id):
+            load_embedding_model(model_id)
+        with _inference_lock:
+            _get_reranker()
+        _touch()
+    except Exception as e:  # no network, no disk space: the first search reports it instead
+        logger.warning("Model warm-up failed: %s", e)
 
 
 def get_embeddings_batch(texts: list[str], model_id: Optional[str] = None) -> list[np.ndarray]:
@@ -240,9 +283,14 @@ def get_embeddings_batch(texts: list[str], model_id: Optional[str] = None) -> li
     config = get_model_config(mid)
     expected_dim = config['dimension']
     truncated = [t[:max_chars] for t in texts]
-    with _inference_lock:
-        embeddings = model.encode(truncated)
+    # One batch per lock acquisition: a whole book held the lock ~17 s (42 ms a chunk),
+    # and a search arriving meanwhile waited that long for its query embedding.
+    embeddings = []
+    for start in range(0, len(truncated), ENCODE_BATCH):
+        with _inference_lock:
+            embeddings.extend(model.encode(truncated[start:start + ENCODE_BATCH]))
     release_memory()
+    _touch()
 
     # Validate the first embedding to catch model misconfigurations early
     if len(embeddings) > 0 and len(embeddings[0]) != expected_dim:
@@ -293,6 +341,7 @@ def rerank_passages(query: str, passages: list[str], top_k: Optional[int] = None
     with _inference_lock:
         scores = _get_reranker().predict(pairs, batch_size=8, show_progress_bar=False)
     release_memory()
+    _touch()
     
     # Sort by score (descending) and return indices with scores
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
@@ -307,7 +356,6 @@ def rerank_passages(query: str, passages: list[str], top_k: Optional[int] = None
 # DeBERTa NLI models fail to load under Python 3.13 with this torch release.
 NLI_MODEL = "cross-encoder/nli-MiniLM2-L6-H768"
 _nli = None
-_nli_lock = threading.Lock()
 
 
 def entailment(premises: list[str], hypothesis: str) -> float:
@@ -321,10 +369,14 @@ def entailment(premises: list[str], hypothesis: str) -> float:
     premises = [p for p in premises if p and p.strip()]
     if not premises or not hypothesis.strip():
         return 0.0
-    with _nli_lock:
+    # Under the inference lock like the reranker: three annotate workers (a cloud
+    # clerk) otherwise ran three NLI passes at once and their scratch memory stacked.
+    with _inference_lock:
         if _nli is None:
+            from sentence_transformers import CrossEncoder
             _nli = CrossEncoder(NLI_MODEL, cache_folder=MODELS_CACHE_DIR, device=model_device())
-        model = _nli
-    labels = {v.lower(): k for k, v in model.config.id2label.items()}
-    scores = model.predict([(p, hypothesis) for p in premises], apply_softmax=True)
+        labels = {v.lower(): k for k, v in _nli.config.id2label.items()}
+        scores = _nli.predict([(p, hypothesis) for p in premises], apply_softmax=True)
+    release_memory()
+    _touch()
     return float(max(row[labels["entailment"]] for row in scores))

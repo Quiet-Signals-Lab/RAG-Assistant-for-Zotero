@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import Chain from "./Chain";
 import { useDesk, type Pin } from "./DeskContext";
-import { BandMark, ClerkNoteLine, Highlighted, openPdf, Reference, showInZotero } from "./parts";
+import { BandMark, Highlighted, openPdf, Reference, showInZotero } from "./parts";
 
 /** The first few words of a passage, enough to tell two pins from one page apart. */
 function opening(text: string): string {
@@ -121,11 +121,6 @@ const Evidence: React.FC = () => {
               )}
               {item.citation && <button type="button" className="btn" onClick={() => showInZotero(item.citation)}>Show in Zotero</button>}
             </div>
-            {desk.clerk.notes[item.item_id] && (
-              <p className="evidence__note">
-                <ClerkNoteLine note={desk.clerk.notes[item.item_id]} onPage={(page) => open(page)} />
-              </p>
-            )}
             {failure && <p className="desk-notice desk-notice--error">{failure}</p>}
             <p className="evidence__count">
               {item.passages.length} passage{item.passages.length === 1 ? "" : "s"}, strongest first

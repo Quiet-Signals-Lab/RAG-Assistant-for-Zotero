@@ -60,10 +60,7 @@ class MistralProvider(BaseProvider):
         if not base_url:
             base_url = "https://api.mistral.ai/v1"
         
-        return OpenAI(
-            api_key=api_key,
-            base_url=base_url
-        )
+        return self._cached((api_key, base_url), lambda: OpenAI(api_key=api_key, base_url=base_url))
     
     def validate_credentials(self, credentials: Dict[str, Any]) -> bool:
         """Validate Mistral API key."""
@@ -709,10 +706,7 @@ class GroqProvider(BaseProvider):
         if not base_url:
             base_url = "https://api.groq.com/openai/v1"
         
-        return OpenAI(
-            api_key=api_key,
-            base_url=base_url
-        )
+        return self._cached((api_key, base_url), lambda: OpenAI(api_key=api_key, base_url=base_url))
     
     def validate_credentials(self, credentials: Dict[str, Any]) -> bool:
         """Validate Groq API key."""
@@ -899,10 +893,7 @@ class OpenRouterProvider(BaseProvider):
         if not base_url:
             base_url = "https://openrouter.ai/api/v1"
         
-        return OpenAI(
-            api_key=api_key,
-            base_url=base_url
-        )
+        return self._cached((api_key, base_url), lambda: OpenAI(api_key=api_key, base_url=base_url))
     
     def validate_credentials(self, credentials: Dict[str, Any]) -> bool:
         """Validate OpenRouter API key."""

@@ -16,6 +16,10 @@ npm run dev
 - [ ] Backend starts (http://localhost:8000/health)
 - [ ] Frontend loads (http://localhost:5173)
 - [ ] Basic functionality works
+- [ ] `pytest backend/tests -q` and `cd frontend && npm test` pass
+- [ ] `npm run smoke:ui` passes with the dev servers running: renders both interfaces, switches
+      between them through Settings and the chat's own button, survives a reload in each, does one
+      search and one chat turn, and reports any console error, failed load or renderer crash
 
 ### 2. Bundle Python
 ```bash

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { Citation, ClerkNote, DeskItem, KnownItem, ScopeFilters } from "../../types/desk";
+import type { Citation, DeskItem, KnownItem, ScopeFilters } from "../../types/desk";
 import { plain, reference, shortCite, sortName } from "./cite";
 import { useDesk, type Sort } from "./DeskContext";
 import { bibtex, pathfinder, ris } from "./exports";
@@ -7,7 +7,7 @@ import { formatReferences } from "./csl";
 import { BUNDLED_STYLES, LOCALE_EN_US } from "./styles";
 import { apiFetch, request } from "../../api/client";
 import { FACETS, groupBy, refinements, type Facet, type Refinement } from "./facets";
-import { BandMark, ClerkNoteLine, Highlighted, itemTypeLabel, openPdf, pageSpan, Reference, showInZotero } from "./parts";
+import { BandMark, Highlighted, itemTypeLabel, openPdf, pageSpan, Reference, showInZotero } from "./parts";
 
 function sortItems(items: DeskItem[], sort: Sort): DeskItem[] {
   if (sort === "relevance") return items;
@@ -116,10 +116,10 @@ const KnownItemCard: React.FC<{ known: KnownItem; others: KnownItem[] }> = ({ kn
   );
 };
 
-type RowProps = { item: DeskItem; note?: ClerkNote; selected: boolean; pinned: boolean; onPick: () => void };
+type RowProps = { item: DeskItem; selected: boolean; pinned: boolean; onPick: () => void };
 
 const Row = React.forwardRef<HTMLButtonElement, RowProps>(
-  ({ item, note, selected, pinned, onPick }, ref) => {
+  ({ item, selected, pinned, onPick }, ref) => {
     const desk = useDesk();
     const best = item.passages[0];
     const meta = [
@@ -142,9 +142,7 @@ const Row = React.forwardRef<HTMLButtonElement, RowProps>(
               {meta.join(" · ")}
               {pinned && <span className="row__pinned"> · ● pinned</span>}
             </span>
-            {note ? (
-              <ClerkNoteLine note={note} />
-            ) : item.extract.text && (
+            {item.extract.text && (
               <span className="row__extract">
                 “<Highlighted text={item.extract.text} spans={item.extract.highlights} />”
                 {item.extract.page && <span className="row__page"> p. {item.extract.page}</span>}
@@ -204,7 +202,12 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
   const known = result?.known_items.filter((k) => k.citation) ?? [];
   // A name-and-year query has no topic, so weak passages are expected: the card answers it.
   const nothingStrong = !!result && result.items.length > 0 && listed.length === 0 && known.length === 0;
-  const visible = showSeeAlso || nothingStrong ? [...listed, ...seeAlso] : listed;
+  // A topical phrase scores lower with the reranker than a question does, so the items it
+  // ranked first can all sit just under the "see also" line: with fewer than three listed,
+  // the nearest items are shown rather than folded away behind one row.
+  const fewListed = listed.length > 0 && listed.length < 3 && seeAlso.length > 0 && known.length === 0;
+  const seeAlsoOpen = showSeeAlso || fewListed;
+  const visible = seeAlsoOpen || nothingStrong ? [...listed, ...seeAlso] : listed;
   const refine = useMemo(() => (result && !desk.within ? refinements(ranked, desk.scope) : []), [result, ranked, desk.scope, desk.within]);
   const applyRefinement = (r: Refinement) => {
     if (r.kind === "decade") desk.setScope({ ...desk.scope, year_min: r.year_min, year_max: r.year_max });
@@ -246,9 +249,8 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
         query: result.query,
         scope: describeScope({ ...result.scope.extracted, ...desk.scope }).replace("that limit", ""),
         date: new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
-        // The groups on screen, else the clerk's themes, else one list.
+        // The groups on screen, else the model's themes, else one list.
         groups: groups ?? groupBy(ranked, "theme", desk.clerk.themes) ?? [{ label: "Results", items: ranked }],
-        notes: desk.clerk.notes,
         pins: desk.pins.filter((pin) => result.items.some((it) => it.item_id === pin.itemId)),
       });
       saveFile(`reading-guide-${stem}.md`, text, "text/markdown");
@@ -274,7 +276,6 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
         else rowRefs.current.delete(item.item_id);
       }}
       item={item}
-      note={desk.clerk.notes[item.item_id]}
       selected={item.item_id === desk.selectedId}
       pinned={pinnedItems.has(item.item_id)}
       onPick={() => {
@@ -427,12 +428,15 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
                     <span className="see-also__label">see also</span>
                     <span className="see-also__count">
                       {seeAlso.length} item{seeAlso.length === 1 ? "" : "s"} with only weak matches
+                      {fewListed ? ", shown since little else matched" : ""}
                     </span>
-                    <button type="button" className="btn" aria-expanded={showSeeAlso} onClick={() => setShowSeeAlso((v) => !v)}>
-                      {showSeeAlso ? "Hide" : "Show"}
-                    </button>
+                    {!fewListed && (
+                      <button type="button" className="btn" aria-expanded={showSeeAlso} onClick={() => setShowSeeAlso((v) => !v)}>
+                        {showSeeAlso ? "Hide" : "Show"}
+                      </button>
+                    )}
                   </div>
-                  {showSeeAlso && (
+                  {seeAlsoOpen && (
                     <ol className="rows rows--see-also" aria-label="See also">
                       {seeAlso.map(renderRow)}
                     </ol>

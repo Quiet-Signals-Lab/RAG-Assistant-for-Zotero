@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { request } from "../../api/client";
-import type { Relation, ScopeFilters } from "../../types/desk";
+import type { Relation, ScopeFilters, SearchResponse } from "../../types/desk";
 import { itemTypeLabel } from "./cite";
 import { useDesk, withoutScope } from "./DeskContext";
 
@@ -51,6 +51,20 @@ function removeChip(scope: ScopeFilters, chip: Chip): ScopeFilters {
     return withoutScope(withoutScope(scope, "year_min"), "year_max");
   }
   return withoutScope(scope, chip.key, chip.value);
+}
+
+/** Who read the limits out of the query, and why the model was or was not part of it. */
+function readerLine(scope: SearchResponse["scope"], ms: number | undefined): string {
+  const took = ms && ms >= 100 ? ` in ${(ms / 1000).toFixed(1)} s` : "";
+  if (scope.read_by === "model") return `the language model${took}`;
+  if (scope.read_by === null) return "nobody: reading limits from the query is off for this search";
+  const reason = scope.read_reason;
+  if (reason.startsWith("not_needed")) return `the app's own reader${took}; nothing was left for the model to read`;
+  if (reason === "no_model") return "the app's own reader; no language model is set up";
+  if (reason === "timeout") return "the app's own reader; the model did not answer in time";
+  if (reason.startsWith("provider_error")) return "the app's own reader; the model could not be reached";
+  if (reason.startsWith("guard") || reason === "malformed") return "the app's own reader; the model's reading did not pass the checks";
+  return "the app's own reader; the model is not asked to read queries";
 }
 
 /** ISO 25964's thesaurus relations, as a catalogue card prints them. */
@@ -156,7 +170,7 @@ const QueryDesk: React.FC = () => {
     : [];
   const current = desk.result?.query.toLocaleLowerCase();
   const scopeRead = desk.result?.scope;
-  const topicDiffers = !!scopeRead?.topic && scopeRead.topic.toLocaleLowerCase() !== current;
+  const read = scopeRead ? chipsFor(scopeRead.extracted) : [];
 
   return (
     <div className="query-desk">
@@ -196,13 +210,21 @@ const QueryDesk: React.FC = () => {
         </button>
       </form>
 
-      {topicDiffers && extracted.length > 0 && (
-        <p className="query-desk__reading">
-          Searched for <q>{scopeRead?.topic}</q>
-          <span className="query-desk__reader">
-            {scopeRead?.read_by === "model" ? " · limits read by the language model" : " · limits read from your words"}
-          </span>
-        </p>
+      {scopeRead && desk.result && (
+        <section className="query-desk__section" aria-label="How the query was read">
+          <h2 className="desk-label">Read as</h2>
+          <dl className="reading">
+            <dt>topic</dt>
+            <dd><q>{scopeRead.topic || desk.result.query}</q></dd>
+            <dt>limits</dt>
+            <dd>
+              {read.length ? read.map((c) => c.label).join(" · ") : "none found in the query"}
+              {scopeRead.extracted_ignored ? " (nothing matched them, so they were set aside)" : ""}
+            </dd>
+            <dt>read by</dt>
+            <dd>{readerLine(scopeRead, desk.result.timing_ms.read)}</dd>
+          </dl>
+        </section>
       )}
 
       <section className="query-desk__section" aria-labelledby="scope-heading">

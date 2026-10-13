@@ -59,9 +59,9 @@ The app is not notarised on Windows and may throw a safety warning.
 - **Known items**: a DOI, ISBN, arXiv id, quoted title, or author and year pins that item above the list, with "search inside this"
 - **Group and narrow**: group the list by decade, kind of item, collection, first author, journal, or theme; narrow to the busiest decade or collection; set the top results aside to see what else there is; "more like this" from any item
 - **References and citations**: what an item cites and what cites it, from Semantic Scholar, with the works already in your library marked (only the item's DOI or title is sent, and only when you ask)
-- **Export**: copy APA references, or save the list as BibTeX, RIS, or a pathfinder (a Markdown subject guide with notes, extracts and your pinned passages)
+- **Export**: copy APA references, or save the list as BibTeX, RIS, or a pathfinder (a Markdown subject guide with extracts and your pinned passages)
 - **Pins and query log**: keep passages across searches, per profile
-- **The desk clerk (optional)**: checked one-line notes, next searches and theme names from a local or cloud model; measured on small local models
+- **A language model (optional)**: reads limits out of your query, suggests next searches and names theme groups; measured on small local models. What it read from your query is shown under the search box
 - **Privacy controls**: run fully offline, or exclude Zotero collections and tags from the index so they are never searched or sent anywhere
 - **Model providers**: local models via Ollama or LM Studio, or OpenAI, Anthropic, Google, Mistral, Groq or OpenRouter
 - **Profiles, automatic updates, macOS, Windows and Linux**
@@ -89,7 +89,7 @@ Install [Zotero](https://www.zotero.org/download/) and sync your library:
 
 ### 2. Language Model (optional)
 
-The reference desk works without one. A model adds the desk clerk's notes and readings, and is needed for legacy chat. For the clerk, a small local model is enough: Qwen3-4B-Instruct-2507 is the model the desk was measured with ([results](docs/DESK_CLERK.md#measurement)).
+The reference desk works without one. A model adds query readings, next searches and theme names, and is needed for legacy chat. For the clerk, a small local model is enough: Qwen3-4B-Instruct-2507 is the model the desk was measured with ([results](docs/DESK_CLERK.md#measurement)).
 
 #### Option A: Local Models (No API key needed)
 

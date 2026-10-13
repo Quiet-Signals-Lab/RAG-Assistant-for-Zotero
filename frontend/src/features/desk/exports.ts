@@ -3,7 +3,7 @@
  * BibTeX and RIS from Zotero's structured fields. Items Zotero could not be read
  * for are exported from the index's own title, authors and year.
  */
-import type { Citation, ClerkNote, Creator, DeskItem } from "../../types/desk";
+import type { Citation, Creator, DeskItem } from "../../types/desk";
 // .ts extension: the node checks (scripts/desk.check.mjs) load this file without a bundler.
 import { doiOf, plain, primaryCreators, reference, type CitableItem } from "./cite.ts";
 
@@ -124,13 +124,12 @@ export interface PathfinderInput {
   scope: string;
   date: string;
   groups: { label: string; items: DeskItem[] }[];
-  notes: Record<string, ClerkNote>;
   pins: { label: string; page: number | null; text: string }[];
 }
 
 /**
  * A pathfinder: the library's subject guide, as Markdown. The list in its groups,
- * each entry with the clerk's note (labelled) or its extract, then the pinned passages.
+ * each entry with its extract, then the pinned passages.
  */
 export function pathfinder(p: PathfinderInput): string {
   const quote = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -142,9 +141,7 @@ export function pathfinder(p: PathfinderInput): string {
     for (const item of group.items) {
       n += 1;
       lines.push(`${n}. ${plain(reference(item))}`);
-      const note = p.notes[item.item_id];
-      if (note) lines.push(`   - Clerk's note (written by a model, checked against the passages): ${quote(note.note)}${page(note.page)}`);
-      else if (item.extract.text) lines.push(`   - “${quote(item.extract.text)}”${page(item.extract.page)}`);
+      if (item.extract.text) lines.push(`   - “${quote(item.extract.text)}”${page(item.extract.page)}`);
     }
     lines.push("");
   }

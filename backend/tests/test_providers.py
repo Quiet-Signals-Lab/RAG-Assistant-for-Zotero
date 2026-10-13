@@ -258,3 +258,12 @@ def test_chat_sends_the_resolved_model_not_the_nominal_default():
         assert provider.chat.call_args.kwargs["model"] == "gemma3:4b"
     finally:
         mp.get_provider = original
+
+
+def test_cloud_providers_keep_one_client_per_credentials():
+    from backend.model_providers import get_provider
+    provider = get_provider("openai")
+    a = provider._get_client({"api_key": "k1"})
+    assert provider._get_client({"api_key": "k1"}) is a
+    assert provider._get_client({"api_key": "k2"}) is not a
+    assert get_provider("lmstudio")._get_client({}) is get_provider("lmstudio")._get_client({})

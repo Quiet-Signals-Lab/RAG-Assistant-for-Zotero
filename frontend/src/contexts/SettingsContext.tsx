@@ -47,7 +47,6 @@ export interface Settings {
   /** The desk clerk's jobs (backend/clerk_jobs.py); each needs a model and falls back without one. */
   deskReadQuery?: boolean;
   deskReadTimeout?: number;
-  deskNotes?: boolean;
   deskAlsoTry?: boolean;
   deskThemes?: boolean;
   /** Let the clerk use a cloud provider (queries and passages are sent to it). Off by default. */

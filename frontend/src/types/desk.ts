@@ -114,14 +114,7 @@ export interface SearchResponse {
   timing_ms: { read?: number; retrieve: number; total: number };
 }
 
-/** The clerk's work on a result list, streamed by POST /api/annotate (backend/clerk_jobs.py). */
-export interface ClerkNote {
-  /** One indicative sentence, checked against the item's passages. */
-  note: string;
-  page: number | null;
-  support: number;
-}
-
+/** The model's work on a result list, streamed by POST /api/annotate (backend/clerk_jobs.py). */
 export type Relation = "broader" | "narrower" | "related";
 
 export interface Suggestion {
@@ -135,7 +128,6 @@ export interface Theme {
 }
 
 export type AnnotateEvent =
-  | ({ type: "note"; item_id: string } & ClerkNote)
   | { type: "also_try"; suggestions: Suggestion[]; source: "model" | "fallback" }
   | { type: "themes"; groups: Theme[]; source: "model" | "fallback" }
   | { type: "done"; model: string; ms: number; counts: { model: number; fallback: number; reasons: Record<string, number> } };
@@ -153,7 +145,7 @@ export interface DeskModel {
     hardware: string;
     results: Record<string, Record<string, unknown>>;
   } | null;
-  jobs: { read_query: boolean; notes: boolean; also_try: boolean; themes: boolean };
+  jobs: { read_query: boolean; also_try: boolean; themes: boolean };
 }
 
 /** POST /api/desk/chain: an item's references and citing works from Semantic Scholar. */

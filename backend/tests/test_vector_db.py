@@ -85,18 +85,43 @@ def test_query_bm25_cjk_character_tokens(client):
     assert [h["id"] for h in client.query_bm25("学习")] == ["1:0"]
 
 
-def test_build_bm25_index_rebuilds_when_out_of_sync(client):
-    _add_items(client, {"1": ["needle in haystack"], "2": ["plain text"]})
+def test_text_lives_in_the_keyword_store_not_in_chroma(client):
+    _add_items(client, {"1": ["needle in haystack"]})
+    assert client.collection.get(ids=["1:0"], include=["documents"])["documents"] == [None]
+    assert client.query_bm25("needle")[0]["document"] == "needle in haystack"
+
+
+def test_reconcile_adopts_text_chroma_still_holds_and_drops_chunks_whose_text_is_lost(client):
+    # A store from before 0.8: text in Chroma, nothing in the keyword store.
+    client.collection.add(ids=["1:0"], documents=["needle in haystack"], metadatas=[{"item_id": "1"}], embeddings=[_vec(1)])
+    _add_items(client, {"2": ["plain text"]})
     with client._fts() as conn:
         conn.execute("DELETE FROM chunks")
         conn.execute("DELETE FROM chunk_map")
-    assert client._fts_count() == 0
-    # Lazy path: querying an empty keyword index with a populated collection rebuilds it.
+    # Lazy path: querying an empty keyword index with a populated collection reconciles it.
     assert [h["id"] for h in client.query_bm25("needle")] == ["1:0"]
-    assert client._fts_count() == 2
+    assert client._fts_count() == 1
+    assert client.get_indexed_item_ids() == {"1"}, "2:0 had no text anywhere, so its item is indexed again next sync"
+    # Rows only the keyword store has (a crash after its write) are dropped too.
+    with client._fts() as conn:
+        client._fts_add(conn, ["9:0"], ["ghost"])
+    client.build_bm25_index()
+    assert client._fts_count() == 1 and client.query_bm25("ghost") == []
     # Reconcile is a no-op when in sync.
     client.build_bm25_index()
-    assert client._fts_count() == 2
+    assert client._fts_count() == 1
+
+
+def test_item_table_is_rebuilt_from_chunk_metadata_when_out_of_step(client):
+    _add_items(client, {"1": (["a", "b"], {"year": 2019, "tags": "NLP"}), "2": (["c"], {"year": "2021"})})
+    with client._fts() as conn:
+        conn.execute("DELETE FROM items")
+    assert client.count_items_matching_filters(year_min=2020) == {"unique_items": 1, "total_chunks": 1}
+    assert {r["item_id"]: r["year"] for r in client._item_rows()} == {"1": 2019, "2": 2021}
+    client.upsert_item("2", {"tags": "NLP", "year": None})
+    assert client.count_items_matching_filters(tags=["NLP"]) == {"unique_items": 2, "total_chunks": 3}
+    assert client.delete_item("2") == 1
+    assert {r["item_id"] for r in client._item_rows()} == {"1"}
 
 
 def test_readding_an_item_replaces_its_fts_rows(client):
@@ -157,4 +182,19 @@ def test_author_and_tag_limits_are_resolved_to_items_before_retrieval(client, mo
     assert none["ids"][0] == []
     assert client._item_ids_matching({"authors": {"$contains_item": "Pearl"}}) == {"1"}
     _add_items(client, {"4": (["more causal"], {"authors": "Pearl", "tags": ""})})
-    assert client._item_ids_matching({"authors": {"$contains_item": "Pearl"}}) == {"1", "4"}, "cache cleared on write"
+    assert client._item_ids_matching({"authors": {"$contains_item": "Pearl"}}) == {"1", "4"}
+    # Half the library or more: the pool is filtered after retrieval, not Chroma.
+    broad = {"$or": [{"tags": {"$contains_item": "Causality"}}, {"authors": {"$contains_item": "Pearl"}}]}  # 3 of 4 items
+    assert client._prefilter(None, broad) == (None, broad)
+    assert client._prefilter(None, {"authors": {"$contains_item": "Smith"}}) == ({"item_id": {"$in": ["3"]}}, None)
+
+
+def test_fused_pool_caps_chunks_per_item(client, monkeypatch):
+    _add_items(client, {"1": [f"dogs bark loudly {i}" for i in range(12)], "2": ["dogs bark softly"], "3": ["cats purr"]})
+    import backend.embed_utils as eu
+    monkeypatch.setattr(eu, "get_embedding", lambda q, model_id=None: np.array(_vec(2), dtype=np.float32))
+    out = client.query_hybrid_rrf("dogs bark", k=6, embedding_model_id="test-model", per_item=2)
+    by_item = {}
+    for cid in out["ids"][0]:
+        by_item[cid.split(":")[0]] = by_item.get(cid.split(":")[0], 0) + 1
+    assert by_item["1"] == 2 and "2" in by_item, by_item
