@@ -149,3 +149,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def test_release_memory_is_safe_to_call_anywhere(monkeypatch):
+    from backend import embed_utils
+    embed_utils.release_memory()
+    monkeypatch.setattr(embed_utils.sys, "platform", "win32")
+    embed_utils.release_memory()

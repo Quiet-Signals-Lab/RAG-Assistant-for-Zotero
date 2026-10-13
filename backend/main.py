@@ -1,6 +1,7 @@
 # backend/main.py
 # uvicorn backend.main:app --reload
 
+import asyncio
 import os
 import re
 import sys
@@ -35,6 +36,7 @@ logging.getLogger('google.auth').setLevel(logging.WARNING)
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Body, HTTPException, Request
 from fastapi.responses import PlainTextResponse
+from starlette.concurrency import run_in_threadpool
 from typing import Optional
 from backend.zoteroitem import ZoteroItem
 from backend.external_api_utils import fetch_semantic_scholar_data
@@ -738,8 +740,14 @@ def _clean_filters(raw) -> Optional[dict]:
     return clean or None
 
 
+# One search at a time: a rerank needs about a gigabyte of scratch memory, and a
+# reader clicking through results starts a search per click while the earlier ones
+# run on. Queued searches whose reader has already moved on are skipped.
+_SEARCH_SLOT = asyncio.Semaphore(1)
+
+
 @app.post("/api/search")
-def search(payload: dict = Body(...)):
+async def search(request: Request, payload: dict = Body(...)):
     """Reference desk search: a ranked bibliography with evidence.
 
     Body: {"query": str, "manual_filters"?: {year_min, year_max, tags, collections,
@@ -758,18 +766,22 @@ def search(payload: dict = Body(...)):
     exclude_ids = _id_list(payload.get("exclude_item_ids"))
     settings = load_settings()
     _clerk_settings(settings)
-    try:
-        return chatbot.search(
-            query,
-            manual_filters=manual_filters,
-            use_metadata_filters=bool(payload.get("use_metadata_filters", True)),
-            filter_item_ids=item_ids or None,
-            exclude_item_ids=exclude_ids or None,
-            read_with_model=bool(settings.get("deskReadQuery", True)),
-            read_timeout=float(settings.get("deskReadTimeout", 8) or 8),
-        )
-    except Exception as e:
-        raise _retrieval_failure(e)
+    async with _SEARCH_SLOT:
+        if await request.is_disconnected():
+            raise HTTPException(status_code=499, detail="The search was abandoned before it started.")
+        try:
+            return await run_in_threadpool(
+                chatbot.search,
+                query,
+                manual_filters=manual_filters,
+                use_metadata_filters=bool(payload.get("use_metadata_filters", True)),
+                filter_item_ids=item_ids or None,
+                exclude_item_ids=exclude_ids or None,
+                read_with_model=bool(settings.get("deskReadQuery", True)),
+                read_timeout=float(settings.get("deskReadTimeout", 8) or 8),
+            )
+        except Exception as e:
+            raise _retrieval_failure(e)
 
 
 def _clerk_settings(settings: dict) -> None:

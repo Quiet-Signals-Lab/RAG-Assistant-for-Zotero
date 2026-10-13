@@ -220,7 +220,7 @@ class Clerk:
             return done(job.fallback(data), "fallback", "timeout")
         except Exception as e:  # provider down, auth, rate limit: the desk carries on
             logger.info("Clerk job %s failed: %s", job.name, e)
-            return done(job.fallback(data), "fallback", "provider_error")
+            return done(job.fallback(data), "fallback", f"provider_error: {type(e).__name__}: {str(e)[:160]}")
 
         if isinstance(outcome, Exception):
             reason = "malformed" if not isinstance(outcome, GuardFailure) else f"guard: {outcome}"

@@ -817,6 +817,8 @@ class ZoteroChatbot:
                     if result.reason:
                         kind = result.reason.split(":")[0]
                         counts["reasons"][kind] = counts["reasons"].get(kind, 0) + 1
+                        # The first full reason of each kind, so "why no notes" can be answered.
+                        counts.setdefault("detail", {}).setdefault(kind, result.reason)
                 if event is not None:
                     yield event
         finally:

@@ -3,6 +3,7 @@
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import numpy as np
 import os
+import sys
 import logging
 import threading
 from typing import Optional
@@ -164,6 +165,24 @@ def load_embedding_model(model_id: Optional[str] = None) -> SentenceTransformer:
 # no network or model-loading side effects.
 _reranker: Optional[CrossEncoder] = None
 _reranker_lock = threading.Lock()
+# Serialises every model inference on the CPU (embedding, reranking, entailment).
+_inference_lock = threading.Lock()
+
+
+def release_memory() -> None:
+    """Hand the allocator's freed pages back to the OS after a large inference.
+
+    Model inference leaves hundreds of MB of freed blocks that macOS and glibc
+    keep in the process; with repeated searches that read as a growing app.
+    """
+    import ctypes
+    try:
+        if sys.platform == "darwin":
+            ctypes.CDLL("libc.dylib").malloc_zone_pressure_relief(None, 0)
+        elif sys.platform.startswith("linux"):
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:  # no libc symbol: nothing to do
+        pass
 
 
 def _get_reranker() -> CrossEncoder:
@@ -221,7 +240,9 @@ def get_embeddings_batch(texts: list[str], model_id: Optional[str] = None) -> li
     config = get_model_config(mid)
     expected_dim = config['dimension']
     truncated = [t[:max_chars] for t in texts]
-    embeddings = model.encode(truncated)
+    with _inference_lock:
+        embeddings = model.encode(truncated)
+    release_memory()
 
     # Validate the first embedding to catch model misconfigurations early
     if len(embeddings) > 0 and len(embeddings[0]) != expected_dim:
@@ -266,8 +287,12 @@ def rerank_passages(query: str, passages: list[str], top_k: Optional[int] = None
     # Create query-passage pairs for the cross-encoder
     pairs = [[query, passage] for passage in passages]
     
-    # Get relevance scores
-    scores = _get_reranker().predict(pairs)
+    # One inference at a time, in small batches: the cross-encoder's attention
+    # scratch is ~1.1 GB per call at batch 32 and ~0.7 GB at 8, and concurrent
+    # calls (a reader clicking "More like this" several times) stacked those.
+    with _inference_lock:
+        scores = _get_reranker().predict(pairs, batch_size=8, show_progress_bar=False)
+    release_memory()
     
     # Sort by score (descending) and return indices with scores
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)

@@ -105,7 +105,7 @@ def test_a_slow_model_falls_back_at_the_time_limit():
 
 def test_a_provider_error_falls_back():
     result = Clerk(FakeManager(error=RuntimeError("connection refused"))).run(JOB, DATA)
-    assert result.reason == "provider_error"
+    assert result.reason == "provider_error: RuntimeError: connection refused"
 
 
 def test_no_model_means_the_fallback_without_a_call():
