@@ -164,9 +164,9 @@ const ChatMessages: React.FC<Props> = ({ messages, loading }) => {
                 Ask a question and a model writes an answer from passages in your library, with numbered citations.
                 Check every claim against the evidence and sources beside it: the answer is the model's, not your sources'.
               </p>
-              <p>The reference desk returns the sources themselves, ranked, with no model in between.</p>
+              <p>Search returns the sources themselves, ranked, with no model in between.</p>
               <button type="button" className="btn" onClick={() => updateSettings({ interfaceMode: "desk" })}>
-                Switch to the reference desk
+                Switch to search
               </button>
             </div>
           </div>

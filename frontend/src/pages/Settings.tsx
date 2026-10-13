@@ -362,7 +362,7 @@ const Settings: React.FC = () => {
 
   const localProviders = availableProviders.filter(p => !p.requires_api_key);
   const cloudProviders = availableProviders.filter(p => p.requires_api_key);
-  const backLabel = settings.interfaceMode === 'chat' ? 'Back to the chat' : 'Back to the desk';
+  const backLabel = settings.interfaceMode === 'chat' ? 'Back to the chat' : 'Back to search';
 
   if (loading) {
     return (
@@ -415,7 +415,7 @@ const Settings: React.FC = () => {
                       onChange={() => updateSettings({ interfaceMode: 'desk' })}
                     />
                     <span>
-                      <span className="settings-check__label">Reference desk</span>
+                      <span className="settings-check__label">Search</span>
                       <span className="settings-hint">
                         Search your library and get back a ranked bibliography with the evidence open at the page.
                         No answers are written, and no model is needed.
@@ -449,8 +449,8 @@ const Settings: React.FC = () => {
                     onChange={(e) => updateSettings({ theme: e.target.checked ? 'dark' : 'light' })}
                   />
                   <span>
-                    <span className="settings-check__label">After hours</span>
-                    <span className="settings-hint">The dark theme: ink becomes the room and paper the text.</span>
+                    <span className="settings-check__label">Dark theme</span>
+                    <span className="settings-hint">Light text on a dark background.</span>
                   </span>
                 </label>
               </Section>
@@ -591,7 +591,7 @@ const Settings: React.FC = () => {
           {activeTab === 'local' && (
             <Section
               title="Local providers"
-              description="Model servers on this computer. No key is needed and nothing leaves the machine. Used by the desk clerk (optional) and by legacy chat."
+              description="Model servers on this computer. No key is needed and nothing leaves the machine. Used by the language model jobs (optional) and by legacy chat."
             >
               {localProviders.map(provider => renderProviderCard(provider))}
             </Section>
@@ -600,7 +600,7 @@ const Settings: React.FC = () => {
           {activeTab === 'cloud' && (
             <Section
               title="Cloud providers"
-              description="External model services. They need an API key, and your query and passages are sent to them. Used by the desk clerk (optional) and by legacy chat."
+              description="External model services. They need an API key, and your query and passages are sent to them. Used by the language model jobs (optional) and by legacy chat."
             >
               {cloudProviders.map(provider => renderProviderCard(provider))}
             </Section>
@@ -609,7 +609,7 @@ const Settings: React.FC = () => {
           {activeTab === 'advanced' && (
             <Section
               title="Evidence per answer"
-              description="Legacy chat only. The reference desk always retrieves the same depth, whatever the model."
+              description="Legacy chat only. Search always retrieves the same depth, whatever the model."
             >
               <div className="settings-field">
                 <label className="settings-label" htmlFor="max-sources">Passages per question</label>

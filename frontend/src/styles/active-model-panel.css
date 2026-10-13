@@ -39,7 +39,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 11px 12px;
   background-color: var(--page);
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
@@ -115,7 +115,7 @@
 
 .active-model-select {
   width: 100%;
-  padding: 10px 14px;
+  padding: 11px 14px;
   font-size: 14px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -196,7 +196,7 @@
 }
 
 .active-model-label {
-  font: 600 11px/1.4 var(--font-sans);
+  font: 600 12px/1.4 var(--font-sans);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-4);
@@ -226,7 +226,7 @@
 }
 
 .active-model-info-label {
-  font: 600 11px/1.4 var(--font-sans);
+  font: 600 12px/1.4 var(--font-sans);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-4);

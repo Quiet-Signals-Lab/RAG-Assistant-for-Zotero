@@ -72,7 +72,7 @@ const TopNav: React.FC = () => {
               <div className="sessions__scrim" onClick={() => setMenuOpen(false)} />
               <div className="sessions__menu" role="menu">
                 <div className="panel-head sessions__head">
-                  <span className="panel-head__title">Sessions</span>
+                  <h2 className="panel-head__title">Sessions</h2>
                   <button className="btn btn--primary" onClick={handleCreateNew}>New session</button>
                 </div>
                 {sessionsList.length === 0 ? (
@@ -120,8 +120,8 @@ const TopNav: React.FC = () => {
         )}
       </div>
 
-      <button className="btn" onClick={() => updateSettings({ interfaceMode: "desk" })} title="Switch to the reference desk">
-        Reference desk
+      <button className="btn" onClick={() => updateSettings({ interfaceMode: "desk" })} title="Switch to search">
+        Switch to search
       </button>
       <button className="icon-button" aria-label="Settings" onClick={() => navigate("/settings")}>
         <Icon>

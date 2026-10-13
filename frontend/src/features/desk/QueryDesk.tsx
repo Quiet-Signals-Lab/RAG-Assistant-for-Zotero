@@ -55,9 +55,9 @@ function removeChip(scope: ScopeFilters, chip: Chip): ScopeFilters {
 
 /** ISO 25964's thesaurus relations, as a catalogue card prints them. */
 const RELATION: Record<Relation, { abbr: string; title: string }> = {
-  broader: { abbr: "BT", title: "Broader term" },
-  narrower: { abbr: "NT", title: "Narrower term" },
-  related: { abbr: "RT", title: "Related term" },
+  broader: { abbr: "broader", title: "A broader subject" },
+  narrower: { abbr: "narrower", title: "A narrower subject" },
+  related: { abbr: "related", title: "A related subject" },
 };
 
 const ScopeEditor: React.FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -92,7 +92,7 @@ const ScopeEditor: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }
 
   return (
-    <form className="scope-editor" onSubmit={apply} aria-label="Edit scope">
+    <form className="scope-editor" onSubmit={apply} aria-label="Edit limits">
       <div className="scope-editor__years">
         <label htmlFor={`${id}-from`}>From</label>
         <input id={`${id}-from`} inputMode="numeric" placeholder="1995" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -169,7 +169,7 @@ const QueryDesk: React.FC = () => {
         }}
       >
         <div className="panel-head">
-          <span className="panel-head__title">Query desk</span>
+          <h2 className="panel-head__title">Search</h2>
           <span className="panel-head__hint" aria-hidden="true">/ to return here</span>
         </div>
         <label htmlFor="desk-query" className="desk-label">What are you looking for</label>
@@ -192,13 +192,13 @@ const QueryDesk: React.FC = () => {
         <p className="query-desk__reading">
           Searched for <q>{scopeRead?.topic}</q>
           <span className="query-desk__reader">
-            {scopeRead?.read_by === "model" ? " · limits read by the clerk" : " · limits read by the desk"}
+            {scopeRead?.read_by === "model" ? " · limits read by the language model" : " · limits read from your words"}
           </span>
         </p>
       )}
 
       <section className="query-desk__section" aria-labelledby="scope-heading">
-        <h2 id="scope-heading" className="desk-label">Scope</h2>
+        <h2 id="scope-heading" className="desk-label">Limits</h2>
         <div className="chips">
           {desk.within && (
             <button type="button" className="chip chip--on" onClick={() => desk.searchWithin(null)} title="Search the whole library again">
@@ -236,7 +236,7 @@ const QueryDesk: React.FC = () => {
             </button>
           ))}
           <button type="button" className="chip chip--add" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>
-            + scope
+            + add a limit
           </button>
         </div>
         {editing && <ScopeEditor onClose={() => setEditing(false)} />}
@@ -245,7 +245,7 @@ const QueryDesk: React.FC = () => {
       {desk.clerk.alsoTry && desk.clerk.alsoTry.length > 0 && (
         <section className="query-desk__section" aria-labelledby="also-heading">
           <h2 id="also-heading" className="desk-label desk-label--split">
-            <span>Also try</span>
+            <span>Related searches</span>
             <span className="desk-label__aside">from your library</span>
           </h2>
           <ul className="also-try">
@@ -263,7 +263,7 @@ const QueryDesk: React.FC = () => {
 
       <section className="query-desk__section" aria-labelledby="log-heading">
         <h2 id="log-heading" className="desk-label desk-label--split">
-          <span>Query log</span>
+          <span>Recent searches</span>
           {desk.log.length > 0 && <span className="desk-label__aside">{desk.log.length}</span>}
         </h2>
         {desk.log.length === 0 ? (

@@ -58,7 +58,7 @@ pre {
 /* Scrollbars */
 
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 11px;
 }
 
 ::-webkit-scrollbar-track {
@@ -127,7 +127,7 @@ pre {
 
 .message__role {
   margin-bottom: 8px;
-  font: 500 11px/1.4 var(--font-mono);
+  font: 500 12px/1.4 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-4);
@@ -216,7 +216,7 @@ pre {
 
 .message__body pre {
   margin: 0 0 0.8em;
-  padding: 10px 12px;
+  padding: 11px 12px;
   overflow-x: auto;
   background: var(--paper);
   border: 1px solid var(--rule);
@@ -249,7 +249,7 @@ pre {
 .message__body th,
 .message__body td {
   border-bottom: 1px solid var(--rule);
-  padding: 5px 10px 5px 0;
+  padding: 5px 11px 5px 0;
   text-align: left;
 }
 
@@ -286,7 +286,7 @@ pre {
   padding: 0;
   background: none;
   border: 0;
-  font: 500 11px var(--font-mono);
+  font: 500 12px var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -304,7 +304,7 @@ pre {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-  font: 500 11px var(--font-mono);
+  font: 500 12px var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-4);
@@ -351,7 +351,7 @@ pre {
 }
 
 .evidence-source__cite {
-  font: 500 11px var(--font-mono);
+  font: 500 12px var(--font-mono);
   color: var(--ink-3);
 }
 
@@ -359,7 +359,7 @@ pre {
   margin: 2px 0 0;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--ink);
-  font: 11px/1.5 var(--font-mono);
+  font: 12px/1.5 var(--font-mono);
   color: var(--ink-3);
 }
 
@@ -391,7 +391,7 @@ pre {
 
 .cited__meta {
   margin: 4px 0 0;
-  font: 11px/1.5 var(--font-mono);
+  font: 12px/1.5 var(--font-mono);
   color: var(--ink-3);
 }
 
@@ -399,7 +399,7 @@ pre {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   margin-top: 8px;
   font-size: 12px;
 }
@@ -443,7 +443,7 @@ pre {
 }
 
 kbd {
-  font: 11px/1 var(--font-mono);
+  font: 12px/1 var(--font-mono);
   padding: 2px 5px;
   border: 1px solid var(--rule);
   border-bottom-width: 2px;

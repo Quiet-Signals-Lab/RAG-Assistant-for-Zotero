@@ -50,7 +50,7 @@
   padding: 18px 20px 0;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 11px;
 }
 
 .cloud-warning-icon {
@@ -91,13 +91,13 @@
   padding: 1px 7px;
   font-size: 12px;
   font-family: monospace;
-  color: var(--brass-deep);
+  color: var(--notice);
   margin-bottom: 8px;
 }
 
 .cloud-warning-footer {
   display: flex;
-  gap: 10px;
+  gap: 11px;
   justify-content: flex-end;
   padding: 0 20px 18px;
 }
@@ -157,7 +157,7 @@
 .scope-section-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-main);
@@ -206,7 +206,7 @@
 }
 
 .stat-label {
-  font: 600 11px/1.4 var(--font-sans);
+  font: 600 12px/1.4 var(--font-sans);
   color: var(--ink-4);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -223,7 +223,7 @@
 
 .lib-select {
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 11px;
   font-size: 13px;
   border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -270,7 +270,7 @@
 .btn-primary,
 .btn-secondary {
   width: 100%;
-  padding: 10px 16px;
+  padding: 11px 16px;
   border: none;
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -327,7 +327,7 @@
 
 .lib-cancel-btn {
   flex: 0 0 auto;
-  padding: 10px 16px;
+  padding: 11px 16px;
   background: transparent;
   border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -394,7 +394,7 @@
   background: repeating-linear-gradient(
     -45deg,
     transparent 0,
-    transparent 10px
+    transparent 11px
   );
   animation: progress-shimmer 1s linear infinite;
   background-size: 40px 100%;
@@ -415,7 +415,7 @@
 .lib-status-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 11px;
   padding: 12px 14px;
   border-radius: var(--radius-sm);
   margin-bottom: 4px;
@@ -473,7 +473,7 @@
 /* ── Migration result banners ─────────────────────────────────────────────── */
 
 .migration-result {
-  padding: 10px 14px;
+  padding: 11px 14px;
   border-radius: var(--radius-sm);
   font-size: 13px;
   display: flex;

@@ -101,14 +101,14 @@ const Evidence: React.FC = () => {
       }}
     >
       <div className="panel-head">
-        <span className="panel-head__title">Evidence{item ? ` · item ${item.rank}` : ""}</span>
+        <h2 className="panel-head__title">Evidence{item ? ` · result ${item.rank}` : ""}</h2>
         <button type="button" className="evidence__close btn" onClick={() => desk.setPane("browse")}>
           Back to the list
         </button>
       </div>
 
       {!item ? (
-        <p className="evidence__empty">Choose an entry in the bibliography to see the passages that matched, page by page.</p>
+        <p className="evidence__empty">Choose a result to see the passages that matched, page by page.</p>
       ) : (
         <>
           <div className="evidence__item">

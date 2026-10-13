@@ -251,7 +251,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
         notes: desk.clerk.notes,
         pins: desk.pins.filter((pin) => result.items.some((it) => it.item_id === pin.itemId)),
       });
-      saveFile(`pathfinder-${stem}.md`, text, "text/markdown");
+      saveFile(`reading-guide-${stem}.md`, text, "text/markdown");
     }
   }
 
@@ -287,9 +287,9 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
   return (
     <div className="bibliography" onKeyDown={onKeyDown}>
       <div className="panel-head panel-head--page">
-        <span className="panel-head__title">
-          Bibliography{result ? ` · ${result.items.length} item${result.items.length === 1 ? "" : "s"}` : ""}
-        </span>
+        <h2 className="panel-head__title">
+          Results{result ? ` · ${result.items.length} item${result.items.length === 1 ? "" : "s"}` : ""}
+        </h2>
         {result && result.items.length > 0 && (
           <div className="panel-head__tools">
             <label className="tool">
@@ -327,7 +327,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
                 <option value="txt">References in this style (.txt)</option>
                 <option value="bib">BibTeX (.bib)</option>
                 <option value="ris">RIS (.ris)</option>
-                <option value="pathfinder">Pathfinder (.md)</option>
+                <option value="pathfinder">Reading guide (.md)</option>
               </select>
             </label>
           </div>
@@ -350,13 +350,13 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
           {indexEmpty ? (
             <>
               <h2>Your library is not indexed yet.</h2>
-              <p>The desk searches the full text of your PDFs, so it needs an index first. It is built on this computer and nothing leaves it.</p>
+              <p>Search covers the full text of your PDFs, so it needs an index first. The index is built on this computer and nothing leaves it.</p>
               <button type="button" className="btn btn--primary" onClick={() => desk.setRoom("library")}>Open the library to index it</button>
             </>
           ) : (
             <>
-              <h2>Ask the catalogue.</h2>
-              <p>Type a topic, a title, or an author and year. The desk returns the items in your library that bear on it, ranked, with the passages that matched. It does not write answers.</p>
+              <h2>Search your library.</h2>
+              <p>Type a topic, a title, or an author and year. You get the items in your library that bear on it, ranked, with the passages that matched. No answer is written for you.</p>
               <ul className="desk-intro__examples">
                 <li><span className="mono">a topic</span> how platform workers organise</li>
                 <li><span className="mono">a title</span> “Cruel optimism”</li>

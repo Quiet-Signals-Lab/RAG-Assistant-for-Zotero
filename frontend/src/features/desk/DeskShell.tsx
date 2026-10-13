@@ -20,10 +20,10 @@ const REPO = "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero";
 const icons: Record<Room, React.ReactNode> = {
   desk: <><rect x="3" y="5" width="18" height="14" rx="1" /><path d="M3 9h18M7 13h7" /></>,
   library: <path d="M4 4h4v16H4zM10 4h4v16h-4zM16 6l4-1 3 15-4 1z" />,
-  clerk: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c1-4 4-6 7-6s6 2 7 6M3 20h18" /></>,
-  about: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
+  clerk: <><rect x="7" y="7" width="10" height="10" rx="1.5" /><rect x="10" y="10" width="4" height="4" /><path d="M10 7V3M14 7V3M10 21v-4M14 21v-4M7 10H3M7 14H3M21 10h-4M21 14h-4" /></>,
+  about: <path d="M12 20.5S4 15.5 4 9.6A4.4 4.4 0 0 1 12 7a4.4 4.4 0 0 1 8 2.6c0 5.9-8 10.9-8 10.9z" />,
 };
-const roomLabels: Record<Room, string> = { desk: "Desk", library: "Library and index", clerk: "Desk clerk (model)", about: "About" };
+const roomLabels: Record<Room, string> = { desk: "Search", library: "Library and index", clerk: "Language model", about: "About" };
 
 /** The QSL signal: "received", in Morse. The only place the lab signs the app. */
 const QslLine: React.FC = () => (
@@ -41,7 +41,7 @@ const About: React.FC = () => {
   }, []);
   return (
     <div className="about">
-      <div className="panel-head"><span className="panel-head__title">About</span></div>
+      <div className="panel-head"><h2 className="panel-head__title">About</h2></div>
       <div className="about__mark" aria-hidden="true" />
       <h2 className="about__name">RAG Assistant for Zotero</h2>
       <p className="mono about__meta">{version ? `Version ${version} · ` : ""}Made by Quiet Signals Lab in the Netherlands</p>
@@ -53,14 +53,14 @@ const About: React.FC = () => {
         <a href={REPO} target="_blank" rel="noreferrer">Source code</a>
         <a href={`${REPO}/blob/master/docs/REFERENCE_DESK_PLAN.md`} target="_blank" rel="noreferrer">Design rationale and sources</a>
       </p>
-      <p>RAG Assistant is made by a small independet software studio. It is and will remain free. If you find my work useful, please consider supporting it via the link below.</p>
+      <p>RAG Assistant is made by a small independent software studio. It is and will remain free. If you find my work useful, please consider supporting it via the link below.</p>
       <p>
         <a href="https://buymeacoffee.com/aahepburn" target="_blank" rel="noreferrer">
           <img src={buyMeACoffee} alt="Buy Me A Coffee" height="40" />
         </a>
       </p>
       <p className="about__credit">
-        The desk borrows its methods from library science: Cutter's catalogue, Ranganathan's five laws, Taylor's reference
+        The design borrows its methods from library science: Cutter's catalogue, Ranganathan's five laws, Taylor's reference
         interview and Bates' berrypicking.
       </p>
       <p className="about__credit">
@@ -73,9 +73,9 @@ const About: React.FC = () => {
 };
 
 const PANES: { id: Pane; label: string }[] = [
-  { id: "ask", label: "Ask" },
-  { id: "browse", label: "Browse" },
-  { id: "verify", label: "Verify" },
+  { id: "ask", label: "Search" },
+  { id: "browse", label: "Results" },
+  { id: "verify", label: "Evidence" },
 ];
 
 const DeskShell: React.FC = () => {
@@ -92,7 +92,7 @@ const DeskShell: React.FC = () => {
   return (
     <div className="desk" data-pane={desk.pane}>
       <RoomHeader title="RAG Assistant for Zotero">
-        <nav className="desk__panes" aria-label="Panes">
+        <nav className="desk__panes" aria-label="Panels">
           {PANES.map((p) => (
             <button key={p.id} type="button" aria-pressed={desk.pane === p.id} onClick={() => desk.setPane(p.id)}>
               {p.label}
@@ -101,7 +101,7 @@ const DeskShell: React.FC = () => {
         </nav>
         <div className="room-header__fill" />
         {stats && (
-          <span className="desk__index mono" title="What the desk can search">
+          <span className="desk__index mono" title="What can be searched">
             {stats.indexed_items.toLocaleString()} items · {stats.total_chunks.toLocaleString()} passages · {stats.current_embedding_model}
           </span>
         )}
@@ -110,11 +110,11 @@ const DeskShell: React.FC = () => {
             type="button"
             className="desk__clerk mono"
             onClick={() => desk.setRoom("clerk")}
-            title={clerk.available ? `The desk clerk uses ${clerk.model}` : "No model: the desk works on its own"}
+            title={clerk.available ? `Language model in use: ${clerk.model}` : "No language model set up: search works without one"}
           >
             {clerk.available
-              ? `clerk · ${clerk.model.split("/").pop()}${clerk.measured ? "" : " (unmeasured)"}${desk.clerk.working ? " · working" : ""}`
-              : "no clerk"}
+              ? `model · ${clerk.model.split("/").pop()}${clerk.measured ? "" : " (unmeasured)"}${desk.clerk.working ? " · working" : ""}`
+              : "no model"}
           </button>
         )}
         <button type="button" className="icon-button" aria-label="Settings" onClick={() => navigate("/settings")}>
@@ -126,7 +126,7 @@ const DeskShell: React.FC = () => {
       </RoomHeader>
 
       <div className="desk__body">
-        <nav className="desk__rail" aria-label="Rooms">
+        <nav className="desk__rail" aria-label="Sections">
           {(Object.keys(icons) as Room[]).map((room) => (
             <button
               key={room}

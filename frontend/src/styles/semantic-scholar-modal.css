@@ -195,7 +195,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
+  padding: 11px 20px;
   background: var(--ink);
   color: var(--paper);
   border: none;
@@ -222,7 +222,7 @@
   .semantic-modal-content {
     max-width: 100%;
     max-height: 90vh;
-    margin: 0 10px;
+    margin: 0 11px;
   }
   
   .semantic-modal-header {

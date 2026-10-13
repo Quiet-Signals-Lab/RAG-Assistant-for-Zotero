@@ -31,7 +31,7 @@ export const Reference: React.FC<{ item: CitableItem; maxAuthors?: number }> = (
  */
 export const ClerkNoteLine: React.FC<{ note: ClerkNote; onPage?: (page: number) => void }> = ({ note, onPage }) => (
   <span className="clerk-note" title="Written by the model from this item's passages and checked against them. Read the passages before you rely on it.">
-    <span className="clerk-note__label">Clerk’s note</span> {note.note}
+    <span className="clerk-note__label">Model’s note</span> {note.note}
     {note.page ? (
       onPage ? (
         <button type="button" className="link-button mono clerk-note__page" onClick={() => onPage(note.page as number)}>p. {note.page}</button>
@@ -79,7 +79,7 @@ export async function openPdf(item: Pick<DeskItem, "citation" | "pdf_path">, pag
   const c = item.citation;
   if (c?.pdf_key && tryOpenZoteroUri(buildZoteroOpenPdfUri(c.pdf_key, page ?? null, c.group_id))) return;
   if (item.pdf_path) return openLocalPdf(item.pdf_path);
-  throw new Error("This item has no PDF the desk can open.");
+  throw new Error("This item has no PDF to open.");
 }
 
 export function showInZotero(c: Citation | null): void {

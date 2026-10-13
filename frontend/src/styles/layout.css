@@ -80,7 +80,7 @@
 
 .sessions__count {
   color: var(--ink-4);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .sessions__scrim {
@@ -139,7 +139,7 @@
 .sessions__row--current .sessions__open {
   color: var(--ink);
   box-shadow: inset 3px 0 0 var(--brass);
-  padding-left: 10px;
+  padding-left: 11px;
 }
 
 .sessions__title {
@@ -150,7 +150,7 @@
 }
 
 .sessions__meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-4);
 }
 
@@ -226,7 +226,7 @@
 }
 
 .chat-view__error {
-  padding: 10px 24px 0;
+  padding: 11px 24px 0;
 }
 
 .chat-view__messages {
@@ -256,7 +256,7 @@
 .chat-input__label {
   display: block;
   margin-bottom: 6px;
-  font: 600 11px/1.4 var(--font-sans);
+  font: 600 12px/1.4 var(--font-sans);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-4);
@@ -265,7 +265,7 @@
 .chat-input__wrapper {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 11px;
 }
 
 .chat-input__textarea {
@@ -288,7 +288,7 @@
 
 .chat-input__hint {
   margin-top: 6px;
-  font: 11px var(--font-mono);
+  font: 12px var(--font-mono);
   color: var(--ink-4);
 }
 
@@ -300,7 +300,7 @@
   justify-content: center;
   gap: 6px;
   min-height: 28px;
-  padding: 0 10px;
+  padding: 0 11px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--rule);
   background: transparent;
@@ -353,7 +353,7 @@
 
 .error-banner::before {
   content: "Problem · ";
-  font: 500 11px var(--font-mono);
+  font: 500 12px var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--error);
@@ -363,7 +363,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font: 11px var(--font-mono);
+  font: 12px var(--font-mono);
   color: var(--ink-3);
 }
 

@@ -23,7 +23,7 @@
 .scope-section-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-main);
@@ -46,7 +46,7 @@
   background: var(--ink);
   color: var(--paper);
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   margin-left: auto;
 }
@@ -59,7 +59,7 @@
 }
 
 .scope-error {
-  padding: 10px 12px;
+  padding: 11px 12px;
   background: transparent;
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
@@ -82,12 +82,12 @@
 /* Search Input Styling */
 .search-input-wrapper {
   position: relative;
-  margin-bottom: 10px;
+  margin-bottom: 11px;
 }
 
 .search-icon {
   position: absolute;
-  left: 10px;
+  left: 11px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
@@ -96,7 +96,7 @@
 
 .search-input {
   width: 100%;
-  padding: 8px 10px 8px 34px;
+  padding: 8px 11px 8px 34px;
   border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -282,7 +282,7 @@
 
 .collection-count {
   margin-left: 12px;
-  padding: 4px 10px;
+  padding: 4px 11px;
   background: transparent;
   border-radius: var(--radius-sm);
   font-size: 12px;
@@ -305,7 +305,7 @@
 }
 
 .date-range-filter input {
-  padding: 8px 10px;
+  padding: 8px 11px;
   border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -350,7 +350,7 @@
 
 .text-filter-input {
   width: 100%;
-  padding: 8px 32px 8px 10px;
+  padding: 8px 32px 8px 11px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -414,7 +414,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 11px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -503,8 +503,8 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin-top: 10px;
-  padding: 10px 12px;
+  margin-top: 11px;
+  padding: 11px 12px;
   background: transparent;
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
@@ -522,7 +522,7 @@
 .btn-primary,
 .btn-secondary {
   width: 100%;
-  padding: 10px 16px;
+  padding: 11px 16px;
   border: none;
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -591,7 +591,7 @@
 }
 
 .side-panel .scope-section-title {
-  font: 600 11px/1.4 var(--font-sans);
+  font: 600 12px/1.4 var(--font-sans);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-4);
@@ -629,7 +629,7 @@
 
 .toggle-group--three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-bottom: 10px;
+  margin-bottom: 11px;
 }
 
 .toggle-btn__count {
@@ -677,7 +677,7 @@
 
 .scope-note {
   display: block;
-  margin-top: 10px;
+  margin-top: 11px;
   padding: 8px 0;
   background: transparent;
   border: 0;
@@ -694,7 +694,7 @@
 
 .scope-note::before {
   content: "Note · ";
-  font: 500 11px var(--font-mono);
+  font: 500 12px var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--notice);
@@ -716,7 +716,7 @@
   justify-content: center;
   gap: 6px;
   min-height: 28px;
-  padding: 0 10px;
+  padding: 0 11px;
   border-radius: var(--radius-sm);
   font: 500 12px/1.2 var(--font-sans);
   cursor: pointer;
