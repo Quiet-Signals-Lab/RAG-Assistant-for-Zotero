@@ -9,6 +9,9 @@
 
 A reference desk for your Zotero library. Ask for a topic, a title, or an author and year, and the desk returns a ranked bibliography of the items in your library that bear on it, with the passages that matched, open at the page. It does not write answers.
 
+<img width="1398" height="813" alt="Screenshot 2026-10-13 at 7 47 24 PM" src="https://github.com/user-attachments/assets/ab2ec234-2b0d-458b-9f8e-858e077c2ffc" />
+
+
 ## What It Does
 
 The app indexes the full text of the PDFs in your Zotero library and searches it by meaning and by keyword. The desk has three panes:
@@ -49,7 +52,6 @@ The app is not notarised on Windows and may throw a safety warning.
 
 **Linux** (Debian/Ubuntu): download the `.deb` from [Releases](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases) and install it with `sudo apt install ./RAG-Assistant-*.deb` — Python and all dependencies are bundled.
 
-<img width="1440" height="871" alt="Screenshot 2026-02-21 at 6 24 03 pm" src="https://github.com/user-attachments/assets/a3ef72b4-dd75-4bd9-b50d-ede5ac65cbdc" />
 
 ## Key Features
 
