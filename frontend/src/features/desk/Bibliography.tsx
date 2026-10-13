@@ -334,7 +334,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
         )}
       </div>
       <div className="bibliography__status" role="status" aria-live="polite">
-        {status === "loading" && <span className="loading-rule">Searching the shelves…</span>}
+        {status === "loading" && <span className="loading-rule">Searching…</span>}
         {copied}
       </div>
 
@@ -403,7 +403,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
               {nothingStrong && (
                 <div className="desk-empty desk-empty--slim">
                   <h2>Nothing strong on this in your library.</h2>
-                  <p>These are the nearest items the shelves hold.</p>
+                  <p>These are the nearest items your library holds.</p>
                 </div>
               )}
               {groups && !nothingStrong ? (

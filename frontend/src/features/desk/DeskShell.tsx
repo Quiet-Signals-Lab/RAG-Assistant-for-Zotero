@@ -18,7 +18,7 @@ type IndexStats = { indexed_items: number; total_chunks: number; current_embeddi
 const REPO = "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero";
 
 const icons: Record<Room, React.ReactNode> = {
-  desk: <><rect x="3" y="5" width="18" height="14" rx="1" /><path d="M3 9h18M7 13h7" /></>,
+  desk: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 21 21" strokeWidth="2.2" /></>,
   library: <path d="M4 4h4v16H4zM10 4h4v16h-4zM16 6l4-1 3 15-4 1z" />,
   clerk: <><rect x="7" y="7" width="10" height="10" rx="1.5" /><rect x="10" y="10" width="4" height="4" /><path d="M10 7V3M14 7V3M10 21v-4M14 21v-4M7 10H3M7 14H3M21 10h-4M21 14h-4" /></>,
   about: <path d="M12 20.5S4 15.5 4 9.6A4.4 4.4 0 0 1 12 7a4.4 4.4 0 0 1 8 2.6c0 5.9-8 10.9-8 10.9z" />,

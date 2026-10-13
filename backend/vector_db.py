@@ -210,11 +210,14 @@ class ChromaClient:
             return []
         if self._fts_count() == 0 and self.collection.count() > 0:
             self.build_bm25_index()
+        # FTS5 takes its optimised ranking path only for its own `rank` column (bm25 by
+        # default): the same query with ORDER BY bm25(chunks) took 124 s on 62k passages
+        # for a 15-word query, ORDER BY rank 0.5 s, with the same results.
         with self._fts() as conn:
             rows = conn.execute(
-                "SELECT m.id, -bm25(chunks) AS score FROM chunks "
+                "SELECT m.id, -rank AS score FROM chunks "
                 "JOIN chunk_map m ON m.fts_rowid = chunks.rowid "
-                "WHERE chunks MATCH ? ORDER BY bm25(chunks) LIMIT ?",
+                "WHERE chunks MATCH ? ORDER BY rank LIMIT ?",
                 (match, int(k)),
             ).fetchall()
         if not rows:

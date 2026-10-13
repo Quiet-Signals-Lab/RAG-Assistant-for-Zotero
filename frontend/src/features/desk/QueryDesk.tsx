@@ -124,7 +124,7 @@ const ScopeEditor: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
 const QueryDesk: React.FC = () => {
   const desk = useDesk();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
@@ -173,13 +173,21 @@ const QueryDesk: React.FC = () => {
           <span className="panel-head__hint" aria-hidden="true">/ to return here</span>
         </div>
         <label htmlFor="desk-query" className="desk-label">What are you looking for</label>
-        <input
+        <textarea
           id="desk-query"
           ref={inputRef}
           className="query-desk__input"
           value={desk.query}
+          rows={2}
           onChange={(e) => desk.setQuery(e.target.value)}
-          placeholder={desk.within ? "What to look for inside it" : "Topic, title, or name and year"}
+          onKeyDown={(e) => {
+            // Enter searches; Shift+Enter starts a new line in a long query.
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (desk.query.trim() && desk.status !== "loading") desk.submit();
+            }
+          }}
+          placeholder={desk.within ? "What to look for inside it" : "A topic, a title, or an author and year"}
           autoComplete="off"
           spellCheck={false}
         />
