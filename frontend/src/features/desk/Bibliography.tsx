@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Citation, DeskItem, KnownItem, ScopeFilters } from "../../types/desk";
-import { plain, reference, shortCite, sortName } from "./cite";
+import { shortCite, sortName } from "./cite";
 import { useDesk, type Sort } from "./DeskContext";
 import { bibtex, pathfinder, ris } from "./exports";
 import { formatReferences } from "./csl";

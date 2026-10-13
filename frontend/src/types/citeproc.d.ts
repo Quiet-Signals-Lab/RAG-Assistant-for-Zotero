@@ -3,11 +3,10 @@ declare module "citeproc" {
     retrieveLocale(lang: string): string;
     retrieveItem(id: string): Record<string, unknown>;
   }
-  class Engine {
-    constructor(sys: Sys, style: string, lang?: string, forceLang?: boolean);
+  interface Engine {
     updateItems(ids: string[]): void;
     makeBibliography(): [Record<string, unknown>, string[]] | false;
   }
-  const CSL: { Engine: typeof Engine };
+  const CSL: { Engine: new (sys: Sys, style: string, lang?: string, forceLang?: boolean) => Engine };
   export default CSL;
 }
