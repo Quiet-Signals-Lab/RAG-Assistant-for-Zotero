@@ -233,6 +233,29 @@ every query and overruling the library reader, 12 of 24 readings were right
 against 21 for the library reader alone (see "Reading the query"); the first
 note gate passed 5 of 10 faithful notes (see "Indicative note").
 
+Same set through Ollama (Q4_K_M), Apple M1, 16 GB, 2026-10-13. Qwen3 4B here is
+the hybrid thinking model with `/no_think` and `think: false`, not the 2507 Instruct.
+
+| | Qwen3 4B (hybrid) | Gemma 3 4B | Llama 3.2 3B | No model |
+|---|---|---|---|---|
+| Query reading, all (54) | 52 | 52 | 50 | 42 |
+| **held-out (14)** | **12** | **12** | **12** | **9** |
+| Notes (10) | 10 | 9 | 10 | the extract |
+| Median time, reading / note | 4.9 / 3.3 s | 5.9 / 3.7 s | 3.9 / 2.0 s | |
+
+Read by hand: Qwen3 4B and Gemma 3 4B name the specifics (the union's 5,000
+members, a two-year out-of-sample forecast); Llama 3.2 3B is faithful but
+vaguer ("Reports membership numbers of workers in certain jobs"). Gemma's one
+rejected note was a correct but over-compressed account of adversarial
+perturbations that the entailment gate did not follow. Any of the three is a
+usable clerk through Ollama; Qwen3 4B is the best of them.
+
+Through Ollama the clerk asks for `keep_alive: 30m`, so the model stays loaded
+between searches (Ollama's default unloads it after five minutes, and reloading
+a 4B model costs several seconds on the next job). Ollama answers one request
+at a time unless `OLLAMA_NUM_PARALLEL` is set; the annotate stream sends two jobs
+at once, so `OLLAMA_NUM_PARALLEL=2` lets notes and next searches run together.
+
 ### On a real library
 
 Run on a throwaway index of 599 items (Zotero abstracts) with Qwen3-4B on an

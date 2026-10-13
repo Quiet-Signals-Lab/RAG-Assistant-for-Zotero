@@ -113,11 +113,37 @@ class ProviderManager:
         return provider
     
     def get_active_model(self) -> str:
-        """Get the model to use for the active provider."""
+        """The chosen model; else, for a local server, the first model it has installed;
+        else the provider's nominal default.
+
+        Ollama's nominal default "llama3.2" is not installed on a machine that pulled
+        "llama3.2:3b", and every job sent to it failed while the desk reported a model.
+        A local server that is up but has nothing installed yields "" (no model).
+        """
         if self.active_model:
             return self.active_model
         provider = self.get_active_provider()
+        if not provider.requires_api_key:
+            installed = self._installed_models(provider)
+            if installed is not None:
+                return installed[0] if installed else ""
         return provider.default_model
+
+    _INSTALLED_TTL = 60.0  # seconds; get_active_model is called on every job
+
+    def _installed_models(self, provider) -> Optional[List[str]]:
+        """Model ids a local server reports, cached briefly; None when it cannot be asked."""
+        import time
+        cache = self.__dict__.setdefault("_installed_cache", {})
+        hit = cache.get(provider.id)
+        if hit and time.monotonic() - hit[0] < self._INSTALLED_TTL:
+            return hit[1]
+        try:
+            names = [m.id for m in provider.list_models(self.get_credentials(provider.id))]
+        except Exception:
+            return None
+        cache[provider.id] = (time.monotonic(), names)
+        return names
     
     def get_credentials(self, provider_id: Optional[str] = None) -> Dict:
         """Get credentials for a provider (active by default)."""
@@ -183,9 +209,9 @@ class ProviderManager:
         if not provider:
             raise ProviderError(f"Provider '{pid}' not found")
         
-        model_id = model or (self.active_model if pid == self.active_provider_id else None)
+        model_id = model or (self.get_active_model() if pid == self.active_provider_id else provider.default_model)
         if not model_id:
-            model_id = provider.default_model
+            raise ProviderError(f"No model is installed on {provider.label}")
         
         creds = self.get_credentials(pid)
         

@@ -64,7 +64,7 @@ A throwaway index of 599 items built from Zotero abstracts, real reranker, real 
 - [x] Contextual chunk headers (`{title} — {first author et al., year} — {section}`) for the embedder and the reranker, and item key + section in chunk metadata, as part of the PDF pipeline rebuild (layout-aware extraction, section-aware chunks, reference lists left out). No migration: an old index keeps working and a full reindex applies the new pipeline. DOI not added (nothing reads it). Measured with `scripts/eval_retrieval.py` on the owner's library before shipping
 - [x] Test collection harness: `scripts/eval_ranking.py` pools queries (with intents), scores nDCG@10, P@5 and MRR, compares two runs with a sign test. The 40 judged queries themselves need the library's owner; judgments stay in the profile folder
 - [x] Platt calibration fit (`eval_ranking.py calibrate`, and in-process in `eval_retrieval.py calibrate`); band cut-offs set from the 2026-10-12 test set on the owner's library (judgments by Claude from titles and abstracts, not by the owner)
-- [ ] Measure local fan-out latency (`llama-server -np 8`, 4B model) and record it. Measured instead through mlx_lm.server, one call at a time: see `docs/DESK_CLERK.md`
+- [x] Measure local fan-out latency. Measured through mlx_lm.server (2026-10-11) and Ollama (2026-10-13), one call at a time; Ollama parallelism is a server setting (`OLLAMA_NUM_PARALLEL`), documented in `docs/DESK_CLERK.md`. The clerk asks Ollama to keep the model loaded 30 min between searches
 
 ## Stage 5 · The desk clerk (tier 1, opt-in)
 - [x] Structured output per provider (Ollama `format`, OpenAI/LM Studio `json_schema`, JSON mode elsewhere), one retry for malformed output, no retry after a guard failure: `backend/clerk.py`
@@ -72,7 +72,7 @@ A throwaway index of 599 items built from Zotero abstracts, real reranker, real 
 - [x] Indicative notes behind the deterministic guard and an NLI entailment gate (passages, joined, three-sentence windows); extract fallback
 - [x] Also-try selected from corpus vocabulary; BT / NT / RT from the words, not the model
 - [x] Theme labels for k-means clusters; model query reading merged into the library reader's, each value tied to a phrase in the request
-- [x] Measured-model register (`backend/clerk_models.json`, `scripts/eval_clerk.py --record`); "unmeasured" label for others
+- [x] Measured-model register (`backend/clerk_models.json`, `scripts/eval_clerk.py --record`); "unmeasured" label for others. Through Ollama: Qwen3 4B, Gemma 3 4B, Llama 3.2 3B (2026-10-13). Found and fixed on the way: with no model chosen, jobs went to Ollama's nominal default `llama3.2`, which is not what a user pulls; the first installed model is used now
 - [x] Clerk room on the rail: model, jobs, measurement; header status
 
 ## Stage 6 · The stacks

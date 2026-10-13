@@ -221,3 +221,40 @@ class TestProviderIntegration:
 if __name__ == "__main__":
     # Run basic tests
     pytest.main([__file__, "-v", "-m", "not integration"])
+
+
+def test_no_chosen_model_uses_the_first_installed_on_a_local_server():
+    """Ollama's nominal default is not what a user pulled; the first installed model is."""
+    from unittest.mock import Mock
+    from backend.model_providers import ProviderManager
+    manager = ProviderManager(active_provider_id="ollama", active_model=None, credentials={})
+    provider = Mock(id="ollama", requires_api_key=False, default_model="llama3.2")
+    provider.list_models.return_value = [Mock(id="gemma3:4b"), Mock(id="llama3.2:3b")]
+    manager.get_active_provider = lambda: provider
+    assert manager.get_active_model() == "gemma3:4b"
+    assert manager.get_active_model() == "gemma3:4b" and provider.list_models.call_count == 1, "listing is cached"
+    manager.__dict__.pop("_installed_cache")
+    provider.list_models.return_value = []
+    assert manager.get_active_model() == "", "a server with nothing installed means no model"
+    manager.__dict__.pop("_installed_cache")
+    provider.list_models.side_effect = ConnectionError("down")
+    assert manager.get_active_model() == "llama3.2", "a server that cannot be asked keeps the nominal default"
+    manager.active_model = "qwen3:4b"
+    assert manager.get_active_model() == "qwen3:4b"
+
+
+def test_chat_sends_the_resolved_model_not_the_nominal_default():
+    from unittest.mock import Mock
+    from backend.model_providers import ProviderManager, Message
+    import backend.model_providers as mp
+    manager = ProviderManager(active_provider_id="ollama", active_model=None, credentials={})
+    provider = Mock(id="ollama", label="Ollama (Local)", requires_api_key=False, default_model="llama3.2")
+    provider.list_models.return_value = [Mock(id="gemma3:4b")]
+    manager.get_active_provider = lambda: provider
+    original = mp.get_provider
+    mp.get_provider = lambda pid: provider
+    try:
+        manager.chat(messages=[Message(role="user", content="hi")])
+        assert provider.chat.call_args.kwargs["model"] == "gemma3:4b"
+    finally:
+        mp.get_provider = original

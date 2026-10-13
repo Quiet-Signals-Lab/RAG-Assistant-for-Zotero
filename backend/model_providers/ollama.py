@@ -124,6 +124,9 @@ class OllamaProvider(BaseProvider):
             # the desk clerk wants a short structured answer, not a monologue.
             payload["format"] = kwargs["response_schema"]
             payload["think"] = False
+            # Keep the model loaded between searches (Ollama unloads after 5 minutes by
+            # default); reloading a 4B model costs several seconds on the next job.
+            payload["keep_alive"] = "30m"
         
         try:
             resp = requests.post(
