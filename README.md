@@ -7,7 +7,7 @@
 
 <a href="https://buymeacoffee.com/aahepburn"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
 
-A reference desk for your Zotero library using semantic search of the contents of your entire PDF collection. Ask for a topic, a title, or an author and year, and the desk returns a ranked bibliography of the items in your library that bear on it, with the passages that matched, open at the page. It does not write answers.
+A reference desk for your Zotero library using semantic search of the contents of your entire PDF collection. Ask for a topic, a title, or an author and year, and the desk returns a ranked bibliography of the items in your library that bear on it, with the passages that matched, open at the page.
 
 <img width="1398" height="813" alt="Screenshot 2026-10-13 at 7 47 24 PM" src="https://github.com/user-attachments/assets/ab2ec234-2b0d-458b-9f8e-858e077c2ffc" />
 
