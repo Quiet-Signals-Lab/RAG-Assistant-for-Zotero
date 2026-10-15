@@ -20,9 +20,9 @@ The app indexes the full text of the PDFs in your Zotero library and searches it
 - **Browse**: the bibliography. Items ranked by their best passage, each with a full reference, the sentence that matched and its page. Relevance is shown as strong, good, weak or see also, never as a percentage.
 - **Verify**: the evidence. Every passage that matched the selected item, with your terms marked, one click from the PDF at that page in Zotero.
 
-The design borrows from library science rather than from chat: Cutter's catalogue objectives (find the item you name, show what the library has on a subject), Ranganathan's laws, Taylor's reference interview and Bates' berrypicking. It does the catalogue's job, not the librarian's: it points you to sources and leaves the reading and the judging to you. The reasoning and its sources are in [docs/REFERENCE_DESK_PLAN.md](docs/REFERENCE_DESK_PLAN.md).
+The design borrows from library science rather than from chat: Cutter's catalogue objectives (find the item you name, show what the library has on a subject), Ranganathan's laws, Taylor's reference interview and Bates' berrypicking. It does the catalogue's job, not the librarian's: it points you to sources and leaves the reading and the judging to you.
 
-**Language models are optional.** The desk ranks, quotes and cites with no model at all. If you set one up, a local model on your computer or a cloud provider, the *desk clerk* uses it for small, checked jobs: reading harder queries, a one-line note on each item that must be supported by its passages, next searches drawn from your own tags, and names for groups of results. Anything that fails a check falls back to the desk's own work. How this is designed and measured: [docs/DESK_CLERK.md](docs/DESK_CLERK.md).
+**Language models are optional.** The desk ranks, quotes and cites with no model at all. If you set one up, a local model on your computer or a cloud provider, the *desk clerk* uses it for small, checked jobs: reading harder queries, a one-line note on each item that must be supported by its passages, next searches drawn from your own tags, and names for groups of results. Anything that fails a check falls back to the desk's own work.
 
 **Prefer the old chat?** The question-and-answer chat from earlier versions is still there: Settings → General → Interface → Legacy chat.
 
