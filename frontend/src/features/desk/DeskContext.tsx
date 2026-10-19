@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { request } from "../../api/client";
-import { annotate, search } from "../../api/search";
+import { annotate, deskModel, search } from "../../api/search";
 import { useProfile } from "../../contexts/ProfileContext";
-import type { DeskItem, Passage, ScopeFilters, SearchResponse, Suggestion, Theme } from "../../types/desk";
+import type { DeskItem, DeskModel, Passage, ScopeFilters, SearchResponse, Suggestion, Theme } from "../../types/desk";
 import { shortCite } from "./cite";
 
 export type Sort = "relevance" | "year" | "author";
@@ -66,6 +66,8 @@ interface DeskState {
   useExtracted: boolean;
   result: SearchResponse | null;
   clerk: ClerkWork;
+  /** The language model the app would use, or null while unknown; re-read when the room changes. */
+  model: DeskModel | null;
   status: Status;
   error: string | null;
   selectedId: string | null;
@@ -248,6 +250,10 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const { activeProfileId } = useProfile();
 
   const [room, setRoom] = useState<Room>("desk");
+  const [model, setModel] = useState<DeskModel | null>(null);
+  useEffect(() => {
+    deskModel().then(setModel).catch(() => setModel(null));
+  }, [room]);
   const [query, setQuery] = useState("");
   const [scope, setScopeState] = useState<ScopeFilters>({});
   const [within, setWithin] = useState<Within | null>(null);
@@ -482,7 +488,7 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   );
 
   const value: DeskState = {
-    room, setRoom, query, setQuery, scope, within, searchWithin, setAside, putAside, moreLike, pane, setPane, useExtracted, result, clerk, status, error,
+    room, setRoom, query, setQuery, scope, within, searchWithin, setAside, putAside, moreLike, pane, setPane, useExtracted, result, clerk, model, status, error,
     selectedId, select: setSelectedId, selected, sort, setSort, pins, log,
     submit, setScope, dropExtracted, restore, forget, togglePin, isPinned, clearPins,
   };

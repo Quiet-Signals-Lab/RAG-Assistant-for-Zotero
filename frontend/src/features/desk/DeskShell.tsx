@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { request } from "../../api/client";
-import { deskModel } from "../../api/search";
-import type { DeskModel } from "../../types/desk";
 import LibraryManagementPanel from "../library/LibraryManagementPanel";
 import { getElectronAPI } from "../../utils/electron";
 import Bibliography from "./Bibliography";
 import ClerkRoom from "./ClerkRoom";
 import { useDesk, type Pane, type Room } from "./DeskContext";
+import { useSettings } from "../../contexts/SettingsContext";
 import Evidence from "./Evidence";
 import QueryDesk from "./QueryDesk";
 import RoomHeader from "../../components/layout/RoomHeader";
@@ -81,12 +80,12 @@ const PANES: { id: Pane; label: string }[] = [
 const DeskShell: React.FC = () => {
   const desk = useDesk();
   const navigate = useNavigate();
+  const { updateSettings } = useSettings();
   const [stats, setStats] = useState<IndexStats | null>(null);
-  const [clerk, setClerk] = useState<DeskModel | null>(null);
+  const clerk = desk.model;
 
   useEffect(() => {
     request<IndexStats>("/api/index_stats").then(setStats).catch(() => setStats(null));
-    deskModel().then(setClerk).catch(() => setClerk(null));
   }, [desk.room]);
 
   return (
@@ -117,6 +116,9 @@ const DeskShell: React.FC = () => {
               : "no model"}
           </button>
         )}
+        <button type="button" className="btn" onClick={() => updateSettings({ interfaceMode: "chat" })} title="Ask a model about your library">
+          Switch to chat
+        </button>
         <button type="button" className="icon-button" aria-label="Settings" onClick={() => navigate("/settings")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
             <circle cx="12" cy="12" r="3" />

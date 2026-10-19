@@ -15,11 +15,11 @@ import DeskShell from "../../features/desk/DeskShell";
 
 const AppShell: React.FC = () => {
   const { settings, loading } = useSettings();
-  if (loading) return null; // avoid flashing the desk for someone who chose legacy chat
+  if (loading) return null; // avoid flashing the desk for someone who chose chat
   return settings.interfaceMode === "chat" ? <LegacyChatShell /> : <DeskShell />;
 };
 
-/** The legacy chat interface, kept behind Settings → Interface. Not developed further. */
+/** The chat interface: the three-column shell, chosen in Settings → Interface or by "Switch to chat". */
 const LegacyChatShell: React.FC = () => {
   const { leftCollapsed, rightCollapsed, leftActiveTab, setLeftActiveTab } = useSessions();
   const classes = ["app-shell", leftCollapsed ? "app-shell--left-collapsed" : "", rightCollapsed ? "app-shell--right-collapsed" : ""].join(" ");

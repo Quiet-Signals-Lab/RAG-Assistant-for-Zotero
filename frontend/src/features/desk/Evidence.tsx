@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Chain from "./Chain";
 import { useDesk, type Pin } from "./DeskContext";
 import { BandMark, Highlighted, openPdf, Reference, showInZotero } from "./parts";
+import { useChatAbout } from "./useChatAbout";
 
 /** The first few words of a passage, enough to tell two pins from one page apart. */
 function opening(text: string): string {
@@ -16,6 +17,7 @@ function pinLine(p: Pin): string {
 
 const ReadingList: React.FC = () => {
   const desk = useDesk();
+  const chatAbout = useChatAbout();
   const [note, setNote] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   if (desk.pins.length === 0) {
@@ -61,6 +63,11 @@ const ReadingList: React.FC = () => {
       </ul>
       <div className="reading-list__actions">
         <button type="button" className="btn btn--primary" onClick={copy}>Copy passages</button>
+        {chatAbout && (
+          <button type="button" className="btn" onClick={() => chatAbout(desk.pins.map((p) => p.itemId), `Chat about ${new Set(desk.pins.map((p) => p.itemId)).size} pinned items`)}>
+            Chat about pinned
+          </button>
+        )}
         {confirming ? (
           <>
             <button type="button" className="btn btn--danger" onClick={() => { desk.clearPins(); setConfirming(false); }}>

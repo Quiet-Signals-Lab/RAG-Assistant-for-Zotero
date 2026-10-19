@@ -1,64 +1,72 @@
-# Prompting & Generation
+# How the chat prompts a model
 
-RAG Assistant uses a citation-aware academic prompting system. It works
-automatically — no configuration, re-indexing, or query changes needed. This
-page explains what it does and how to tune it.
+The chat answers from passages in your library, for literature review and discovery:
+what the library holds on a question, what each source argues, where sources differ, and
+what the retrieved passages leave uncovered. It is not a general assistant. Nothing here
+needs configuring.
 
-## What you get
+## What the model is told
 
-- **Every claim is cited** inline with `[N]` markers tied to retrieved sources.
-- **Facts vs. analysis are distinguished** — direct findings from papers vs. the
-  assistant's own synthesis across them.
-- **Gaps are acknowledged** — when the retrieved documents don't cover something,
-  the answer says so instead of inventing an answer.
-- **Structured responses**: direct answer (2-3 sentences) → key evidence (cited
-  bullets) → synthesis across sources → limitations.
+One system prompt of about 300 words (`backend/academic_prompts.py`), with nine numbered
+rules in order of importance:
 
-Example:
+1. Every claim carries the number of its source, even when the author is named. Only
+   numbers that appear in the message may be used. Pages go in words, (p. 12), never in
+   brackets.
+2. Say only what the passages say; they are excerpts, often cut mid-sentence. Quote a
+   short phrase with its page when the wording matters.
+3. When the passages do not answer the question, or only part of it, say so. Do not fill
+   the gap, and do not cite earlier answers as evidence.
+4. Leave out passages that do not bear on the question.
+5. When a passage reports another author's view, say so ("as [2] summarises Damasio"),
+   and offer such works as leads.
+6. Where sources disagree, say so and cite each side.
+7. Keep inference brief and mark it as the model's own.
+8. A topic rather than a question asks for a short overview. "These" sources means the
+   sources already discussed.
+9. Begin with the answer, in plain prose, as short as the question allows. No headings
+   and no reference list: the app shows the sources beside the answer.
 
-> Recent research identifies three primary impact categories [1][2]:
-> - Temperature increases of 1.2°C have accelerated ecosystem disruption [1]
-> - Ocean acidification up 30%, threatening marine biodiversity [2][3]
->
-> **Synthesis:** Sources [1] and [2] agree on warming magnitude but differ on
-> regional impacts. **Limitations:** the documents don't address adaptation policy.
+Each turn's message gives the question, the passages that matched grouped under their
+source (one number per source, not per passage), a one-line key to sources cited earlier
+whose passages are not in this turn, and where the passages came from: the whole library,
+the items chosen in search, the part matching filters, or the sources discussed so far.
 
-## Tuning generation
+## Citation numbers
 
-Presets live in `backend/academic_prompts.py` (`AcademicGenerationParams`). Fetch
-one with `AcademicGenerationParams.get_params("standard")`:
+A number names one source for the whole conversation. The backend keeps the numbering per
+session, so [2] in the first answer is the same paper as [2] in the fifth, and the
+interface links each number to that source. References are formatted by the app from
+Zotero's metadata, never written by the model.
 
-| Preset | temp | max_tokens | Use for |
-|---|---|---|---|
-| `standard` (default) | 0.35 | 600 | Academic Q&A — balances factuality and natural synthesis |
-| `creative` | 0.45 | 800 | Literature reviews, brainstorming |
-| `precise` | 0.25 | 400 | Specific fact extraction |
+A follow-up that refers back ("which of these is the earliest?") searches the sources
+already discussed first, and the whole library only when they hold nothing on it.
 
-Rationale for the defaults: temp 0.2-0.3 causes citation/phrase repetition in
-academic content; 0.35-0.4 is the sweet spot; above 0.5 hallucinations spike.
-`top_p=0.9` suppresses low-probability hallucinations, `top_k=50` keeps technical
-vocabulary diverse, and a repetition penalty (`repeat_penalty=1.15` for Ollama,
-`frequency_penalty=0.3` for OpenAI-compatible providers) stops
-"as [1] states, [1] shows…" loops. These are applied per-provider in
-`backend/model_providers/`.
+## Why the prompt is short
 
-## Prompt structure
+Small local models follow a prompt only when it is short, the rules are numbered, and
+nothing optional is mentioned: a 377-word draft that mentioned tables once produced tables
+in a third of answers, turned the purpose sentence into section headings, and doubled
+answer length. Measured with Gemma 3 4B on the test set through `scripts/eval_chat.py`
+(three queries, each as a first question, a follow-up and a scoped question):
 
-The system prompt (in `academic_prompts.py`) is layered: role/context →
-RAG grounding rules (mandatory citations, `[FINDING]`/`[SYNTHESIS]`/`[GAP]`
-distinctions) → chain-of-thought reasoning → output structure → a quality-gate
-checklist that tells the model to say "I don't know" when evidence is thin.
+| Across 9 answers | 377-word draft | shipped prompt |
+|---|---|---|
+| Answers citing a number that names no source | 3 | 1 |
+| Answers with headings or tables | 3 | 0 |
+| Median share of sentences with a citation | 0.25 to 0.5 | 0.5 to 1.0 |
+| Median words, first question | 359 | 101 |
 
-## Troubleshooting
+## Checking it
 
-- **Responses longer than before** — expected; capped at 600 tokens for academic
-  depth. Lower `max_tokens` in the `standard` preset if you want them shorter.
-- **Model repeating citations** — update your model (`ollama pull <model>`); the
-  repetition penalties already mitigate this.
+`python scripts/eval_chat.py --limit 3 --show` runs against the app on `127.0.0.1:8000`
+with the active model and prints each answer with its checks: unknown citation numbers,
+numbers that changed source between turns, cited-sentence share, reference lists, pages in
+brackets, headings or tables, and length. Faithfulness to the passages still needs a
+human read of the answers it prints.
 
-## Background
+## Generation settings
 
-Design is grounded in citation-accuracy research (notably CiteFix, ACL 2025 —
-~80% of RAG "hallucinations" are citation mismatches, not fabricated facts) and
-citation-aware tools like Perplexity and Consensus. All changes are backward
-compatible; generation params can be overridden per call.
+`AcademicGenerationParams` in `backend/academic_prompts.py`: temperature 0.35, 2000 tokens,
+`top_p` 0.9, `top_k` 50, repetition penalty 1.15 (applied per provider in
+`backend/model_providers/`), and a separate preset for session titles.

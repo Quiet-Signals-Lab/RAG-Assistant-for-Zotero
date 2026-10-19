@@ -42,7 +42,7 @@ export interface Settings {
   excludedTags?: string[];
   excludedItemTypes?: string[];
   theme?: 'light' | 'dark';
-  /** 'desk' (the reference desk, default) or 'chat' (legacy chat mode). */
+  /** 'desk' (the reference desk, default) or 'chat' (the chat). */
   interfaceMode?: 'desk' | 'chat';
   /** The desk clerk's jobs (backend/clerk_jobs.py); each needs a model and falls back without one. */
   deskReadQuery?: boolean;

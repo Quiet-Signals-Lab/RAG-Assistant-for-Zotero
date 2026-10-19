@@ -5,6 +5,26 @@ All notable changes to RAG Assistant for Zotero will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-10-19
+
+### Upgrading from 0.7.0
+Nothing to run. Chat sessions, pins, the query log, settings and the index are untouched.
+
+### Added
+- **Search and chat are one workflow.** "Switch to chat" in the search header and "Switch to search" in the chat's move between them, and both keep their state. From search, **Chat about this** on a result, **Chat about these** on the list, and **Chat about pinned** on the reading list open a chat that answers only from those items; the chat says so above the conversation, with a way back. The entry points appear only when a model is set up. A chat opened this way keeps its "Chat about …" title.
+- `scripts/eval_chat.py` runs test-set queries through the live app as a first question, a follow-up and a scoped question, and checks each answer: every citation names a returned source, numbers keep their source across turns, how many sentences carry a citation, whether a reference list was written anyway, pages in brackets, headings or tables, and length.
+
+### Changed
+- **The chat's prompt was rewritten for literature review and for small models.** One system prompt of about 300 words with nine numbered rules replaces the 500-line layered one: say only what the passages say, cite each claim by number even when naming the author, say when the passages do not answer, leave out passages that do not bear on the question, say when a source *reports* another author's view rather than finding it, state disagreement between sources, mark inference as the model's own, and no reference list, since the app shows the sources. Nothing optional (tables, headings, tags) is mentioned, because a small model uses whatever is mentioned. Measured with Gemma 3 4B: no invented citation numbers, no headings or tables, every sentence cited, answers a third of their earlier length (`docs/PROMPTING.md`).
+- **A citation number names one source for the whole conversation.** Numbers were restarted at [1] on every turn while the prompt told the model to keep using earlier ones, so [2] in one answer could be a different paper from [2] in the next. Each turn's message also carries a one-line key to earlier-cited sources, so the numbers stay meaningful after long conversations are trimmed.
+- Every turn tells the model where its passages come from: the whole library, the items you chose in search, the part matching your filters, or the sources discussed so far.
+- "Legacy chat" is now "Chat" throughout the interface and settings.
+
+### Fixed
+- **A follow-up that refers back ("which of these is the earliest?") answers about the sources discussed**, not about whatever the whole library returns for the condensed question; the library is searched only when those sources hold nothing on it.
+- The model's Chicago-style reference lists, written from title, authors and year alone, are no longer asked for.
+- "[1, 2]" in an answer is linked as two citations.
+
 ## [0.7.0] - 2026-10-13
 
 ### Upgrading from 0.6

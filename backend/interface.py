@@ -526,17 +526,6 @@ class ZoteroChatbot:
         # The embedding model will handle the expansion naturally
         return base
 
-    def build_answer_prompt(self, question: str, snippets: list[dict]) -> str:
-        """
-        Build an optimized prompt for academic question answering.
-        
-        Delegates to AcademicPrompts module for consistent formatting.
-        """
-        return AcademicPrompts.build_answer_prompt(
-            question=question,
-            snippets=snippets,
-            include_reasoning=True  # Enable chain-of-thought for complex questions
-        )
 
     def _build_filter(
         self,
@@ -946,8 +935,9 @@ class ZoteroChatbot:
         
         # STEP 2: CONDENSE query if it's a follow-up
         retrieval_query = query  # Default to original
-        
-        if session_id and self.query_condenser.should_condense(query, conversation_history):
+        is_follow_up = bool(session_id) and self.query_condenser.should_condense(query, conversation_history)
+
+        if is_follow_up:
             logger.debug("\nCONDENSATION: Detected follow-up question")
             retrieval_query = self.query_condenser.condense_query(
                 query=query,
@@ -976,13 +966,23 @@ class ZoteroChatbot:
         limits = self.get_retrieval_limits(is_focused=is_focused_query_prelim, max_sources_override=max_sources)
 
         # Manual filters are intentional, so only an auto-extracted filter falls back.
-        docs, metas, _scores, _fell_back = self._search_and_rerank(
+        fallback_where = item_where if (use_metadata_filters and not manual_filters) else db_filter
+        # "Which of these is earliest" is about the sources discussed so far, not the whole
+        # library: a follow-up that refers back searches those first, and the library only
+        # when they hold nothing on it.
+        prior_ids = [s["item_id"] for s in self.conversation_store.cited_sources(session_id) if s.get("item_id")] if is_follow_up and not filter_item_ids else []
+        where = db_filter
+        if prior_ids:
+            from backend.metadata_utils import merge_where_clauses
+            where = merge_where_clauses({"item_id": {"$in": prior_ids}}, db_filter)
+        docs, metas, _scores, fell_back = self._search_and_rerank(
             retrieval_query,
-            where=db_filter,
+            where=where,
             k=limits["retrieval_k"],
             rerank_top_k=limits["rerank_top_k"],
-            fallback_where=item_where if (use_metadata_filters and not manual_filters) else db_filter,
+            fallback_where=fallback_where,
         )
+        among_prior = bool(prior_ids) and not fell_back
 
         # Detect focused queries and relax caps so deep single-document questions
         # get enough context. Two signals trigger focused mode:
@@ -998,9 +998,17 @@ class ZoteroChatbot:
         max_snippets_per_paper = limits["max_snippets_per_paper"]
         max_total_snippets = limits["max_total_snippets"]
 
-        # Build snippets and citation map with page numbers
+        # Build snippets; citation numbers hold for the whole session so [N] names one source throughout.
         snippets = []
-        citation_map = OrderedDict()
+        turn_numbers = OrderedDict()  # without a session, numbers live for this turn only
+
+        def cite(key, meta):
+            if session_id:
+                return self.conversation_store.cite(session_id, key, meta)
+            if key not in turn_numbers:
+                turn_numbers[key] = {"id": len(turn_numbers) + 1, **meta}
+            return turn_numbers[key]["id"]
+
         paper_snippet_count = {}
 
         for doc, meta in zip(docs, metas):
@@ -1017,10 +1025,7 @@ class ZoteroChatbot:
 
             paper_snippet_count[paper_id] = paper_snippet_count.get(paper_id, 0) + 1
 
-            if key not in citation_map:
-                citation_map[key] = len(citation_map) + 1
-
-            cid = citation_map[key]
+            cid = cite(key, {"title": title, "year": year, "authors": authors, "pdf_path": pdf_path, "item_id": str(meta.get("item_id") or "")})
             snippet_text = (doc or "")[:800]
             snippets.append({
                 "citation_id": cid,
@@ -1035,61 +1040,26 @@ class ZoteroChatbot:
             if len(snippets) >= max_total_snippets:
                 break
 
-        # Build citations list
-        citation_to_authors = {}
-        for s in snippets:
-            key = (s["title"], s["year"], s["pdf_path"])
-            if key not in citation_to_authors:
-                citation_to_authors[key] = s["authors"]
-        
-        citations = [
-            {
-                "id": cid,
-                "title": title,
-                "year": year,
-                "authors": citation_to_authors.get((title, year, pdf_path), ""),
-                "pdf_path": pdf_path,
-            }
-            for (title, year, pdf_path), cid in citation_map.items()
-        ]
+        all_sources = self.conversation_store.cited_sources(session_id) if session_id else list(turn_numbers.values())
+        turn_ids = {s["citation_id"] for s in snippets}
 
-        # STEP 4: BUILD MESSAGES
-        # Critical: For follow-ups, append ONLY the question (no embedded RAG context)
-        # The conversation history already contains the system prompt and prior context
-        
-        logger.debug(f"\nMESSAGE CONSTRUCTION: is_new_session={is_new_session}, snippets={len(snippets)}")
-        
+        # STEP 4: BUILD MESSAGES. Every turn gets the same shape: question, this turn's
+        # passages, a key to earlier-cited sources, and where the passages came from.
+        if filter_item_ids:
+            n = len(filter_item_ids)
+            scope = "the one item you chose" if n == 1 else f"the {n} items you chose"
+        elif among_prior:
+            scope = "the sources discussed so far in this conversation"
+        elif manual_filters or (use_metadata_filters and _extracted):
+            scope = "the part of your library matching your filters"
+        else:
+            scope = "your whole library"
+        user_message = AcademicPrompts.build_turn_message(
+            query, snippets, scope, earlier_sources=[s for s in all_sources if s["id"] not in turn_ids]
+        )
+        logger.debug(f"\nMESSAGE CONSTRUCTION: is_new_session={is_new_session}, snippets={len(snippets)}, scope={scope}")
+
         if session_id:
-            # Determine message type based on turn number and snippet availability
-            if is_new_session:
-                # First turn: include full RAG context in user message
-                if snippets:
-                    user_message = self._build_first_turn_message(query, snippets)
-                    logger.debug(f"   Building FIRST turn message with {len(snippets)} snippets embedded")
-                    logger.debug(f"   Message length: {len(user_message)} chars")
-                else:
-                    user_message = query
-                    logger.debug("   Building FIRST turn message (no snippets)")
-            else:
-                # Follow-up turn: inject fresh evidence so the model can satisfy
-                # its grounding instruction ("use only the provided context").
-                # Without evidence here, the model receives no context but the
-                # system prompt says "use only provided context" — on GPT-4o
-                # this causes it to generate a new question instead of an answer
-                # (root cause of issue #35).
-                #
-                # Use build_hybrid_user_message (not build_rag_user_message):
-                # the hybrid variant frames the content as supplementary evidence
-                # for a follow-up, not as a fresh first-turn RAG query.
-                if snippets:
-                    user_message = AcademicPrompts.build_hybrid_user_message(query, snippets)
-                    logger.debug(f"   Building FOLLOW-UP turn #{user_turns + 1} with {len(snippets)} snippets embedded")
-                    logger.debug(f"   Message length: {len(user_message)} chars")
-                else:
-                    user_message = AcademicPrompts.build_plain_user_message(query)
-                    logger.debug(f"   Building FOLLOW-UP turn #{user_turns + 1} (no snippets, answering from history)")
-                    logger.debug(f"   Message length: {len(user_message)} chars")
-            
             # Append user message to history
             self.conversation_store.append_message(session_id, "user", user_message)
             
@@ -1115,10 +1085,7 @@ class ZoteroChatbot:
                 content_preview = msg.content[:150].replace('\n', ' ') + ('...' if len(msg.content) > 150 else '')
                 logger.debug(f"   [{i}] {msg.role:10s}: {content_preview}")
         else:
-            # Fallback: single-turn conversation (backward compatibility)
-            logger.debug("   Building SINGLE-TURN message (no session)")
-            prompt = self.build_answer_prompt(query, snippets)
-            messages = [Message(role="user", content=prompt)]
+            messages = [Message(role="system", content=AcademicPrompts.get_system_prompt()), Message(role="user", content=user_message)]
         
         # STEP 5: GENERATE answer using LLM
         gen_params = AcademicGenerationParams.get_params("standard")
@@ -1139,7 +1106,6 @@ class ZoteroChatbot:
             raw_content = response.content
             
             # Extract <think>...</think> content if present
-            import re
             think_pattern = r'<think>(.*?)</think>'
             think_matches = re.findall(think_pattern, raw_content, re.DOTALL)
             
@@ -1269,6 +1235,12 @@ class ZoteroChatbot:
                 f"*Error details: {str(e)[:200]}*"
             )
 
+        # The sources the answer can be checked against: this turn's passages, and any
+        # earlier source the answer cites by number.
+        summary = AcademicPrompts.normalise_citations(summary)
+        cited = {int(n) for n in re.findall(r"\[(\d+)\]", summary)}
+        citations = [src for src in all_sources if src["id"] in turn_ids or src["id"] in cited]
+
         # STEP 6: Generate session title for new sessions
         generated_title = None
         if session_id and is_new_session:
@@ -1293,34 +1265,6 @@ class ZoteroChatbot:
             result["reasoning"] = reasoning_content
         
         return result
-    
-    def _build_first_turn_message(self, question: str, snippets: list[dict]) -> str:
-        """Build first turn message with embedded RAG context."""
-        if not snippets:
-            return question
-        
-        # Build compact context
-        context_blocks = []
-        for s in snippets:
-            cid = s.get("citation_id", "?")
-            title = s.get("title", "Untitled")
-            year = s.get("year", "")
-            authors = s.get("authors", "Unknown")
-            text = s.get("snippet", "")
-            page = s.get("page")
-            
-            bib = f"{authors} ({year})" if year else authors
-            page_info = f", p. {page}" if page else ""
-            context_blocks.append(f"[{cid}] {title}{page_info}\n{bib}\n{text}")
-        
-        context = "\n\n".join(context_blocks)
-        
-        return f"""{question}
-
----
-**Evidence from library:**
-
-{context}"""
     
     def generate_session_title(self, user_question: str, assistant_response: str) -> str:
         """

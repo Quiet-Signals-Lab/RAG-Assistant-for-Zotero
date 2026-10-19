@@ -106,7 +106,7 @@ const ClerkRoom: React.FC = () => {
         </label>
       )}
 
-      <ActiveModelPanel hint="the model for these jobs and for legacy chat" />
+      <ActiveModelPanel hint="the model for these jobs and for chat" />
 
       <fieldset className="clerk-room__jobs">
         <legend className="desk-label">What the model may do</legend>

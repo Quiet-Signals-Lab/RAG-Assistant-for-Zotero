@@ -45,4 +45,6 @@ export type Session = {
   messages: Message[];
   snippets: Snippet[];
   sources: SourceRef[];
+  /** Zotero item ids the chat answers from, when opened from search. */
+  itemIds?: string[];
 };

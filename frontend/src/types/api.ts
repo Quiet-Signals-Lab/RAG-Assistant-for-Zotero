@@ -45,4 +45,5 @@ export interface ChatRequest {
   };
   use_rrf?: boolean;
   max_sources?: number;
+  item_ids?: string[];
 }

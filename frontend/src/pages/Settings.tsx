@@ -432,10 +432,10 @@ const Settings: React.FC = () => {
                       onChange={() => updateSettings({ interfaceMode: 'chat' })}
                     />
                     <span>
-                      <span className="settings-check__label">Legacy chat</span>
+                      <span className="settings-check__label">Chat</span>
                       <span className="settings-hint">
-                        The earlier chat interface, where a model writes an answer from your sources.
-                        It needs a configured model and is no longer developed.
+                        A model answers your questions from passages in your library, citing each one.
+                        It needs a configured model. From search, “Chat about these” opens it on the items you found.
                       </span>
                     </span>
                   </label>
@@ -536,7 +536,7 @@ const Settings: React.FC = () => {
                 </Section>
               )}
 
-              <Section title="Notifications" description="Legacy chat only: when the model has finished an answer.">
+              <Section title="Notifications" description="Chat only: when the model has finished an answer.">
                 <label className="settings-check">
                   <input
                     type="checkbox"
@@ -592,7 +592,7 @@ const Settings: React.FC = () => {
           {activeTab === 'local' && (
             <Section
               title="Local providers"
-              description="Model servers on this computer. No key is needed and nothing leaves the machine. Used by the language model jobs (optional) and by legacy chat."
+              description="Model servers on this computer. No key is needed and nothing leaves the machine. Used by the language model jobs (optional) and by chat."
             >
               {localProviders.map(provider => renderProviderCard(provider))}
             </Section>
@@ -601,7 +601,7 @@ const Settings: React.FC = () => {
           {activeTab === 'cloud' && (
             <Section
               title="Cloud providers"
-              description="External model services. They need an API key, and your query and passages are sent to them. Used by the language model jobs (optional) and by legacy chat."
+              description="External model services. They need an API key, and your query and passages are sent to them. Used by the language model jobs (optional) and by chat."
             >
               {cloudProviders.map(provider => renderProviderCard(provider))}
             </Section>
@@ -610,7 +610,7 @@ const Settings: React.FC = () => {
           {activeTab === 'advanced' && (
             <Section
               title="Evidence per answer"
-              description="Legacy chat only. Search always retrieves the same depth, whatever the model."
+              description="Chat only. Search always retrieves the same depth, whatever the model."
             >
               <div className="settings-field">
                 <label className="settings-label" htmlFor="max-sources">Passages per question</label>
@@ -657,7 +657,7 @@ const TABS: { id: TabId; label: string; note: string }[] = [
   { id: 'general', label: 'General', note: 'interface, Zotero, profile' },
   { id: 'local', label: 'Local models', note: 'Ollama, LM Studio' },
   { id: 'cloud', label: 'Cloud providers', note: 'API keys' },
-  { id: 'advanced', label: 'Chat retrieval', note: 'legacy chat' },
+  { id: 'advanced', label: 'Chat retrieval', note: 'chat' },
 ];
 
 /** A ledger row: what the setting is on the left, the controls on the right. */

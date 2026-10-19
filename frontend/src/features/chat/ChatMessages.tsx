@@ -159,12 +159,15 @@ const ChatMessages: React.FC<Props> = ({ messages, loading }) => {
         {messages.length === 0 && !loading && (
           <div className="message-list__empty">
             <div className="desk-intro">
-              <h2>Legacy chat.</h2>
+              <h2>Ask your library.</h2>
               <p>
-                Ask a question and a model writes an answer from passages in your library, with numbered citations.
-                Check every claim against the evidence and sources beside it: the answer is the model's, not your sources'.
+                A model answers from passages in your library, citing each one by number. Check every claim against the
+                evidence beside it: the answer is the model's reading, not your sources'.
               </p>
-              <p>Search returns the sources themselves, ranked, with no model in between.</p>
+              <p>
+                Start here to find your way into a topic, or start in search, where results come back ranked with no model
+                in between, and bring chosen items here with “Chat about these”.
+              </p>
               <button type="button" className="btn" onClick={() => updateSettings({ interfaceMode: "desk" })}>
                 Switch to search
               </button>

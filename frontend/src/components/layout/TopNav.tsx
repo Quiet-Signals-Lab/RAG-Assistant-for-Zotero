@@ -11,7 +11,7 @@ const Icon: React.FC<React.PropsWithChildren> = ({ children }) => (
   </svg>
 );
 
-/** The legacy chat's header: the room bar with session controls. */
+/** The chat's header: the room bar with session controls. */
 const TopNav: React.FC = () => {
   const navigate = useNavigate();
   const { updateSettings } = useSettings();
@@ -58,7 +58,7 @@ const TopNav: React.FC = () => {
   const sessionsList = Object.values(sessions).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 
   return (
-    <RoomHeader title="Legacy chat" className="legacy-header">
+    <RoomHeader title="Chat" className="legacy-header">
       <div className="legacy-header__tools">
         <button className="icon-button" onClick={toggleLeft} aria-pressed={!leftCollapsed} aria-label={leftCollapsed ? "Show the side panel" : "Hide the side panel"} title={leftCollapsed ? "Show the side panel" : "Hide the side panel"}>
           <Icon><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M9 4v16" /></Icon>

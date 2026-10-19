@@ -148,6 +148,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         : undefined,
       use_rrf: searchSettings.useRRF,
       max_sources: settings.maxSources || 0,
+      item_ids: sessionId ? sessions.getSession(sessionId)?.itemIds : undefined,
     };
     
     // send via the chat hook, which returns created messages and the response
@@ -241,7 +242,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       console.log("[ChatContext] Auto-selected follow-up response (no race):", a.id);
 
       // Update session title if LLM generated one (first message in session)
-      if (generatedTitle) {
+      if (generatedTitle && !sessions.getSession(sessionId)?.itemIds) {
         sessions.updateSessionTitle(sessionId, generatedTitle);
       }
 

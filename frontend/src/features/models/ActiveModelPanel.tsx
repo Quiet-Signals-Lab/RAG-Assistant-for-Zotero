@@ -7,7 +7,7 @@ import '../../styles/active-model-panel.css';
  * ActiveModelPanel displays the active provider and model selection
  * in the left sidebar for quick model switching during chat sessions.
  */
-const ActiveModelPanel: React.FC<{ hint?: string }> = ({ hint = 'writes legacy chat answers' }) => {
+const ActiveModelPanel: React.FC<{ hint?: string }> = ({ hint = 'writes chat answers' }) => {
   const { settings, updateSettings, availableProviders } = useSettings();
   const [availableModels, setAvailableModels] = useState<Record<string, ModelInfo[]>>({});
   const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});

@@ -225,6 +225,10 @@
   height: 100%;
 }
 
+.chat-view__scope {
+  margin: 0 16px;
+}
+
 .chat-view__error {
   padding: 11px 24px 0;
 }

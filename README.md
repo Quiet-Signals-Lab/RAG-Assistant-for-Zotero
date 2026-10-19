@@ -24,7 +24,7 @@ The design borrows from library science rather than from chat: Cutter's catalogu
 
 **Language models are optional.** The desk ranks, quotes and cites with no model at all. If you set one up, a local model on your computer or a cloud provider, the *desk clerk* uses it for small, checked jobs: reading harder queries, a one-line note on each item that must be supported by its passages, next searches drawn from your own tags, and names for groups of results. Anything that fails a check falls back to the desk's own work.
 
-**Prefer the old chat?** The question-and-answer chat from earlier versions is still there: Settings → General → Interface → Legacy chat.
+**Want an answer written?** The chat is one switch away ("Switch to chat" in the header, or Settings → General → Interface): a model answers from passages in your library, citing each by number. From search, "Chat about these" opens a chat on the items you found.
 
 The application can run entirely on your computer. With no model or a local one, your documents and queries never leave it.
 
@@ -91,7 +91,7 @@ Install [Zotero](https://www.zotero.org/download/) and sync your library:
 
 ### 2. Language Model (optional)
 
-The reference desk works without one. A model adds query readings, next searches and theme names, and is needed for legacy chat. For the clerk, a small local model is enough: Qwen3-4B-Instruct-2507 is the model the desk was measured with ([results](docs/DESK_CLERK.md#measurement)).
+The reference desk works without one. A model adds query readings, next searches and theme names, and is needed for chat. For the clerk, a small local model is enough: Qwen3-4B-Instruct-2507 is the model the desk was measured with ([results](docs/DESK_CLERK.md#measurement)).
 
 #### Option A: Local Models (No API key needed)
 
@@ -126,7 +126,7 @@ Configure API keys in Settings for: **OpenAI**, **Anthropic**, **Google**, **Mis
 
 2. **Index Your Library**: Make sure your Zotero client is closed. Then open the library from the desk's rail and click "Index Library" to process your PDFs. This creates embeddings for semantic search. Initial indexing may take a while depending on library size.
 
-3. **Optional - Choose a Model**: for the desk clerk or legacy chat.
+3. **Optional - Choose a Model**: for the language model jobs or chat.
    - **Local (No API key)**: Ollama or LM Studio - install and load a model
    - **Cloud (API key required)**: OpenAI, Anthropic, Google, Mistral, Groq, or OpenRouter - add API key in Settings
    - See [Provider Setup Guide](docs/provider_guide.md) for detailed instructions and API key locations
@@ -167,7 +167,7 @@ For complete build instructions, see [docs/BUILD_CHECKLIST.md](docs/BUILD_CHECKL
 ** [Complete Documentation Index](docs/README.md)**
 
 **Quick Links:**
-- **Users:** [Provider Setup](docs/provider_guide.md) · [Prompting Guide (legacy chat)](docs/PROMPTING.md)
+- **Users:** [Provider Setup](docs/provider_guide.md) · [How the chat prompts a model](docs/PROMPTING.md)
 - **Design:** [The reference desk](docs/REFERENCE_DESK_PLAN.md) · [The desk clerk: small models](docs/DESK_CLERK.md) · [Roadmap](docs/REFDESK_ROADMAP.md)
 - **Developers:** [Build Checklist](docs/BUILD_CHECKLIST.md) · [Desktop App Guide](docs/DESKTOP_APP.md)
 - **Platform-Specific:** [Windows Build](docs/WINDOWS_BUILD_GUIDE.md) · [Linux Packaging](docs/LINUX_PACKAGING.md)

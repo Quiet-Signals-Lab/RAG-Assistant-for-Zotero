@@ -7,8 +7,9 @@ Provides in-memory storage of conversation histories with support for:
 - Session lifecycle management
 """
 
-from typing import Dict, List, Optional
-from dataclasses import dataclass
+from collections import OrderedDict
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
 from backend.model_providers import Message
 from backend.academic_prompts import AcademicPrompts
 import logging
@@ -22,7 +23,9 @@ class ConversationHistory:
     session_id: str
     messages: List[Message]
     system_prompt: Optional[str] = None
-    
+    # source key -> {id, title, year, authors, pdf_path}; a number names one source for the whole session
+    sources: "OrderedDict[Tuple, Dict]" = field(default_factory=OrderedDict)
+
 
 class ConversationStore:
     """
@@ -83,6 +86,21 @@ class ConversationStore:
         message = Message(role=role, content=content)
         self._sessions[session_id].messages.append(message)
     
+    def cite(self, session_id: str, key: Tuple, meta: Dict) -> int:
+        """The citation number this source has in the session: the one it was given, else the next."""
+        if session_id not in self._sessions:
+            self.get_messages(session_id)
+        sources = self._sessions[session_id].sources
+        if key not in sources:
+            sources[key] = {"id": len(sources) + 1, **meta}
+        return sources[key]["id"]
+
+    def cited_sources(self, session_id: str) -> List[Dict]:
+        """Every source numbered in the session so far, in number order."""
+        if session_id not in self._sessions:
+            return []
+        return list(self._sessions[session_id].sources.values())
+
     def clear_session(self, session_id: str) -> None:
         """
         Clear all messages from a session.

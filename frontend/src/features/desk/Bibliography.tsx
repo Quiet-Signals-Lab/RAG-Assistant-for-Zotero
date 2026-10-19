@@ -8,6 +8,7 @@ import { BUNDLED_STYLES, LOCALE_EN_US } from "./styles";
 import { apiFetch, request } from "../../api/client";
 import { FACETS, groupBy, refinements, type Facet, type Refinement } from "./facets";
 import { BandMark, Highlighted, itemTypeLabel, openPdf, pageSpan, Reference, showInZotero } from "./parts";
+import { useChatAbout } from "./useChatAbout";
 
 function sortItems(items: DeskItem[], sort: Sort): DeskItem[] {
   if (sort === "relevance") return items;
@@ -121,6 +122,7 @@ type RowProps = { item: DeskItem; selected: boolean; pinned: boolean; onPick: ()
 const Row = React.forwardRef<HTMLButtonElement, RowProps>(
   ({ item, selected, pinned, onPick }, ref) => {
     const desk = useDesk();
+    const chatAbout = useChatAbout();
     const best = item.passages[0];
     const meta = [
       itemTypeLabel(item.citation?.item_type || item.item_type),
@@ -165,6 +167,7 @@ const Row = React.forwardRef<HTMLButtonElement, RowProps>(
               </button>
             )}
             <button type="button" className="btn" onClick={() => desk.moreLike(item)}>More like this</button>
+            {chatAbout && <button type="button" className="btn" onClick={() => chatAbout([item.item_id], `Chat about ${shortCite(item)}`)}>Chat about this</button>}
             <button type="button" className="btn" onClick={() => desk.setPane("verify")}>Evidence</button>
           </div>
         )}
@@ -176,6 +179,7 @@ Row.displayName = "Row";
 
 const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
   const desk = useDesk();
+  const chatAbout = useChatAbout();
   const { result, status, error } = desk;
   const [showSeeAlso, setShowSeeAlso] = useState(false);
   const [facet, setFacet] = useState<Facet>("none");
@@ -321,6 +325,11 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
               </select>
             </label>
             <button type="button" className="tool-button" onClick={copyBibliography}>Copy references</button>
+            {chatAbout && (
+              <button type="button" className="tool-button" onClick={() => chatAbout(visible.map((it) => it.item_id), `Chat about ${visible.length} items: ${result.query}`)}>
+                Chat about these
+              </button>
+            )}
             <label className="tool">
               <span className="sr-only">Save the list as</span>
               <select value="" onChange={(e) => saveAs(e.target.value)} aria-label="Save the list as a file">

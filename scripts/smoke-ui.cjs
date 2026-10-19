@@ -1,6 +1,6 @@
 /**
  * Smoke test for the interface switch: the app must render, switch from search to
- * legacy chat and back (through Settings and through the chat's own button), survive a
+ * the chat and back (through Settings and through the chat's own button), survive a
  * reload in each mode, and do one search and one chat turn, with no console error,
  * failed load or renderer crash along the way. The stored interface setting is put back.
  *
@@ -87,9 +87,9 @@ async function main() {
     // Settings → legacy chat
     await toSettings();
     await chooseMode("chat");
-    await until("legacy chat renders after the switch", `!!document.querySelector(".app-shell .chat-input__textarea")`);
+    await until("chat renders after the switch", `!!document.querySelector(".app-shell .chat-input__textarea")`);
     await win.reload();
-    await until("legacy chat renders after a reload", `!!document.querySelector(".app-shell .chat-input__textarea")`);
+    await until("chat renders after a reload", `!!document.querySelector(".app-shell .chat-input__textarea")`);
 
     if (!NO_CHAT) {
       await js(`document.querySelector(".chat-input__textarea").focus()`);
@@ -106,7 +106,7 @@ async function main() {
     // Settings → legacy chat → Settings → search
     await toSettings();
     await chooseMode("chat");
-    await until("legacy chat renders a second time", `!!document.querySelector(".app-shell")`);
+    await until("chat renders a second time", `!!document.querySelector(".app-shell")`);
     await toSettings();
     await chooseMode("desk");
     await until("search interface renders after switching back", `!!document.querySelector(".desk")`);

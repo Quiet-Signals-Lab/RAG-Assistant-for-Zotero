@@ -22,6 +22,8 @@ type SessionsShape = {
     assistantMessageId?: string,
     reasoning?: string
   ) => { sessionId: string; assistantMessageId: string };
+  /** An empty session scoped to these items, made current; the first question fills it. */
+  startSession: (title: string, itemIds: string[]) => string;
   appendMessage: (sessionId: string, message: Message) => void;
   updateSessionTitle: (sessionId: string, newTitle: string) => void;
   addSnippet: (sessionId: string, snippet: Snippet) => void;
@@ -201,6 +203,14 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
     return { sessionId: id, assistantMessageId: assistantMsgId };
   }
 
+  function startSession(title: string, itemIds: string[]): string {
+    const id = crypto.randomUUID();
+    const createdAt = nowISO();
+    setSessions((prev) => ({ ...prev, [id]: { id, title, createdAt, updatedAt: createdAt, messages: [], snippets: [], sources: [], itemIds } }));
+    setCurrentSessionId(id);
+    return id;
+  }
+
   function appendMessage(sessionId: string, message: Message) {
     setSessions((prev) => {
       const s = prev[sessionId];
@@ -285,6 +295,7 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
         leftActiveTab,
         setLeftActiveTab,
         createSession,
+        startSession,
         appendMessage,
         updateSessionTitle,
         addSnippet,
