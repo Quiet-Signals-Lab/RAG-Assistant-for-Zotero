@@ -2,7 +2,7 @@
 # RAG Assistant for Zotero
 
 [![Latest version](https://img.shields.io/github/v/release/Quiet-Signals-Lab/RAG-Assistant-for-Zotero?label=version)](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/latest)
-[![Downloads](https://img.shields.io/badge/downloads-2%3C000%2B-blue)](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases)
+[![Downloads](https://img.shields.io/badge/downloads-3%2C000%2B-blue)](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases)
 [![License: GPL-3.0](https://img.shields.io/github/license/Quiet-Signals-Lab/RAG-Assistant-for-Zotero)](LICENSE)
 
 <a href="https://buymeacoffee.com/aahepburn"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
@@ -11,7 +11,11 @@ A reference desk for your Zotero library using semantic search of the contents o
 
 <img width="1397" height="872" alt="Screenshot 2026-10-22 at 1 40 39 PM" src="https://github.com/user-attachments/assets/1669b1a9-4224-4d6e-8433-9776f13dd2c1" />
 
+_Start in Reference Desk Mode for literature discovery._
+
 <img width="1396" height="869" alt="Screenshot 2026-10-22 at 2 02 00 PM" src="https://github.com/user-attachments/assets/33079ead-cbaa-4745-bbf8-d169b58b7f3b" />
+
+_Continue in RAG Mode with saved context from earlier search._
 
 ## What It Does
 
