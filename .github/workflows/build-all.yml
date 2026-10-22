@@ -328,6 +328,9 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Update tap cask
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -337,6 +340,8 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           REPO="Quiet-Signals-Lab/RAG-Assistant-for-Zotero"
           TAP="Quiet-Signals-Lab/homebrew-rag-assistant-for-zotero"
+          # package.json is the one source for the description on every channel.
+          DESC="$(node -p "require('./package.json').description")"
 
           # Download the released macOS DMG straight from the release and hash it.
           gh release download "v${VERSION}" --repo "$REPO" --pattern "*.dmg" --dir dmg
@@ -355,7 +360,7 @@ jobs:
 
             url "https://github.com/${REPO}/releases/download/v#{version}/${DMG_NAME}"
             name "RAG Assistant for Zotero"
-            desc "AI-powered research assistant for your Zotero library"
+            desc "${DESC}"
             homepage "https://github.com/${REPO}"
 
             livecheck do
@@ -405,6 +410,9 @@ jobs:
       UPSTREAM: microsoft/winget-pkgs
       KOMAC_VERSION: 2.16.0
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Resolve version and installer URL
         id: v
         run: |
@@ -454,6 +462,37 @@ jobs:
               print(f"stripped {len(insts) - len(kept)} nested installer entry/entries")
           else:
               print(f"{len(insts)} installer entry/entries, nothing to strip")
+          PY
+
+      # komac inherits the locale fields from the previous version, so the text
+      # written for 0.4.5 would be copied forward forever. package.json is the
+      # one source for the description, tags, licence and URLs; the release
+      # notes come from this version's CHANGELOG section.
+      - name: Apply package metadata to the locale manifest
+        run: |
+          set -euo pipefail
+          f=$(find ./wg -name '*.locale.en-US.yaml' | head -1)
+          python3 - "$f" "${{ steps.v.outputs.version }}" <<'PY'
+          import json, re, sys, yaml
+          path, version = sys.argv[1], sys.argv[2]
+          pkg = json.load(open("package.json"))
+          home = pkg["homepage"]
+          m = yaml.safe_load(open(path))
+          m["Publisher"] = pkg["author"]["name"]
+          m["PublisherUrl"] = home.rsplit("/", 1)[0]
+          m["PublisherSupportUrl"] = f"{home}/issues"
+          m["PackageUrl"] = home
+          m["License"] = pkg["license"]
+          m["ShortDescription"] = pkg["description"]
+          m["Description"] = pkg["longDescription"]
+          m["Tags"] = pkg["keywords"][:16]
+          log = open("CHANGELOG.md").read()
+          section = re.search(rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)", log, re.S | re.M)
+          if section:
+              m["ReleaseNotes"] = section.group(1).strip()[:10000]
+          m["ReleaseNotesUrl"] = f"{home}/releases/tag/v{version}"
+          yaml.safe_dump(m, open(path, "w"), sort_keys=False, allow_unicode=True, width=100000)
+          print(open(path).read())
           PY
 
       - name: Open winget PR

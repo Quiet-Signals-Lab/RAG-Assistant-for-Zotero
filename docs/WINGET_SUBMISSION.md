@@ -197,12 +197,15 @@ gh pr create --repo microsoft/winget-pkgs --base master \
   layout, so it can map both a nullsoft and a portable entry onto our single
   `.exe`. winget rejects that as `DuplicateInstallerEntry`. The workflow strips
   any entry carrying `NestedInstallerType` before committing.
-- **`License` field.** komac emits `GPL-3.0`, which is deprecated SPDX for the
-  *only* variant. The project is `GPL-3.0-or-later`. Worth correcting in the
-  manifest; it is not automated.
-- **`PublisherUrl` and `PackageUrl`** still point at
-  `github.com/aahepburn/RAG-Assistant-for-Zotero`, inherited from 0.4.5. They
-  resolve via GitHub's redirect to the org, so they are stale rather than broken.
+- **Locale fields are inherited, then overwritten.** komac copies the previous
+  version's locale manifest, which until 0.7.1 still carried the 0.4.5 text
+  (`GPL-3.0` instead of `GPL-3.0-or-later`, URLs on the personal account, a
+  description of the old chat app). Since 2026-10-22 the "Apply package
+  metadata" step rewrites ShortDescription, Description, Tags, License, the
+  three URLs and ReleaseNotes from `package.json` (`description`,
+  `longDescription`, `keywords`, `license`, `homepage`) and the version's
+  `CHANGELOG.md` section. Edit those, not the manifest. The manual submission
+  below skips that step, so apply the same fields by hand when submitting manually.
 - **The fork is the user's, not the org's.** `fork-user` / `KOMAC_FORK_OWNER`
   must be `aahepburn`. Getting this wrong produces `Could not resolve to a
   Repository with the name 'Quiet-Signals-Lab/winget-pkgs'`.
