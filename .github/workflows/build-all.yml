@@ -492,8 +492,9 @@ jobs:
               m["ReleaseNotes"] = section.group(1).strip()[:10000]
           m["ReleaseNotesUrl"] = f"{home}/releases/tag/v{version}"
 
-          # Write it the way komac does (literal blocks, plain scalars, the header
-          # comments): PyYAML's multi-line quoted scalars failed winget's validator.
+          # Write it the way komac does. The validator requires the schema header
+          # comment on line 1 (SchemaHeaderNotFound otherwise), which yaml.safe_dump
+          # drops; literal blocks for multi-line text keep the file readable.
           def scalar(v):
               v = str(v)
               if "\n" in v:
