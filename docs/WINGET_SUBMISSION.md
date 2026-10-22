@@ -206,6 +206,13 @@ gh pr create --repo microsoft/winget-pkgs --base master \
   `longDescription`, `keywords`, `license`, `homepage`) and the version's
   `CHANGELOG.md` section. Edit those, not the manifest. The manual submission
   below skips that step, so apply the same fields by hand when submitting manually.
+- **Write multi-line fields as literal blocks.** The first 0.7.2 submission failed
+  `02. Manifest Validation` with the generic "verify the manifest is compliant"
+  comment. The files passed the JSON schemas locally; what differed from komac's
+  output was PyYAML's formatting (release notes as a multi-line single-quoted
+  scalar, header comments dropped). Rewritten in komac's style (`|-` blocks, plain
+  or single-quoted one-line scalars, the two header comments) the same content
+  passed. The step now renders the file itself and asserts it reads back equal.
 - **The fork is the user's, not the org's.** `fork-user` / `KOMAC_FORK_OWNER`
   must be `aahepburn`. Getting this wrong produces `Could not resolve to a
   Repository with the name 'Quiet-Signals-Lab/winget-pkgs'`.
@@ -218,3 +225,4 @@ gh pr create --repo microsoft/winget-pkgs --base master \
 | 2026-07-29 | 0.5.1 | winget-releaser action, succeeded |
 | 2026-09-09 | 0.5.2 | Action failed 3× on `CreateRef`; submitted by hand ([PR 432197](https://github.com/microsoft/winget-pkgs/pull/432197)); action replaced with komac + `gh` |
 | 2026-10-10 | 0.6.0 | komac + `gh` job failed on the fork sync (`workflow` scope); submitted by hand ([PR 450264](https://github.com/microsoft/winget-pkgs/pull/450264)) with license and release notes corrected |
+| 2026-10-22 | 0.7.2 | Job succeeded end to end ([PR 459046](https://github.com/microsoft/winget-pkgs/pull/459046)); first validation failed on PyYAML's formatting of the locale file, fixed by pushing a komac-style file to the branch |
