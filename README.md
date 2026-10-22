@@ -7,7 +7,7 @@
 
 <a href="https://buymeacoffee.com/aahepburn"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
 
-A reference desk for your Zotero library using semantic search of the contents of your entire PDF collection. Ask for a topic, a title, or an author and year, and the desk returns a ranked bibliography of the items in your library that bear on it, with the passages that matched, open at the page.
+A reference desk for your Zotero library using semantic search of the contents of your entire PDF collection. Ask for a topic, a title, or an author and year, and the desk returns a ranked bibliography of the items in your library that bear on it, with the passages that matched, open at the page. This can then be used as context to narrow down your list in RAG Mode.
 
 <img width="1397" height="872" alt="Screenshot 2026-10-22 at 1 40 39 PM" src="https://github.com/user-attachments/assets/1669b1a9-4224-4d6e-8433-9776f13dd2c1" />
 
