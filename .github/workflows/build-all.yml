@@ -491,8 +491,27 @@ jobs:
           if section:
               m["ReleaseNotes"] = section.group(1).strip()[:10000]
           m["ReleaseNotesUrl"] = f"{home}/releases/tag/v{version}"
-          yaml.safe_dump(m, open(path, "w"), sort_keys=False, allow_unicode=True, width=100000)
-          print(open(path).read())
+
+          # Write it the way komac does (literal blocks, plain scalars, the header
+          # comments): PyYAML's multi-line quoted scalars failed winget's validator.
+          def scalar(v):
+              v = str(v)
+              if "\n" in v:
+                  return "|-\n" + "\n".join(("  " + l.rstrip()) if l.strip() else "" for l in v.strip().split("\n"))
+              plain = v and not re.search(r": |#|^[-?:,\[\]{}&*!|>'\"%@`]|^\s|\s$", v) and v.lower() not in ("true", "false", "null", "~", "yes", "no")
+              return v if plain else "'" + v.replace("'", "''") + "'"
+          lines = ["# Created with komac, locale fields from package.json",
+                   "# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json", ""]
+          for k, v in m.items():
+              if isinstance(v, list):
+                  lines.append(f"{k}:")
+                  lines += [f"- {scalar(x)}" for x in v]
+              else:
+                  lines.append(f"{k}: {scalar(v)}")
+          text = "\n".join(lines) + "\n"
+          assert yaml.safe_load(text) == {k: (str(v) if not isinstance(v, list) else v) for k, v in m.items()}, "rendered manifest does not round-trip"
+          open(path, "w", encoding="utf-8").write(text)
+          print(text)
           PY
 
       - name: Open winget PR
