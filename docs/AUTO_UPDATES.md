@@ -10,7 +10,7 @@ The application uses Electron's `electron-updater` module to provide seamless au
 
 The macOS build is Apple Silicon (arm64) only, produced on a `macos-14` runner, and requires macOS 13 (Ventura) or later since Electron 44. `latest-mac.yml` carries `minimumSystemVersion: 22.0.0` (the Darwin kernel version of macOS 13); electron-updater compares it with `os.release()` and skips the update on an older Mac rather than installing a build that cannot launch. electron-builder does not write that key itself, so the release workflow appends it after packaging.
 
-`scripts/merge-mac-yml.js` dates from the period when Intel and Apple Silicon builds were merged into one manifest. Nothing runs it any more.
+A `merge-mac-yml.js` script once merged the Intel and Apple Silicon manifests into one; it was removed on 2026-10-22 since only arm64 is built.
 
 ## Architecture
 

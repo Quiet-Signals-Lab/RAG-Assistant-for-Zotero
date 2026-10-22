@@ -5,6 +5,28 @@ All notable changes to RAG Assistant for Zotero will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-10-22
+
+### Upgrading from 0.7.1
+Nothing to run. Settings, sessions, pins, the query log and the index are untouched; the profile's desk file gains a context list.
+
+### Added
+- **A context folder for RAG Chat.** "Add to context" on a result's evidence, "Add all to context" on the list and "Add pinned to context" on the reading list put items, with their strongest matched passage, into a folder shown above the RAG Chat question box. The items you tick there are the only ones RAG Chat answers from. The folder is kept per profile. This replaces "Chat about this / these / pinned", which switched screens without saying what had happened, and it needs no model.
+- **The active model in the header**, with a green or red dot: "gemma3:4b selected", or "(Not running)" when a local server is down or does not list the model; the tooltip carries the provider's own error. Checked on load, when the model settings change, and once a minute.
+
+### Changed
+- **The interface was redone for hierarchy.** One typeface for the interface (the serif stays for references), a five-step type scale, sentence-case labels, and three surfaces: the frame, the side panels and the canvas. The selected result is a card. The results toolbar is one row of one kind of control. Row actions moved to the Evidence panel, so the list no longer shifts while you arrow through it. The reading list sits folded at the top of Evidence, and "Read as" folds to one line.
+- **Search and RAG Chat share one shell.** A Search | RAG Chat switch beside the mode's own controls replaces "Switch to chat"; the same rail, panels and header serve both. RAG Chat shows the session title above the conversation and its Scope panel in the left column. "Chat" is "RAG Chat" throughout.
+- The app name moved to the right of the header beside Settings, without the logo mark. The chat column is one colour, and the context folder is framed, green once it holds something.
+- **Package descriptions come from `package.json`.** The winget manifest, the Homebrew cask, the Debian control file and the desktop entry still described the March chat app. The release jobs now take the short and long description, keywords, licence and URLs from `package.json`, and the winget release notes from this file.
+- Repository housekeeping: the PyInstaller spec and entry point live in `build/pyinstaller/`; stale Docker, AppImage, setup and test scripts, the archive folder and dead frontend modules are gone; `.env.example` lists only the variables the backend reads.
+
+### Fixed
+- Deleting a session no longer opens a native dialog, after which the window ignored clicks and the Sessions menu could not be closed. Delete asks inline, and Escape closes the menu.
+- Settings → Updates links to the latest release rather than the unordered releases list.
+- No separator rule under the last message of a conversation.
+- The docs' winget section described a job that had been replaced.
+
 ## [0.7.1] - 2026-10-19
 
 ### Upgrading from 0.7.0

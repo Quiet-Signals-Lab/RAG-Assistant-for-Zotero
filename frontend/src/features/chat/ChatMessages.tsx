@@ -4,7 +4,6 @@ import type { ChatMessage } from "../../types/domain";
 import { Spinner } from "../../components/ui/Spinner";
 import { useResponseSelection } from "../../contexts/ResponseSelectionContext";
 import ReasoningSection from "../../components/ui/ReasoningSection";
-import { useSettings } from "../../contexts/SettingsContext";
 import { normaliseMarkdown } from "./markdown";
 
 interface Props {
@@ -137,7 +136,6 @@ const ChatMessages: React.FC<Props> = ({ messages, loading }) => {
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
   const { selectedResponseId, setSelectedResponseId } = useResponseSelection();
-  const { updateSettings } = useSettings();
 
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -166,11 +164,8 @@ const ChatMessages: React.FC<Props> = ({ messages, loading }) => {
               </p>
               <p>
                 Start here to find your way into a topic, or start in search, where results come back ranked with no model
-                in between, and bring chosen items here with “Chat about these”.
+                in between, and add items to the context folder below to answer from those alone.
               </p>
-              <button type="button" className="btn" onClick={() => updateSettings({ interfaceMode: "desk" })}>
-                Switch to search
-              </button>
             </div>
           </div>
         )}

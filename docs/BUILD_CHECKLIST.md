@@ -203,8 +203,8 @@ npm run publish:mac  # or :win, :linux
 ## How the Python bundle works
 
 The backend ships as a **PyInstaller** standalone executable, not a venv. The
-entry point is `backend_server_main.py`, built per the `backend_bundle.spec`
-spec into `python-dist/` by `scripts/bundle-python-pyinstaller.sh` (`.bat`/`.ps1`
+entry point is `build/pyinstaller/backend_server_main.py`, built per the
+`build/pyinstaller/backend_bundle.spec` spec into `python-dist/` by `scripts/bundle-python-pyinstaller.sh` (`.bat`/`.ps1`
 on Windows). PyInstaller replaced the old venv-with-symlinks approach because the
 symlinks broke once the app moved to `/Applications`, causing "Python interpreter
 missing" errors. If you ever see `backend_server` as a symlink, an old bundle is

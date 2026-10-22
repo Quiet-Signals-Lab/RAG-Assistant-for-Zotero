@@ -90,7 +90,7 @@
   border-radius: var(--radius-sm);
   padding: 1px 7px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-sans);
   color: var(--notice);
   margin-bottom: 8px;
 }
@@ -101,38 +101,6 @@
   justify-content: flex-end;
   padding: 0 20px 18px;
 }
-
-.cloud-warning-footer .btn-danger {
-  background: var(--ink);
-  color: var(--page);
-  border: none;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-
-.cloud-warning-footer .btn-danger:hover {
-  opacity: 0.88;
-}
-
-.cloud-warning-footer .btn-ghost {
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.cloud-warning-footer .btn-ghost:hover {
-  background: var(--bg-hover);
-}
-
 
 /* ── Sections (flat, bottom-border only — same as .scope-section) ─────────── */
 
@@ -162,7 +130,6 @@
   font-weight: 600;
   color: var(--text-main);
   margin-bottom: 12px;
-  letter-spacing: 0.01em;
 }
 
 .scope-section-title svg {
@@ -196,7 +163,7 @@
 }
 
 .stat-value {
-  font: 500 14px/1.2 var(--font-mono);
+  font: 500 14px/1.2 var(--font-sans);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
@@ -206,10 +173,8 @@
 }
 
 .stat-label {
-  font: 600 12px/1.4 var(--font-sans);
+  font: 500 12px/1.4 var(--font-sans);
   color: var(--ink-4);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 .loading-stats {
@@ -259,70 +224,9 @@
   flex-wrap: wrap;
 }
 
-.lib-action-row .btn-primary,
-.lib-action-row .btn-secondary {
+.lib-action-row .btn {
   flex: 1;
   min-width: 120px;
-}
-
-/* ── Buttons (mirrors prompt-scaffolding.css) ─────────────────────────────── */
-
-.btn-primary,
-.btn-secondary {
-  width: 100%;
-  padding: 11px 16px;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  letter-spacing: 0.01em;
-}
-
-.btn-primary {
-  background: var(--ink);
-  color: var(--paper);
-  box-shadow: none;
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: none;
-}
-
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: var(--bg-panel);
-  color: var(--text-main);
-  border: 1.5px solid var(--border-subtle);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--bg-panel-alt);
-  border-color: var(--accent);
-  transform: translateY(-1px);
-  box-shadow: none;
-}
-
-.btn-secondary:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .lib-cancel-btn {
@@ -521,8 +425,7 @@
     flex-direction: column;
   }
 
-  .lib-action-row .btn-primary,
-  .lib-action-row .btn-secondary {
+  .lib-action-row .btn {
     width: 100%;
   }
 }

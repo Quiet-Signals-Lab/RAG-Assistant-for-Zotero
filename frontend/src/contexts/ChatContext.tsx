@@ -3,6 +3,7 @@ import type { ChatResponse } from "../types/api";
 import type { ChatMessage } from "../types/domain";
 import { useChat as useChatHook } from "../hooks/useChat";
 import { useSessions } from "./SessionsContext";
+import { useDesk } from "../features/desk/DeskContext";
 import { useResponseSelection } from "./ResponseSelectionContext";
 import { useSearchSettings } from "./SearchSettingsContext";
 import { useSettings } from "./SettingsContext";
@@ -78,8 +79,15 @@ function convertToResponseScopedSources(citations: any[], snippets: any[]): Sour
   return sources;
 }
 
+/** The item ids attached in the context folder, or undefined when none are. */
+export function attachedContextIds(context: { itemId: string; attached: boolean }[]): string[] | undefined {
+  const ids = [...new Set(context.filter((c) => c.attached).map((c) => c.itemId))];
+  return ids.length ? ids : undefined;
+}
+
 export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { messages, loading, error, lastResponse, sendMessage: rawSendMessage, stopGeneration, loadThread, clearMessages } = useChatHook();
+  const desk = useDesk();
   const sessions = useSessions();
   const { setSelectedResponseId } = useResponseSelection();
   const { searchSettings } = useSearchSettings();
@@ -148,7 +156,8 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         : undefined,
       use_rrf: searchSettings.useRRF,
       max_sources: settings.maxSources || 0,
-      item_ids: sessionId ? sessions.getSession(sessionId)?.itemIds : undefined,
+      // Attached context items scope the answer; a session opened on chosen items keeps its own scope otherwise.
+      item_ids: attachedContextIds(desk.context) ?? (sessionId ? sessions.getSession(sessionId)?.itemIds : undefined),
     };
     
     // send via the chat hook, which returns created messages and the response

@@ -61,9 +61,8 @@ const ClerkRoom: React.FC = () => {
     <div className="clerk-room">
       <div className="panel-head"><h2 className="panel-head__title">Language model</h2></div>
       <p className="clerk-room__intro">
-        Optional. A language model can add to search results: it can read limits out of your query, suggest next
-        searches and name groups. What it read from your query is shown under the search box. It never answers your
-        question, and each job falls back to the app's own method when the model is missing, slow, or fails a check.
+        Optional. It can read limits out of your query, suggest next searches and name groups. It never writes an
+        answer in search, and every job falls back to the app's own method without it.
       </p>
 
       <div className="clerk-room__status" role="status">
@@ -106,7 +105,7 @@ const ClerkRoom: React.FC = () => {
         </label>
       )}
 
-      <ActiveModelPanel hint="the model for these jobs and for chat" />
+      <ActiveModelPanel bare />
 
       <fieldset className="clerk-room__jobs">
         <legend className="desk-label">What the model may do</legend>

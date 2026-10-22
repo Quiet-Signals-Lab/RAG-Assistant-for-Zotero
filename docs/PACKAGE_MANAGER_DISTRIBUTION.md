@@ -370,63 +370,16 @@ brew upgrade rag-assistant-for-zotero
 
 #### Winget Update — automated
 
-**This is automated.** The `publish-winget` job in
-`.github/workflows/build-all.yml` runs after every tagged release: the
-`winget-releaser` action detects the new `.exe`, computes its hash, generates
-the manifests, and opens a PR against `microsoft/winget-pkgs`. Microsoft's
-validation bot reviews and (if it passes) merges it. No manual manifests.
-
-**One-time setup:**
-
-1. Fork `microsoft/winget-pkgs` under the `aahepburn` account (the action pushes
-   its branch to your fork). Leave the fork in place permanently.
-2. Create a **classic** Personal Access Token with `public_repo` scope and add it
-   to this repo's Actions secrets as `WINGET_TOKEN`.
-
-The manual manifest steps below are only needed for the very first submission if
-the package identifier `aahepburn.RAGAssistantForZotero` doesn't exist in
-winget-pkgs yet — the action can create new packages too, but a brand-new
-identifier sometimes needs one manual PR first to get moderator-approved.
-
-<details><summary>Manual fallback</summary>
-
-<!-- markdownlint-disable -->
-
-```bash
-cd ~/Projects/winget-pkgs
-mkdir -p manifests/a/aahepburn/RAGAssistantForZotero/0.4.6
-cd manifests/a/aahepburn/RAGAssistantForZotero/0.4.6
-# Copy previous version's 3 manifests, update version / InstallerUrl / InstallerSha256
-# Create PR following steps 9-10 above
-```
-</details>
+The `publish-winget` job in `.github/workflows/build-all.yml` runs after every
+tagged release: komac generates the manifests, the job rewrites the locale
+fields from `package.json` and the changelog, and `gh` opens the PR against
+`microsoft/winget-pkgs`. Setup, the manual fallback and the failure history are
+in [WINGET_SUBMISSION.md](WINGET_SUBMISSION.md).
 
 ### Automation Options
 
 #### Homebrew Auto-Updates
 Users automatically get updates with `brew upgrade`. The `livecheck` block in your cask enables automatic version detection.
-
-#### Winget Auto-Updates
-Consider using [Winget Releaser GitHub Action](https://github.com/vedantmgoyal2009/winget-releaser) to automatically submit new versions when you create GitHub releases.
-
-Example `.github/workflows/winget-releaser.yml`:
-
-```yaml
-name: Winget Release
-
-on:
-  release:
-    types: [released]
-
-jobs:
-  winget:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: vedantmgoyal2009/winget-releaser@v2
-        with:
-          identifier: aahepburn.RAGAssistantForZotero
-          token: ${{ secrets.WINGET_TOKEN }}
-```
 
 ---
 

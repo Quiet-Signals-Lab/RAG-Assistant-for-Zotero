@@ -90,35 +90,17 @@ The following sensitive files and directories are excluded from version control 
 
 ## Setting Up on a New Machine
 
-### Automated Setup (Recommended)
+Desktop app users install the app and set the Zotero path in Settings. Source
+users follow the development setup in `CONTRIBUTING.md`:
 
-```bash
-./setup.sh
-```
+1. **Install dependencies**: `requirements.txt` in a virtual environment, then
+   `npm install` at the root and in `frontend/`.
 
-This script:
-1. Creates Python virtual environment
-2. Installs all dependencies
-3. Creates `.env` from template
-4. Initializes profile directory structure
-5. Creates default settings files
+2. **Optional environment file**: `cp .env.example .env` and add provider API
+   keys there if you prefer them outside the Settings page.
 
-### Manual Setup
-
-1. **Create environment file**:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Edit `.env`** with your paths:
-   ```bash
-   ZOTERO_DB_PATH=/path/to/your/Zotero/zotero.sqlite
-   ```
-
-3. **Initialize profile directory**:
-   ```bash
-   mkdir -p ~/.zotero-llm/profiles/default/chroma
-   ```
+3. **Zotero path and profile**: set in Settings on first run; the profile
+   directory is created for you.
 
 4. **The application will auto-generate**:
    - Default settings on first run
@@ -139,7 +121,6 @@ This script:
 
 2. **Always commit**:
    - `.env.example` with placeholder values
-   - `setup.sh` initialization script
    - Documentation about setup process
    - Default configuration templates
 
@@ -173,7 +154,7 @@ This script:
    - Don't need to copy `.zotero-llm` directory (profiles will be recreated)
    - Reconfigure API keys via Settings UI
    - Re-index library (database will be rebuilt)
-   - Source users: Use `setup.sh` on new machine
+   - Source users: follow the setup in `CONTRIBUTING.md` on the new machine
 
 4. **Secure your API keys**:
    - Never share screenshots of Settings page
@@ -227,10 +208,8 @@ If working on a team:
 ## Troubleshooting
 
 ### "Profile not found" Error
-```bash
-# Reinitialize profile structure
-./setup.sh
-```
+Delete `~/.zotero-llm/active_profile.json` and start the app again; it recreates
+the default profile.
 
 ### "Missing API key" Error
 - Check Settings UI and add API keys
@@ -257,8 +236,7 @@ rm -rf ~/.zotero-llm/
 
 # Source/development users: Full reset
 rm -rf ~/.zotero-llm/
-./setup.sh
-# Reconfigure settings via UI
+# Start the app; the default profile is recreated. Reconfigure settings via UI
 ```
 
 ## Security Recommendations

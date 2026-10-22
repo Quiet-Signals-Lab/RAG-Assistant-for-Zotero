@@ -21,14 +21,14 @@ const App: React.FC = () => (
 				<SearchSettingsProvider>
 						<SessionsProvider>
 							<ResponseSelectionProvider>
-								<ChatProvider>
-									<DeskProvider>
+								<DeskProvider>
+									<ChatProvider>
 										<Routes>
 											<Route path="/" element={<AppShell />} />
 											<Route path="/settings" element={<Settings />} />
 										</Routes>
-									</DeskProvider>
-								</ChatProvider>
+									</ChatProvider>
+								</DeskProvider>
 							</ResponseSelectionProvider>
 						</SessionsProvider>
 				</SearchSettingsProvider>

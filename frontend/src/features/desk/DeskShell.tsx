@@ -10,6 +10,13 @@ import { useSettings } from "../../contexts/SettingsContext";
 import Evidence from "./Evidence";
 import QueryDesk from "./QueryDesk";
 import RoomHeader from "../../components/layout/RoomHeader";
+import ModeSwitch from "../../components/layout/ModeSwitch";
+import ChatTools from "../../components/layout/ChatTools";
+import ModelStatus from "../models/ModelStatus";
+import ChatView from "../chat/ChatView";
+import SourcesPanel from "../sources/SourcesPanel";
+import SnippetsPanel from "../sessions/SnippetsPanel";
+import PromptScaffoldingPanel from "../prompts/PromptScaffoldingPanel";
 import buyMeACoffee from "../../assets/buymeacoffee.png";
 
 type IndexStats = { indexed_items: number; total_chunks: number; current_embedding_model: string };
@@ -23,6 +30,7 @@ const icons: Record<Room, React.ReactNode> = {
   about: <path d="M12 20.5S4 15.5 4 9.6A4.4 4.4 0 0 1 12 7a4.4 4.4 0 0 1 8 2.6c0 5.9-8 10.9-8 10.9z" />,
 };
 const roomLabels: Record<Room, string> = { desk: "Search", library: "Library and index", clerk: "Language model", about: "About" };
+const chatRoomLabels: Record<Room, string> = { ...roomLabels, desk: "Scope" };
 
 /** The QSL signal: "received", in Morse. The only place the lab signs the app. */
 const QslLine: React.FC = () => (
@@ -71,18 +79,19 @@ const About: React.FC = () => {
   );
 };
 
-const PANES: { id: Pane; label: string }[] = [
-  { id: "ask", label: "Search" },
-  { id: "browse", label: "Results" },
-  { id: "verify", label: "Evidence" },
-];
+/* On a phone, one pane at a time. */
+const PANES: Record<"desk" | "chat", { id: Pane; label: string }[]> = {
+  desk: [{ id: "ask", label: "Search" }, { id: "browse", label: "Results" }, { id: "verify", label: "Evidence" }],
+  chat: [{ id: "ask", label: "Scope" }, { id: "browse", label: "RAG Chat" }, { id: "verify", label: "Sources" }],
+};
 
 const DeskShell: React.FC = () => {
   const desk = useDesk();
   const navigate = useNavigate();
-  const { updateSettings } = useSettings();
+  const { settings } = useSettings();
+  const mode = settings.interfaceMode === "chat" ? "chat" : "desk";
+  const labels = mode === "chat" ? chatRoomLabels : roomLabels;
   const [stats, setStats] = useState<IndexStats | null>(null);
-  const clerk = desk.model;
 
   useEffect(() => {
     request<IndexStats>("/api/index_stats").then(setStats).catch(() => setStats(null));
@@ -90,41 +99,28 @@ const DeskShell: React.FC = () => {
 
   return (
     <div className="desk" data-pane={desk.pane}>
-      <RoomHeader title="RAG Assistant for Zotero">
-        <nav className="desk__panes" aria-label="Panels">
-          {PANES.map((p) => (
+      <RoomHeader
+        title="RAG Assistant for Zotero"
+        actions={
+          <button type="button" className="icon-button" aria-label="Settings" onClick={() => navigate("/settings")}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+            </svg>
+          </button>
+        }
+      >
+        <ModeSwitch />
+        <nav className="segmented desk__panes" aria-label="Panels">
+          {PANES[mode].map((p) => (
             <button key={p.id} type="button" aria-pressed={desk.pane === p.id} onClick={() => desk.setPane(p.id)}>
               {p.label}
             </button>
           ))}
         </nav>
+        {mode === "chat" && <ChatTools />}
         <div className="room-header__fill" />
-        {stats && (
-          <span className="desk__index mono" title="What can be searched">
-            {stats.indexed_items.toLocaleString()} items · {stats.total_chunks.toLocaleString()} passages · {stats.current_embedding_model}
-          </span>
-        )}
-        {clerk && (
-          <button
-            type="button"
-            className="desk__clerk mono"
-            onClick={() => desk.setRoom("clerk")}
-            title={clerk.available ? `Language model in use: ${clerk.model}` : "No language model set up: search works without one"}
-          >
-            {clerk.available
-              ? `model · ${clerk.model.split("/").pop()}${clerk.measured ? "" : " (unmeasured)"}${desk.clerk.working ? " · working" : ""}`
-              : "no model"}
-          </button>
-        )}
-        <button type="button" className="btn" onClick={() => updateSettings({ interfaceMode: "chat" })} title="Ask a model about your library">
-          Switch to chat
-        </button>
-        <button type="button" className="icon-button" aria-label="Settings" onClick={() => navigate("/settings")}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-          </svg>
-        </button>
+        <ModelStatus />
       </RoomHeader>
 
       <div className="desk__body">
@@ -134,8 +130,8 @@ const DeskShell: React.FC = () => {
               key={room}
               type="button"
               className="icon-button"
-              aria-label={roomLabels[room]}
-              title={roomLabels[room]}
+              aria-label={labels[room]}
+              title={labels[room]}
               aria-current={desk.room === room ? "page" : undefined}
               onClick={() => {
                 desk.setRoom(room);
@@ -149,19 +145,19 @@ const DeskShell: React.FC = () => {
           ))}
         </nav>
 
-        <aside className="desk__ask" aria-label={roomLabels[desk.room]}>
-          {desk.room === "desk" && <QueryDesk />}
+        <aside className="desk__ask" aria-label={labels[desk.room]}>
+          {desk.room === "desk" && (mode === "chat" ? <PromptScaffoldingPanel /> : <QueryDesk />)}
           {desk.room === "library" && <LibraryManagementPanel />}
           {desk.room === "clerk" && <ClerkRoom />}
           {desk.room === "about" && <About />}
         </aside>
 
-        <main className="desk__browse">
-          <Bibliography indexEmpty={stats?.indexed_items === 0} />
+        <main className={mode === "chat" ? "desk__browse desk__browse--chat" : "desk__browse"}>
+          {mode === "chat" ? <ChatView /> : <Bibliography indexEmpty={stats?.indexed_items === 0} />}
         </main>
 
-        <aside className="desk__verify" aria-label="Evidence">
-          <Evidence />
+        <aside className="desk__verify" aria-label={mode === "chat" ? "Sources" : "Evidence"}>
+          {mode === "chat" ? <><SourcesPanel /><SnippetsPanel /></> : <Evidence />}
         </aside>
       </div>
     </div>

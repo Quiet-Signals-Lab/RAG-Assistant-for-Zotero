@@ -45,6 +45,12 @@ export const BandMark: React.FC<{ band: Band; small?: boolean; withLabel?: boole
   </span>
 );
 
+/** The first few words of a passage, enough to tell two from one page apart. */
+export function opening(text: string): string {
+  const words = text.replace(/^…/, "").split(/\s+/).filter(Boolean);
+  return words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : "");
+}
+
 /** "pp. 112–131", "p. 41", or "" when pages are unknown. */
 export function pageSpan(pages: number[]): string {
   if (!pages.length) return "";

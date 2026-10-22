@@ -20,6 +20,8 @@ settings.json
 
 # Python cache
 __pycache__/
+.mypy_cache/
+.pytest_cache/
 *.pyc
 *.pyo
 *.pyd
@@ -32,7 +34,9 @@ __pycache__/
 *.swo
 *~
 
-# Electron build output
+# Build output
+build/backend_bundle/
+build-python/
 dist/
 release/
 electron/node_modules/

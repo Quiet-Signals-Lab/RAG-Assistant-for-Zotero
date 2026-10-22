@@ -12,7 +12,7 @@ const Button: React.FC<ButtonProps> = ({
   ...props 
 }) => {
   const baseClass = 'btn';
-  const variantClass = variant === 'primary' ? 'btn--primary' : variant === 'secondary' ? 'btn--secondary' : '';
+  const variantClass = variant === 'primary' ? 'btn--primary' : '';
   const classes = [baseClass, variantClass, className].filter(Boolean).join(' ');
 
   return (

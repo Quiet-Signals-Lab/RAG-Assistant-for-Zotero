@@ -23,14 +23,14 @@ PIN = {"id": "7:12:Couriers used", "itemId": "7", "label": "Woodcock (2020)", "p
 
 def test_a_new_profile_has_an_empty_desk(client):
     c, _ = client
-    assert c.get("/api/profiles/default/desk").json() == {"pins": [], "log": []}
+    assert c.get("/api/profiles/default/desk").json() == {"pins": [], "log": [], "context": []}
 
 
 def test_pins_and_log_round_trip_through_the_profile_file(client):
     c, pm = client
     log = [{"query": "courier strikes", "scope": {"year_min": 2015, "tags": ["Labour"]}, "count": 12, "at": 2}]
     assert c.put("/api/profiles/default/desk", json={"pins": [PIN], "log": log}).status_code == 200
-    assert c.get("/api/profiles/default/desk").json() == {"pins": [PIN], "log": log}
+    assert c.get("/api/profiles/default/desk").json() == {"pins": [PIN], "log": log, "context": []}
     assert pm.get_profile_desk_file("default").exists()
 
 
@@ -44,6 +44,14 @@ def test_unknown_fields_are_dropped_and_sizes_capped(client):
     assert out["log"] == [{"query": "q", "scope": {}, "count": 0, "at": 0}]
 
 
+def test_the_context_folder_round_trips_and_defaults_to_attached(client):
+    c, _ = client
+    entries = [{**PIN, "id": "7", "attached": False}, {**PIN, "id": "8", "itemId": "8"}, {"no": "id"}]
+    out = c.put("/api/profiles/default/desk", json={"pins": [], "log": [], "context": entries}).json()
+    assert [(e["id"], e["attached"]) for e in out["context"]] == [("7", False), ("8", True)]
+    assert c.get("/api/profiles/default/desk").json()["context"] == out["context"]
+
+
 def test_bad_profile_ids_and_unknown_profiles_are_refused(client):
     c, _ = client
     assert c.get("/api/profiles/..%2Fetc/desk").status_code in (400, 404)
@@ -54,5 +62,5 @@ def test_an_unreadable_file_is_moved_aside_not_overwritten(client):
     c, pm = client
     path = pm.get_profile_desk_file("default")
     path.write_text("{ half a file")
-    assert c.get("/api/profiles/default/desk").json() == {"pins": [], "log": []}
+    assert c.get("/api/profiles/default/desk").json() == {"pins": [], "log": [], "context": []}
     assert path.with_suffix(".json.bad").read_text() == "{ half a file" and not path.exists()

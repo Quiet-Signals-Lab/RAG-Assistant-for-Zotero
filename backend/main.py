@@ -1771,23 +1771,26 @@ def _desk_state(body) -> dict:
         except HTTPException:
             return {}
 
-    pins = [
-        {"id": text(p.get("id"), 300), "itemId": text(p.get("itemId"), 64), "label": text(p.get("label"), 300),
-         "page": number(p.get("page")), "text": text(p.get("text"), 4000), "query": text(p.get("query"), 500),
-         "at": number(p.get("at")) or 0}
-        for p in (body.get("pins") or []) if isinstance(p, dict) and p.get("id")
-    ][-DESK_PIN_LIMIT:]  # pins are appended: keep the newest
+    def passage(p):
+        return {"id": text(p.get("id"), 300), "itemId": text(p.get("itemId"), 64), "label": text(p.get("label"), 300),
+                "page": number(p.get("page")), "text": text(p.get("text"), 4000), "query": text(p.get("query"), 500),
+                "at": number(p.get("at")) or 0}
+
+    pins = [passage(p) for p in (body.get("pins") or []) if isinstance(p, dict) and p.get("id")][-DESK_PIN_LIMIT:]  # appended: keep the newest
+    # The context folder for RAG Chat: one entry per item, attached unless unticked.
+    context = [{**passage(c), "attached": c.get("attached", True) is not False}
+               for c in (body.get("context") or []) if isinstance(c, dict) and c.get("id")][-DESK_PIN_LIMIT:]
     log = [
         {"query": text(e.get("query"), 500), "scope": scope(e.get("scope")), "count": number(e.get("count")) or 0,
          "at": number(e.get("at")) or 0}
         for e in (body.get("log") or []) if isinstance(e, dict) and e.get("query")
     ][:DESK_LOG_LIMIT]
-    return {"pins": pins, "log": log}
+    return {"pins": pins, "log": log, "context": context}
 
 
 @app.get("/api/profiles/{profile_id}/desk")
 def get_desk_state(profile_id: str):
-    """The reference desk's pins and query log for a profile."""
+    """The reference desk's pins, query log and RAG Chat context for a profile."""
     _validate_profile_id(profile_id)
     return profile_manager.load_desk_state(profile_id)
 

@@ -396,11 +396,11 @@ const LibraryManagementPanel: React.FC = () => {
 
           <div style={{ marginTop: '10px' }}>
             <button
-              className="btn-primary"
+              className="btn btn--primary"
               onClick={handleSaveModel}
               disabled={savingModel || embeddingModel === settings.embeddingModel}
             >
-              {savingModel ? 'Saving...' : modelSaveSuccess ? 'Saved!' : 'Save Model'}
+              {savingModel ? 'Saving…' : modelSaveSuccess ? 'Saved' : 'Save model'}
             </button>
           </div>
 
@@ -420,7 +420,7 @@ const LibraryManagementPanel: React.FC = () => {
           </h3>
 
           <p className="muted" style={{ fontSize: '12px', marginBottom: '14px', lineHeight: '1.5' }}>
-            Items matching any rule below are skipped during indexing. An item is excluded if it belongs to an excluded collection or tag, or is an excluded item type — even when it is also filed in a collection you keep. Already-indexed items that become excluded are removed on your next sync.
+            Items in an excluded collection, tag or type are skipped when indexing and removed from the index on the next sync.
           </p>
 
           {/* Axis selector */}
@@ -496,7 +496,7 @@ const LibraryManagementPanel: React.FC = () => {
 
           <div style={{ display: 'flex', gap: '8px', marginTop: '12px', maxWidth: '320px' }}>
             <button
-              className="btn-primary"
+              className="btn btn--primary"
               style={{ flex: 1 }}
               onClick={handleSaveExclusions}
               disabled={savingExclusions || !exclusionsDirty}
@@ -504,7 +504,7 @@ const LibraryManagementPanel: React.FC = () => {
               {savingExclusions ? 'Saving...' : exclusionsSaved ? 'Saved!' : 'Save Exclusions'}
             </button>
             <button
-              className="btn-secondary"
+              className="btn"
               style={{ flex: 1 }}
               onClick={handleClearExclusions}
               disabled={savingExclusions || !hasSelections}
@@ -537,7 +537,7 @@ const LibraryManagementPanel: React.FC = () => {
 
           <div className="lib-action-row">
             <button
-              className="btn-primary"
+              className="btn btn--primary"
               onClick={() => startIndexing(true)}
               disabled={indexing}
             >
@@ -550,7 +550,7 @@ const LibraryManagementPanel: React.FC = () => {
             </button>
 
             <button
-              className="btn-secondary"
+              className="btn"
               onClick={() => startIndexing(false)}
               disabled={indexing}
             >
@@ -641,7 +641,7 @@ const LibraryManagementPanel: React.FC = () => {
 
           <div>
             <button
-              className="btn-primary"
+              className="btn btn--primary"
               onClick={handleMetadataSync}
               disabled={syncingMetadata}
             >
@@ -727,13 +727,13 @@ const LibraryManagementPanel: React.FC = () => {
 
             <div className="cloud-warning-footer">
               <button
-                className="btn-ghost"
+                className="btn"
                 onClick={() => setCloudWarningTarget(null)}
               >
                 Cancel
               </button>
               <button
-                className="btn-danger"
+                className="btn btn--danger"
                 onClick={() => {
                   setEmbeddingModel(cloudWarningTarget);
                   setCloudWarningTarget(null);

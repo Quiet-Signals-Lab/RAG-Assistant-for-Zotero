@@ -15,7 +15,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
 $BundleDir = Join-Path $ProjectRoot "python-dist"
 $BuildDir = Join-Path $ProjectRoot "build-python"
-$SpecFile = Join-Path $ProjectRoot "backend_bundle.spec"
+$SpecFile = Join-Path $ProjectRoot "build\pyinstaller\backend_bundle.spec"
 
 Write-Host " Creating standalone Python bundle with PyInstaller for Windows..." -ForegroundColor Cyan
 Write-Host "==================================================================" -ForegroundColor Cyan

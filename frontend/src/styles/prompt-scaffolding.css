@@ -28,7 +28,6 @@
   font-weight: 600;
   color: var(--text-main);
   margin-bottom: 12px;
-  letter-spacing: 0.01em;
 }
 
 .scope-section-title svg {
@@ -339,7 +338,6 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-main);
-  letter-spacing: 0.01em;
 }
 
 /* Text Filter (Title/Author) */
@@ -495,7 +493,7 @@
 
 .scope-preview strong {
   color: var(--ink);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -519,66 +517,11 @@
   color: var(--ink-2);
 }
 
-.btn-primary,
-.btn-secondary {
-  width: 100%;
-  padding: 11px 16px;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  letter-spacing: 0.01em;
-}
-
-.btn-primary {
-  background: var(--ink);
-  color: var(--paper);
-  box-shadow: none;
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: none;
-}
-
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: var(--bg-panel);
-  color: var(--text-main);
-  border: 1.5px solid var(--border-subtle);
-  margin-bottom: 8px;
-}
-
-.btn-secondary:hover {
-  background: var(--bg-panel-alt);
-  border-color: var(--accent);
-  transform: translateY(-1px);
-  box-shadow: none;
-}
-
-.btn-secondary:active {
-  transform: translateY(0);
-}
-
 .muted {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
 }
-
 
 /* ---- Reading Room forms ---------------------------------------------------- */
 
@@ -591,9 +534,7 @@
 }
 
 .side-panel .scope-section-title {
-  font: 600 12px/1.4 var(--font-sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px/1.4 var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -618,12 +559,10 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  font: 500 10.5px/1.2 var(--font-mono);
-  letter-spacing: 0.02em;
+  font: 500 11px/1.2 var(--font-sans);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-transform: uppercase;
   color: var(--ink);
 }
 
@@ -666,12 +605,12 @@
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
   border-radius: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
 .scope-preview strong {
-  font: 500 14px var(--font-mono);
+  font: 500 14px var(--font-sans);
   color: var(--ink);
 }
 
@@ -684,7 +623,7 @@
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
   border-radius: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -694,9 +633,7 @@
 
 .scope-note::before {
   content: "Note · ";
-  font: 500 12px var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px var(--font-sans);
   color: var(--notice);
 }
 
@@ -709,42 +646,3 @@
   color: var(--error);
 }
 
-.btn-primary,
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 11px;
-  border-radius: var(--radius-sm);
-  font: 500 12px/1.2 var(--font-sans);
-  cursor: pointer;
-  box-shadow: none;
-  transform: none;
-}
-
-.btn-primary {
-  background: var(--ink);
-  border: 1px solid var(--ink);
-  color: var(--paper);
-}
-
-.btn-secondary {
-  background: transparent;
-  border: 1px solid var(--rule);
-  color: var(--ink);
-}
-
-.btn-primary:hover:not(:disabled),
-.btn-secondary:hover:not(:disabled) {
-  background: var(--ink-2);
-  border-color: var(--ink-2);
-  transform: none;
-  box-shadow: none;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: transparent;
-  border-color: var(--ink);
-}

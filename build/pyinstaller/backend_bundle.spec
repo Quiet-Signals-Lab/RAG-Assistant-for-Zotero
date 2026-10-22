@@ -6,8 +6,9 @@ import sys
 import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-# Get the project root directory
-project_root = os.path.abspath(os.path.dirname(SPEC))
+# This file lives in build/pyinstaller/; the project root is two levels up.
+spec_dir = os.path.abspath(os.path.dirname(SPEC))
+project_root = os.path.abspath(os.path.join(spec_dir, '..', '..'))
 backend_dir = os.path.join(project_root, 'backend')
 
 # Collect all submodules for key dependencies
@@ -71,7 +72,7 @@ datas.append((backend_dir, 'backend'))
 datas.append((os.path.join(project_root, 'requirements.txt'), '.'))
 
 a = Analysis(
-    [os.path.join(project_root, 'backend_server_main.py')],
+    [os.path.join(spec_dir, 'backend_server_main.py')],
     pathex=[project_root],
     binaries=[],
     datas=datas,

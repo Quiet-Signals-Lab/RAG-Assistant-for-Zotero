@@ -12,7 +12,7 @@
 }
 
 .mono {
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Room header: shared by the desk, Settings and legacy chat --------------- */
@@ -25,8 +25,8 @@
   align-items: center;
   gap: 16px;
   padding: 0 12px 0 16px;
-  border-bottom: 1px solid var(--ink);
-  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  background: var(--chrome);
   color: var(--ink);
   -webkit-app-region: drag;
   min-width: 0;
@@ -36,24 +36,55 @@
   padding-left: 84px; /* clear of the macOS window buttons */
 }
 
-.room-brand {
-  display: flex;
-  align-items: center;
-  gap: 11px;
+.room-brand__name {
+  flex: none;
+  font: 500 12px/1 var(--font-sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
-.room-brand__mark {
-  width: 26px;
-  height: 12px;
-  border: 1.5px solid var(--ink);
-  border-top: 3px solid var(--brass);
+/* The active model and whether it answers, at the right of the header. */
+.model-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 300px;
+  padding: 0 6px;
+  background: none;
+  border: 0;
+  font: 12px/1 var(--font-sans);
+  color: var(--ink-3);
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
 }
 
-.room-brand__name {
-  font: 500 12px/1 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.model-status:hover {
+  color: var(--ink);
+}
+
+.model-status__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-status__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
+
+.model-status__dot--ok {
+  background: var(--ok);
+}
+
+.model-status__dot--down {
+  background: var(--error);
 }
 
 .room-header__fill {
@@ -64,19 +95,39 @@
   white-space: nowrap;
 }
 
-.desk__index {
-  font-size: 12px;
-  color: var(--ink-4);
-  white-space: nowrap;
+/* One segmented control for every either-or choice: the mode, the pane on a phone. */
+.segmented {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.segmented button {
+  min-height: 26px;
+  padding: 0 12px;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--ink);
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--page);
 }
 
 .desk__panes {
   display: none;
-  border: 1px solid var(--ink);
 }
+
 
 .icon-button {
   width: 32px;
@@ -116,6 +167,7 @@
   gap: 6px;
   padding-top: 12px;
   border-right: 1px solid var(--rule);
+  background: var(--chrome);
 }
 
 .desk__ask,
@@ -134,14 +186,25 @@
   border-right: 1px solid var(--rule);
 }
 
-/* Panels shared with legacy chat bring their own padding; the desk's pane has it already. */
-.desk__ask > .side-panel {
+/* The chat's panels bring their own padding; the panes have it already. */
+.desk__ask > .side-panel,
+.desk__verify > .side-panel {
   padding: 0;
+}
+
+.desk__verify > .side-panel + .side-panel {
+  margin-top: 18px;
 }
 
 .desk__browse {
   background: var(--page);
   padding: 14px 22px 40px;
+}
+
+/* The chat owns its own padding and keeps its input pinned at the foot. */
+.desk__browse--chat {
+  padding: 0;
+  overflow: hidden;
 }
 
 .desk__verify {
@@ -156,20 +219,20 @@
   align-items: baseline;
   gap: 12px;
   flex-wrap: wrap;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
   padding-bottom: 6px;
   margin-bottom: 12px;
 }
 
 .panel-head__title {
-  font: 500 12px/1.3 var(--font-mono);
+  font: 500 12px/1.3 var(--font-sans);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin: 0;
 }
 
 .panel-head__hint {
-  font: 400 12px/1.3 var(--font-mono);
+  font: 400 12px/1.3 var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -193,20 +256,40 @@
   justify-content: space-between;
 }
 
+/* The results toolbar: selects and buttons share one height, one border and one gap. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
 .tool {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 4px;
+  min-height: 28px;
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  font: 400 12px/1.2 var(--font-sans);
   color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.tool:hover {
+  border-color: var(--ink);
 }
 
 .tool select {
-  font: 600 12px var(--font-sans);
+  font: 500 12px var(--font-sans);
   color: var(--ink);
   background: transparent;
   border: 0;
   padding: 0 2px;
   cursor: pointer;
+  max-width: 160px;
 }
 
 .tool-button,
@@ -225,9 +308,7 @@
 .desk-label {
   display: block;
   margin: 0 0 6px;
-  font: 600 12px/1.4 var(--font-sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px/1.4 var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -237,7 +318,7 @@
 }
 
 .desk-label__aside {
-  font: 400 12px/1.4 var(--font-mono);
+  font: 400 12px/1.4 var(--font-sans);
   letter-spacing: 0;
 }
 
@@ -273,7 +354,7 @@ mark {
   border: 1px solid var(--ink-4);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
-  font: 400 17px/1.4 var(--font-serif);
+  font: 400 15px/1.4 var(--font-sans);
   color: var(--ink);
 }
 
@@ -297,9 +378,38 @@ mark {
   flex-direction: column;
 }
 
+.query-desk__read summary {
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Folded sections show their state. */
+.query-desk__read summary::before,
+.reading-list summary .panel-head__title::before {
+  content: "▸";
+  display: inline-block;
+  width: 12px;
+  color: var(--ink-4);
+}
+
+.query-desk__read[open] summary::before,
+.reading-list[open] summary .panel-head__title::before {
+  content: "▾";
+}
+
+.query-desk__read summary q {
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.query-desk__read[open] summary {
+  margin-bottom: 8px;
+}
+
 .query-desk__empty {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
@@ -356,7 +466,7 @@ mark {
 }
 
 .refine__label {
-  font: 12px var(--font-mono);
+  font: 12px var(--font-sans);
   color: var(--ink-4);
   margin-right: 2px;
 }
@@ -432,7 +542,7 @@ mark {
   background: none;
   border: 0;
   cursor: pointer;
-  font: 13px/1.35 var(--font-serif);
+  font: 13px/1.35 var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -451,7 +561,7 @@ mark {
 }
 
 .log__count {
-  font: 12px/1.6 var(--font-mono);
+  font: 12px/1.6 var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -473,7 +583,7 @@ mark {
 
 .bibliography__status {
   min-height: 18px;
-  font: 12px/1.5 var(--font-mono);
+  font: 12px/1.5 var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -489,10 +599,14 @@ mark {
 
 .row--selected {
   background: var(--selected);
-  border-top: 1px solid var(--ink);
-  border-bottom: 1px solid var(--ink);
-  margin: -1px -8px 0;
-  padding: 0 8px;
+  border: 1px solid var(--ink-4);
+  border-radius: var(--radius-md);
+  margin: 0 -10px;
+  padding: 0 10px;
+}
+
+.row--selected + .row {
+  border-top: 1px solid var(--rule);
 }
 
 .row__select {
@@ -514,7 +628,7 @@ mark {
 }
 
 .row__rank {
-  font: 500 12px/1.6 var(--font-mono);
+  font: 500 12px/1.6 var(--font-sans);
   display: flex;
   justify-content: flex-end;
   gap: 4px;
@@ -543,7 +657,7 @@ mark {
 }
 
 .row__meta {
-  font: 12px/1.5 var(--font-mono);
+  font: 12px/1.5 var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -552,12 +666,12 @@ mark {
 }
 
 .row__extract {
-  font: 13.5px/1.45 var(--font-serif);
+  font: 13px/1.45 var(--font-sans);
   color: var(--ink-2);
 }
 
 .row__page {
-  font: 12px var(--font-mono);
+  font: 12px var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -567,13 +681,6 @@ mark {
   gap: 6px;
   width: 100%;
   margin-top: 5px;
-}
-
-.row__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 4px 12px 50px;
 }
 
 .see-also {
@@ -586,12 +693,12 @@ mark {
 }
 
 .see-also__label {
-  font: italic 13.5px var(--font-serif);
+  font: italic 13px var(--font-sans);
   color: var(--ink-3);
 }
 
 .see-also__count {
-  font: 12px var(--font-mono);
+  font: 12px var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -617,8 +724,8 @@ mark {
 }
 
 .band__seg {
-  width: 12px;
-  height: 5px;
+  width: 14px;
+  height: 6px;
   border: 1px solid var(--ink);
 }
 
@@ -627,8 +734,8 @@ mark {
 }
 
 .band--small .band__seg {
-  width: 9px;
-  height: 4px;
+  width: 10px;
+  height: 5px;
 }
 
 .band__dotted {
@@ -637,9 +744,7 @@ mark {
 }
 
 .band__label {
-  font: 500 11px/1 var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 11px/1 var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -658,16 +763,14 @@ mark {
   align-items: center;
   height: 34px;
   padding: 0 20px;
-  font: 500 12px/1 var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px/1 var(--font-sans);
   color: var(--ink-3);
   border-bottom: 2px solid var(--stamp);
 }
 
 .catalogue-card__body {
   padding: 6px 20px 0;
-  font: 13.5px/26px var(--font-mono);
+  font: 13px/26px var(--font-sans);
   color: var(--ink);
   background-image: repeating-linear-gradient(to bottom, transparent 0 25px, var(--catalogue-blue) 25px 26px);
   background-position: 0 6px;
@@ -731,7 +834,7 @@ mark {
 .desk-intro p,
 .desk-empty p {
   margin: 0 0 14px;
-  font-size: 14.5px;
+  font-size: 14px;
   line-height: 1.55;
   color: var(--ink-2);
 }
@@ -746,7 +849,7 @@ mark {
 .desk-intro__examples li {
   padding: 8px 0;
   border-bottom: 1px solid var(--rule);
-  font: 15px var(--font-serif);
+  font: 15px var(--font-sans);
 }
 
 .desk-intro__examples .mono {
@@ -766,9 +869,7 @@ mark {
 
 .desk-notice::before {
   content: "Note · ";
-  font: 500 12px var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px var(--font-sans);
   color: var(--notice);
 }
 
@@ -820,7 +921,7 @@ mark {
 
 .evidence__count {
   margin: 0;
-  font: 12px var(--font-mono);
+  font: 12px var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -837,7 +938,7 @@ mark {
 
 .passage__text {
   margin: 0 0 8px;
-  font: 13.5px/1.55 var(--font-sans);
+  font: 13px/1.55 var(--font-sans);
   color: var(--ink);
   overflow-wrap: anywhere;
 }
@@ -847,7 +948,7 @@ mark {
   align-items: center;
   flex-wrap: wrap;
   gap: 11px;
-  font: 12px var(--font-mono);
+  font: 12px var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -862,12 +963,29 @@ mark {
 }
 
 .reading-list {
-  margin-top: 28px;
+  margin: 0 0 18px;
+}
+
+.reading-list summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.reading-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.reading-list summary .panel-head {
+  margin-bottom: 0;
+}
+
+.reading-list[open] summary .panel-head {
+  margin-bottom: 10px;
 }
 
 .reading-list__empty {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
@@ -881,7 +999,7 @@ mark {
   list-style: none;
   margin: 0 0 11px;
   padding: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -890,7 +1008,7 @@ mark {
 }
 
 .reading-list__opening {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -908,7 +1026,7 @@ mark {
 .reading-list__note {
   min-height: 16px;
   margin-top: 6px;
-  font: 12px var(--font-mono);
+  font: 12px var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -960,7 +1078,7 @@ mark {
 .chain__entry {
   display: grid;
   grid-template-columns: 14px 1fr;
-  font: 13px/1.4 var(--font-serif);
+  font: 13px/1.4 var(--font-sans);
   color: var(--ink-2);
 }
 
@@ -1005,7 +1123,7 @@ mark {
 
 .about__name {
   margin: 0;
-  font: 600 19px/1.25 var(--font-serif);
+  font: 600 19px/1.25 var(--font-sans);
   color: var(--ink);
 }
 
@@ -1074,11 +1192,6 @@ mark {
   .evidence__close {
     display: inline-flex;
   }
-
-  .desk__index,
-  .desk__clerk {
-    display: none;
-  }
 }
 
 /* Under 760px: one pane at a time, chosen with Ask · Browse · Verify. */
@@ -1116,7 +1229,8 @@ mark {
     display: flex;
   }
 
-  .desk .room-brand__name {
+  .desk .room-brand__name,
+  .model-status__label {
     display: none;
   }
 
@@ -1133,10 +1247,6 @@ mark {
     align-items: center;
     justify-content: flex-start;
     margin-top: 0;
-  }
-
-  .row__actions {
-    padding-left: 42px;
   }
 
   .evidence__close {
@@ -1157,15 +1267,13 @@ mark {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 3px 10px;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.4;
   color: var(--ink-2);
 }
 
 .reading dt {
-  font: 500 11px/1.6 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 500 11px/1.6 var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -1210,7 +1318,7 @@ mark {
 .also-try__rel {
   flex: none;
   width: 5em;
-  font: 12px var(--font-mono);
+  font: 12px var(--font-sans);
   color: var(--ink-4);
   text-decoration: none;
 }
@@ -1225,33 +1333,14 @@ mark {
   margin: 0;
   padding: 6px 0;
   border-bottom: 2px solid var(--ink);
-  font: 600 12px/1.3 var(--font-sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px/1.3 var(--font-sans);
   color: var(--ink);
 }
 
 .rows__group-count {
-  font: 400 12px var(--font-mono);
+  font: 400 12px var(--font-sans);
   letter-spacing: 0;
   color: var(--ink-4);
-}
-
-.desk__clerk {
-  font-size: 12px;
-  color: var(--ink-4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 260px;
-  background: none;
-  border: 0;
-  padding: 0 4px;
-  cursor: pointer;
-}
-
-.desk__clerk:hover {
-  color: var(--ink);
 }
 
 .clerk-room {
@@ -1270,12 +1359,12 @@ mark {
   padding: 8px 11px;
   border: 1px solid var(--rule);
   border-left: 3px solid var(--brass);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .clerk-room__privacy {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--notice);
 }
 

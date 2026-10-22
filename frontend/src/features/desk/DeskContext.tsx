@@ -28,6 +28,11 @@ export interface Pin {
   at: number;
 }
 
+/** An item in the context folder: added from search, attached to RAG Chat when ticked. */
+export interface ContextEntry extends Pin {
+  attached: boolean;
+}
+
 /** One row of the query log: the trail of a search session (Bates' berrypicking). */
 export interface LogEntry {
   query: string;
@@ -77,6 +82,15 @@ interface DeskState {
   setSort: (s: Sort) => void;
   pins: Pin[];
   log: LogEntry[];
+  /** The context folder for RAG Chat: one entry per item, with the passage that matched. */
+  context: ContextEntry[];
+  /** Add items with their strongest passage; an item already there is left as it is. */
+  addToContext: (items: DeskItem[]) => void;
+  addPinsToContext: () => void;
+  inContext: (itemId: string) => boolean;
+  setAttached: (id: string, attached: boolean) => void;
+  removeFromContext: (id: string) => void;
+  clearContext: () => void;
   submit: (query?: string) => void;
   setScope: (scope: ScopeFilters) => void;
   dropExtracted: (key: keyof ScopeFilters, value?: string) => void;
@@ -104,19 +118,21 @@ function readStored<T>(key: string, fallback: T): T {
   }
 }
 
-type DeskFile = { pins: Pin[]; log: LogEntry[] };
+type DeskFile = { pins: Pin[]; log: LogEntry[]; context: ContextEntry[] };
 type FileState = { profile: string; status: "loading" | "ready" | "failed"; file: DeskFile };
 
-const EMPTY_FILE: DeskFile = { pins: [], log: [] };
+const EMPTY_FILE: DeskFile = { pins: [], log: [], context: [] };
 const LOAD_RETRIES = [1000, 3000, 8000, 20000];
 
 /** Edits made while the file was loading, laid over what loaded. */
 function mergeDesk(loaded: DeskFile, edits: DeskFile): DeskFile {
   const ids = new Set(loaded.pins.map((p) => p.id));
+  const ctx = new Set(loaded.context.map((c) => c.id));
   const queries = new Set(edits.log.map((e) => e.query.toLocaleLowerCase()));
   return {
     pins: [...loaded.pins, ...edits.pins.filter((p) => !ids.has(p.id))],
     log: [...edits.log, ...loaded.log.filter((e) => !queries.has(e.query.toLocaleLowerCase()))].slice(0, LOG_LIMIT),
+    context: [...loaded.context, ...edits.context.filter((c) => !ctx.has(c.id))],
   };
 }
 
@@ -158,10 +174,11 @@ function useDeskFile(profileId: string): [DeskFile, (update: (prev: DeskFile) =>
     setState((prev) => (prev.profile === profileId ? prev : { profile: profileId, status: "loading", file: EMPTY_FILE }));
 
     const load = (attempt: number) => {
-      request<DeskFile>(deskPath(profileId))
-        .then((loaded) => {
+      request<Partial<DeskFile>>(deskPath(profileId))
+        .then((raw) => {
           if (cancelled) return;
-          const legacy = { pins: readStored<Pin[]>(`desk:${profileId}:pins`, []), log: readStored<LogEntry[]>(`desk:${profileId}:log`, []) };
+          const loaded: DeskFile = { pins: raw.pins ?? [], log: raw.log ?? [], context: raw.context ?? [] }; // files written before the context folder lack it
+          const legacy = { pins: readStored<Pin[]>(`desk:${profileId}:pins`, []), log: readStored<LogEntry[]>(`desk:${profileId}:log`, []), context: [] };
           const migrate = !loaded.pins.length && !loaded.log.length && (legacy.pins.length > 0 || legacy.log.length > 0);
           if (migrate) edits.current += 1;
           const base = migrate ? legacy : loaded;
@@ -266,7 +283,11 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("relevance");
   const [deskFile, updateDeskFile] = useDeskFile(activeProfileId || "default");
-  const { pins, log } = deskFile;
+  const { pins, log, context } = deskFile;
+  const setContext = useCallback(
+    (fn: (prev: ContextEntry[]) => ContextEntry[]) => updateDeskFile((prev) => ({ ...prev, context: fn(prev.context) })),
+    [updateDeskFile],
+  );
   const setPins = useCallback(
     (fn: (prev: Pin[]) => Pin[]) => updateDeskFile((prev) => ({ ...prev, pins: fn(prev.pins) })),
     [updateDeskFile],
@@ -482,6 +503,52 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   );
   const clearPins = useCallback(() => setPins(() => []), [setPins]);
 
+  const addToContext = useCallback(
+    (items: DeskItem[]) =>
+      setContext((prev) => {
+        const have = new Set(prev.map((c) => c.itemId));
+        const added = items
+          .filter((it) => !have.has(it.item_id))
+          .map((it) => {
+            const passage = it.passages[0];
+            return {
+              id: it.item_id,
+              itemId: it.item_id,
+              label: shortCite(it),
+              page: passage?.page ?? it.extract.page ?? null,
+              text: passage?.text ?? it.extract.text ?? "",
+              query: result?.query ?? query,
+              at: Date.now(),
+              attached: true,
+            };
+          });
+        return added.length ? [...prev, ...added] : prev;
+      }),
+    [setContext, result, query],
+  );
+  const addPinsToContext = useCallback(
+    () =>
+      setContext((prev) => {
+        const have = new Set(prev.map((c) => c.itemId));
+        const added: ContextEntry[] = [];
+        for (const p of pins) {
+          if (have.has(p.itemId)) continue;
+          have.add(p.itemId);
+          added.push({ ...p, id: p.itemId, attached: true, at: Date.now() });
+        }
+        return added.length ? [...prev, ...added] : prev;
+      }),
+    [setContext, pins],
+  );
+  const contextIds = useMemo(() => new Set(context.map((c) => c.itemId)), [context]);
+  const inContext = useCallback((itemId: string) => contextIds.has(itemId), [contextIds]);
+  const setAttached = useCallback(
+    (id: string, attached: boolean) => setContext((prev) => prev.map((c) => (c.id === id ? { ...c, attached } : c))),
+    [setContext],
+  );
+  const removeFromContext = useCallback((id: string) => setContext((prev) => prev.filter((c) => c.id !== id)), [setContext]);
+  const clearContext = useCallback(() => setContext(() => []), [setContext]);
+
   const selected = useMemo(
     () => result?.items.find((it) => it.item_id === selectedId) ?? null,
     [result, selectedId],
@@ -490,6 +557,7 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const value: DeskState = {
     room, setRoom, query, setQuery, scope, within, searchWithin, setAside, putAside, moreLike, pane, setPane, useExtracted, result, clerk, model, status, error,
     selectedId, select: setSelectedId, selected, sort, setSort, pins, log,
+    context, addToContext, addPinsToContext, inContext, setAttached, removeFromContext, clearContext,
     submit, setScope, dropExtracted, restore, forget, togglePin, isPinned, clearPins,
   };
   return <DeskContext.Provider value={value}>{children}</DeskContext.Provider>;

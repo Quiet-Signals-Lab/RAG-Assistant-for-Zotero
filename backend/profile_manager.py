@@ -436,16 +436,16 @@ class ProfileManager:
                 data = json.load(f)
             if not isinstance(data, dict):
                 raise ValueError("not an object")
-            return {"pins": data.get("pins") or [], "log": data.get("log") or []}
+            return {"pins": data.get("pins") or [], "log": data.get("log") or [], "context": data.get("context") or []}
         except FileNotFoundError:
-            return {"pins": [], "log": []}
+            return {"pins": [], "log": [], "context": []}
         except (OSError, ValueError) as e:
             logger.error(f"Unreadable desk state, moved to desk.json.bad: {e}")
             try:
                 os.replace(path, path.with_suffix(".json.bad"))
             except OSError:
                 pass
-            return {"pins": [], "log": []}
+            return {"pins": [], "log": [], "context": []}
 
     def save_desk_state(self, profile_id: str, state: Dict[str, Any]) -> bool:
         """Write the desk state through a temporary file, so a crash never leaves half a file."""

@@ -108,8 +108,6 @@
   font-weight: 600;
   color: var(--text-main);
   margin: 0 0 12px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .semantic-authors {

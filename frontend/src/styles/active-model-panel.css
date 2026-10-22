@@ -9,11 +9,10 @@
 }
 
 .active-model-title {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 20px;
   font-weight: 600;
   color: var(--text-main);
-  letter-spacing: 0.02em;
   margin-bottom: 4px;
 }
 
@@ -172,10 +171,9 @@
 .active-model-info-value {
   font-weight: 600;
   color: var(--text-main);
-  font-family: var(--font-mono, 'Menlo', 'Monaco', 'Courier New', monospace);
+  font-family: var(--font-sans);
   font-size: 12px;
 }
-
 
 /* ---- Reading Room forms ---------------------------------------------------- */
 
@@ -191,14 +189,12 @@
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
   border-radius: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
 .active-model-label {
-  font: 600 12px/1.4 var(--font-sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px/1.4 var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -226,13 +222,11 @@
 }
 
 .active-model-info-label {
-  font: 600 12px/1.4 var(--font-sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px/1.4 var(--font-sans);
   color: var(--ink-4);
 }
 
 .active-model-info-value {
-  font: 12px var(--font-mono);
+  font: 12px var(--font-sans);
   color: var(--ink);
 }

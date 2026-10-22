@@ -211,8 +211,11 @@ const QueryDesk: React.FC = () => {
       </form>
 
       {scopeRead && desk.result && (
-        <section className="query-desk__section" aria-label="How the query was read">
-          <h2 className="desk-label">Read as</h2>
+        <details className="query-desk__read">
+          <summary className="desk-label">
+            Read as <q>{scopeRead.topic || desk.result.query}</q>
+            {read.length ? ` · ${read.map((c) => c.label).join(" · ")}` : ""}
+          </summary>
           <dl className="reading">
             <dt>topic</dt>
             <dd><q>{scopeRead.topic || desk.result.query}</q></dd>
@@ -224,7 +227,7 @@ const QueryDesk: React.FC = () => {
             <dt>read by</dt>
             <dd>{readerLine(scopeRead, desk.result.timing_ms.read)}</dd>
           </dl>
-        </section>
+        </details>
       )}
 
       <section className="query-desk__section" aria-labelledby="scope-heading">

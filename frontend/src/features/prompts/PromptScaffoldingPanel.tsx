@@ -219,7 +219,7 @@ const PromptScaffoldingPanel: React.FC = () => {
     <div className="side-panel">
       <div className="panel-head">
         <h2 className="panel-head__title">Scope</h2>
-        <span className="panel-head__hint">which items chat searches</span>
+        <span className="panel-head__hint">which items RAG Chat searches</span>
       </div>
       
       <main className="scope-panel">
@@ -609,7 +609,7 @@ const PromptScaffoldingPanel: React.FC = () => {
               
               {(selectedTags.length > 0 || selectedCollections.length > 0 || yearStart || yearEnd || titleFilter || authorFilter || itemTypeFilter.length > 0) && (
                 <button 
-                  className="btn-secondary"
+                  className="btn"
                   onClick={handleClearFilters}
                 >
                   Clear All Filters
@@ -617,7 +617,7 @@ const PromptScaffoldingPanel: React.FC = () => {
               )}
               
               <button 
-                className="btn-primary"
+                className="btn btn--primary"
                 onClick={handleApplyFilters}
               >
                 Apply Filters to Search

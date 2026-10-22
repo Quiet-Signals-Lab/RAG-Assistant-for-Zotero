@@ -1,6 +1,6 @@
 /**
  * Smoke test for the interface switch: the app must render, switch from search to
- * the chat and back (through Settings and through the chat's own button), survive a
+ * the chat and back (through Settings and through the header's mode switch), survive a
  * reload in each mode, and do one search and one chat turn, with no console error,
  * failed load or renderer crash along the way. The stored interface setting is put back.
  *
@@ -82,14 +82,14 @@ async function main() {
   try {
     await settings({ interfaceMode: "desk" });
     await win.loadURL(APP);
-    await until("search interface renders", `!!document.querySelector(".desk")`);
+    await until("search interface renders", `!!document.querySelector(".desk .query-desk")`);
 
     // Settings → legacy chat
     await toSettings();
     await chooseMode("chat");
-    await until("chat renders after the switch", `!!document.querySelector(".app-shell .chat-input__textarea")`);
+    await until("chat renders after the switch", `!!document.querySelector(".desk .chat-input__textarea")`);
     await win.reload();
-    await until("chat renders after a reload", `!!document.querySelector(".app-shell .chat-input__textarea")`);
+    await until("chat renders after a reload", `!!document.querySelector(".desk .chat-input__textarea")`);
 
     if (!NO_CHAT) {
       await js(`document.querySelector(".chat-input__textarea").focus()`);
@@ -99,19 +99,19 @@ async function main() {
       await until("chat turn gets an answer or an error message", `!!document.querySelector(".message--assistant:not([aria-busy]), .chat-view__error")`, 90000);
     }
 
-    // The chat's own "switch to search" button
-    await click("button[title='Switch to search']");
-    await until("search interface renders from the chat's button", `!!document.querySelector(".desk")`);
+    // The mode switch in the header
+    await click(".segmented button[data-mode='desk']");
+    await until("search renders from the mode switch", `!!document.querySelector(".desk .query-desk")`);
 
     // Settings → legacy chat → Settings → search
     await toSettings();
     await chooseMode("chat");
-    await until("chat renders a second time", `!!document.querySelector(".app-shell")`);
+    await until("chat renders a second time", `!!document.querySelector(".desk .chat-input__textarea")`);
     await toSettings();
     await chooseMode("desk");
-    await until("search interface renders after switching back", `!!document.querySelector(".desk")`);
+    await until("search interface renders after switching back", `!!document.querySelector(".desk .query-desk")`);
     await win.reload();
-    await until("search interface renders after a reload", `!!document.querySelector(".desk")`);
+    await until("search interface renders after a reload", `!!document.querySelector(".desk .query-desk")`);
 
     await js(`const t = document.querySelector("#desk-query"); t.focus();`);
     wc.insertText(QUERY);

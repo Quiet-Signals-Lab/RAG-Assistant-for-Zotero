@@ -2,7 +2,7 @@
 
 ## What are Profiles?
 
-Profiles allow you to maintain separate workspaces within the Zotero LLM Plugin. Each profile has its own:
+Profiles allow you to maintain separate workspaces within RAG Assistant for Zotero. Each profile has its own:
 - Settings (API keys, model preferences, etc.)
 - Chat history and sessions
 - Document embeddings (vector database)

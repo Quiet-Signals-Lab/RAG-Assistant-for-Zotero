@@ -363,7 +363,7 @@ const Settings: React.FC = () => {
 
   const localProviders = availableProviders.filter(p => !p.requires_api_key);
   const cloudProviders = availableProviders.filter(p => p.requires_api_key);
-  const backLabel = settings.interfaceMode === 'chat' ? 'Back to the chat' : 'Back to search';
+  const backLabel = settings.interfaceMode === 'chat' ? 'Back to RAG Chat' : 'Back to search';
 
   if (loading) {
     return (
@@ -432,10 +432,10 @@ const Settings: React.FC = () => {
                       onChange={() => updateSettings({ interfaceMode: 'chat' })}
                     />
                     <span>
-                      <span className="settings-check__label">Chat</span>
+                      <span className="settings-check__label">RAG Chat</span>
                       <span className="settings-hint">
                         A model answers your questions from passages in your library, citing each one.
-                        It needs a configured model. From search, “Chat about these” opens it on the items you found.
+                        It needs a configured model. From search, “Add to context” collects items it can be told to answer from alone.
                       </span>
                     </span>
                   </label>
@@ -530,13 +530,13 @@ const Settings: React.FC = () => {
                   </div>
                   <p className="settings-note">
                     New versions are downloaded and installed by hand from{' '}
-                    <a href="https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>.
+                    <a href="https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/latest" target="_blank" rel="noopener noreferrer">the latest release on GitHub</a>.
                     Profiles, keys, indexes and settings carry over.
                   </p>
                 </Section>
               )}
 
-              <Section title="Notifications" description="Chat only: when the model has finished an answer.">
+              <Section title="Notifications" description="RAG Chat only: when the model has finished an answer.">
                 <label className="settings-check">
                   <input
                     type="checkbox"
@@ -610,7 +610,7 @@ const Settings: React.FC = () => {
           {activeTab === 'advanced' && (
             <Section
               title="Evidence per answer"
-              description="Chat only. Search always retrieves the same depth, whatever the model."
+              description="RAG Chat only. Search always retrieves the same depth, whatever the model."
             >
               <div className="settings-field">
                 <label className="settings-label" htmlFor="max-sources">Passages per question</label>
@@ -657,7 +657,7 @@ const TABS: { id: TabId; label: string; note: string }[] = [
   { id: 'general', label: 'General', note: 'interface, Zotero, profile' },
   { id: 'local', label: 'Local models', note: 'Ollama, LM Studio' },
   { id: 'cloud', label: 'Cloud providers', note: 'API keys' },
-  { id: 'advanced', label: 'Chat retrieval', note: 'chat' },
+  { id: 'advanced', label: 'RAG Chat retrieval', note: 'passages per answer' },
 ];
 
 /** A ledger row: what the setting is on the left, the controls on the right. */

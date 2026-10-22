@@ -59,7 +59,7 @@ jobs:
           
           # Build PyInstaller bundle (will build for native architecture of runner)
           echo "Building for ${{ matrix.arch }} architecture on $(uname -m) runner"
-          pyinstaller --clean --noconfirm backend_bundle.spec
+          pyinstaller --clean --noconfirm build/pyinstaller/backend_bundle.spec
           
           # Verify architecture
           file python-dist/backend_server | head -1
@@ -83,7 +83,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller
           python -m pip install -r requirements.txt
-          pyinstaller --clean --noconfirm backend_bundle.spec
+          pyinstaller --clean --noconfirm build/pyinstaller/backend_bundle.spec
           
           # Move PyInstaller output to python-dist
           if (Test-Path "dist\backend_bundle") {

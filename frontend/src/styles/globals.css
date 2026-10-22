@@ -74,10 +74,8 @@ pre {
 /* Utility */
 
 .app-heading {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 1.1rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--text-soft);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -107,6 +105,12 @@ pre {
   border-bottom: 1px solid var(--rule);
 }
 
+/* The rule separates turns; after the last one there is nothing to separate. */
+.message:last-of-type,
+.message--selected:last-of-type {
+  border-bottom: 0;
+}
+
 .message--assistant {
   cursor: pointer;
 }
@@ -117,7 +121,7 @@ pre {
 
 .message--selected,
 .message--selected:hover {
-  background: var(--selected);
+  background: transparent; /* the chat column stays one colour; the rules mark the selected answer */
   border-top: 1px solid var(--ink);
   border-bottom: 1px solid var(--ink);
   margin: -1px -24px 0;
@@ -127,25 +131,22 @@ pre {
 
 .message__role {
   margin-bottom: 8px;
-  font: 500 12px/1.4 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font: 500 12px/1.4 var(--font-sans);
   color: var(--ink-4);
 }
 
 .message__note {
-  letter-spacing: 0.04em;
   text-transform: none;
 }
 
 .message--user .message__body {
-  font: 19px/1.4 var(--font-serif);
+  font: 19px/1.4 var(--font-sans);
   color: var(--ink);
 }
 
 .message__body {
   max-width: 68ch;
-  font: 15px/1.6 var(--font-serif);
+  font: 15px/1.6 var(--font-sans);
   color: var(--ink);
   overflow-wrap: anywhere;
 }
@@ -171,8 +172,6 @@ pre {
 .message__body h3 {
   margin: 1.2em 0 0.4em;
   font: 600 13px/1.4 var(--font-sans);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink-2);
 }
 
@@ -259,7 +258,7 @@ pre {
 
 /* [1] [2]: the citation numbers that tie a sentence to a source. */
 .citation-ref {
-  font: 500 0.68em var(--font-mono);
+  font: 500 0.68em var(--font-sans);
   color: var(--ink-3);
   margin: 0 1px;
   text-decoration: underline;
@@ -286,9 +285,7 @@ pre {
   padding: 0;
   background: none;
   border: 0;
-  font: 500 12px var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px var(--font-sans);
   color: var(--ink-3);
   cursor: pointer;
 }
@@ -304,9 +301,7 @@ pre {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-  font: 500 12px var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 12px var(--font-sans);
   color: var(--ink-4);
 }
 
@@ -351,7 +346,7 @@ pre {
 }
 
 .evidence-source__cite {
-  font: 500 12px var(--font-mono);
+  font: 500 12px var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -359,7 +354,7 @@ pre {
   margin: 2px 0 0;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--ink);
-  font: 12px/1.5 var(--font-mono);
+  font: 12px/1.5 var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -378,7 +373,7 @@ pre {
 }
 
 .cited__number {
-  font: 500 12px/1.6 var(--font-mono);
+  font: 500 12px/1.6 var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -391,7 +386,7 @@ pre {
 
 .cited__meta {
   margin: 4px 0 0;
-  font: 12px/1.5 var(--font-mono);
+  font: 12px/1.5 var(--font-sans);
   color: var(--ink-3);
 }
 
@@ -443,7 +438,7 @@ pre {
 }
 
 kbd {
-  font: 12px/1 var(--font-mono);
+  font: 12px/1 var(--font-sans);
   padding: 2px 5px;
   border: 1px solid var(--rule);
   border-bottom-width: 2px;

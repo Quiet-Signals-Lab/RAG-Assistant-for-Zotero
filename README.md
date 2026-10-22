@@ -24,7 +24,7 @@ The design borrows from library science rather than from chat: Cutter's catalogu
 
 **Language models are optional.** The desk ranks, quotes and cites with no model at all. If you set one up, a local model on your computer or a cloud provider, the *desk clerk* uses it for small, checked jobs: reading harder queries, a one-line note on each item that must be supported by its passages, next searches drawn from your own tags, and names for groups of results. Anything that fails a check falls back to the desk's own work.
 
-**Want an answer written?** The chat is one click away (the Search | Chat switch in the header, or Settings → General → Interface): a model answers from passages in your library, citing each by number. From search, "Chat about these" opens a chat on the items you found.
+**Want an answer written?** RAG Chat is one click away (the Search | RAG Chat switch in the header, or Settings → General → Interface): a model answers from passages in your library, citing each by number. From search, "Add to context" collects items with their matched passage in a context folder; the items you attach there are the only ones RAG Chat answers from.
 
 The application can run entirely on your computer. With no model or a local one, your documents and queries never leave it.
 
@@ -152,7 +152,7 @@ To create distribution packages:
 ```bash
 npm run package:mac      # macOS .dmg and .zip
 npm run package:win      # Windows .exe installer
-npm run package:linux    # Linux .AppImage and .deb
+npm run package:linux    # Linux .deb
 npm run package:all      # All platforms
 ```
 

@@ -1,4 +1,4 @@
-# Quick Reference: Perplexity-Style RAG Implementation
+# Quick Reference: the RAG Chat pipeline
 
 ## TL;DR - The Fix
 

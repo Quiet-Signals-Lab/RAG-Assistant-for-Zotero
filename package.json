@@ -1,7 +1,7 @@
 {
   "name": "rag-assistant",
   "productName": "RAG Assistant",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "RAG tooling, reimagined with researchers in mind: literature discovery and review via semantic search of your Zotero PDF collection",
   "longDescription": "RAG tooling, reimagined with researchers in mind. This open-source app lets Zotero users do literature discovery and review via semantic search of their PDF collections, drawing from both classic RAG and library science. It indexes the full text of the PDFs in your Zotero library and searches it by meaning and by keyword. Ask for a topic, a title, or an author and year, and it returns a ranked bibliography of the items in your library that bear on it, with the passages that matched, one click from the PDF at that page in Zotero. Limits in your query (years, authors, tags, collections, kinds of item) become filters you can remove. Group and narrow the list, follow references and citations, pin passages, and export APA, BibTeX, RIS or a reading guide. No language model is needed; with one, local through Ollama or LM Studio or a cloud provider, it also reads harder queries, suggests next searches, names groups of results, and can answer questions from your library with citations. Works fully offline with a local model, so sensitive documents never leave your computer.",
   "keywords": ["zotero", "pdf", "search", "semantic-search", "bibliography", "citations", "research", "literature-review", "rag", "llm", "local-first", "ollama", "open-source"],

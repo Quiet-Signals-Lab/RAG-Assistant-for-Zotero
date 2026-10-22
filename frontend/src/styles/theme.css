@@ -6,8 +6,9 @@
   color-scheme: light;
 
   /* Palette */
-  --paper: #f2ede1;          /* the room: query desk, evidence */
-  --page: #fbf9f4;           /* the bibliography, which reads as the document */
+  --chrome: #ddd3bf;         /* the frame: header and rail */
+  --paper: #ebe4d3;          /* the side panels: query desk, evidence */
+  --page: #fdfbf7;           /* the canvas: the bibliography, which reads as the document */
   --ink: #1c1a17;            /* text, heavy rules, filled marks, primary button */
   --ink-2: #3a342b;          /* body text on paper */
   --ink-3: #5a5347;          /* secondary text */
@@ -19,7 +20,7 @@
   --stamp: #b8322a;          /* date-due red: only for what is yours (pins) */
   --catalogue-blue: #a9bbd2; /* card rules, on the known-item card only */
   --mark: #efe2bc;           /* highlighted query terms */
-  --selected: #f2ede1;       /* the selected row on the page */
+  --selected: #f2ecdf;       /* the selected row: a card on the page */
   --notice: #8c6309;         /* one-line notices: something was set aside */
   --ok: #3e6b3a;             /* status text only: done, connected */
   --error: #a23a2c;          /* status text only: failed */
@@ -33,8 +34,8 @@
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", "Consolas",
     "Ubuntu Mono", "Liberation Mono", monospace;
 
-  --radius-sm: 2px;
-  --radius-md: 2px;
+  --radius-sm: 3px;
+  --radius-md: 6px;
   --shadow-soft: none;
 
   --spacing-xs: 4px;
@@ -77,8 +78,9 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --paper: #1a1813;
-  --page: #211e18;
+  --chrome: #0f0d0a;
+  --paper: #181611;
+  --page: #26221b;
   --ink: #eae2d0;
   --ink-2: #d2c8b4;
   --ink-3: #a89e8c;
@@ -90,7 +92,7 @@
   --stamp: #e0574c;
   --catalogue-blue: #4c627a;
   --mark: #4a3f22;
-  --selected: #2a261f;
+  --selected: #2b2720;
   --notice: #e0b84a;
   --ok: #8fc98a;
   --error: #ec8a7c;

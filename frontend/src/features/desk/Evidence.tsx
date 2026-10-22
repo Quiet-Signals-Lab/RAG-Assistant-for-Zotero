@@ -1,14 +1,7 @@
 import React, { useState } from "react";
 import Chain from "./Chain";
 import { useDesk, type Pin } from "./DeskContext";
-import { BandMark, Highlighted, openPdf, Reference, showInZotero } from "./parts";
-import { useChatAbout } from "./useChatAbout";
-
-/** The first few words of a passage, enough to tell two pins from one page apart. */
-function opening(text: string): string {
-  const words = text.replace(/^…/, "").split(/\s+/).filter(Boolean);
-  return words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : "");
-}
+import { BandMark, Highlighted, opening, openPdf, Reference, showInZotero } from "./parts";
 
 function pinLine(p: Pin): string {
   const text = p.text.replace(/\s+/g, " ").trim();
@@ -17,17 +10,9 @@ function pinLine(p: Pin): string {
 
 const ReadingList: React.FC = () => {
   const desk = useDesk();
-  const chatAbout = useChatAbout();
   const [note, setNote] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  if (desk.pins.length === 0) {
-    return (
-      <section className="reading-list" aria-labelledby="reading-heading">
-        <h2 id="reading-heading" className="panel-head__title panel-head--rule">Reading list</h2>
-        <p className="reading-list__empty">Pin a passage to keep it here, with its page, across searches.</p>
-      </section>
-    );
-  }
+  const count = desk.pins.length;
   async function copy() {
     try {
       await navigator.clipboard.writeText(desk.pins.map(pinLine).join("\n\n"));
@@ -38,11 +23,17 @@ const ReadingList: React.FC = () => {
     window.setTimeout(() => setNote(null), 2500);
   }
   return (
-    <section className="reading-list" aria-labelledby="reading-heading">
-      <h2 id="reading-heading" className="panel-head__title panel-head--rule panel-head--split">
-        <span>Reading list</span>
-        <span className="reading-list__count">● {desk.pins.length} pinned</span>
-      </h2>
+    <details className="reading-list" open={count > 0}>
+      <summary>
+        <div className="panel-head">
+          <h2 className="panel-head__title">Reading list</h2>
+          <span className={count ? "reading-list__count" : "panel-head__hint"}>{count ? `● ${count} pinned` : "nothing pinned yet"}</span>
+        </div>
+      </summary>
+      {count === 0 ? (
+        <p className="reading-list__empty">Pin a passage to keep it here, with its page, across searches.</p>
+      ) : (
+        <>
       <ul className="reading-list__items">
         {desk.pins.map((p) => {
           const inResults = desk.result?.items.some((it) => it.item_id === p.itemId);
@@ -62,31 +53,30 @@ const ReadingList: React.FC = () => {
         })}
       </ul>
       <div className="reading-list__actions">
-        <button type="button" className="btn btn--primary" onClick={copy}>Copy passages</button>
-        {chatAbout && (
-          <button type="button" className="btn" onClick={() => chatAbout(desk.pins.map((p) => p.itemId), `Chat about ${new Set(desk.pins.map((p) => p.itemId)).size} pinned items`)}>
-            Chat about pinned
-          </button>
-        )}
+        <button type="button" className="btn" onClick={copy}>Copy passages</button>
+        <button type="button" className="btn" onClick={desk.addPinsToContext}>Add pinned to context</button>
         {confirming ? (
           <>
             <button type="button" className="btn btn--danger" onClick={() => { desk.clearPins(); setConfirming(false); }}>
-              Clear all {desk.pins.length}
+              Clear all {count}
             </button>
             <button type="button" className="btn" onClick={() => setConfirming(false)}>Keep them</button>
           </>
         ) : (
-          <button type="button" className="btn" onClick={() => setConfirming(true)}>Clear</button>
+          <button type="button" className="link-button" onClick={() => setConfirming(true)}>Clear</button>
         )}
       </div>
       <div role="status" aria-live="polite" className="reading-list__note">{note}</div>
-    </section>
+        </>
+      )}
+    </details>
   );
 };
 
 const Evidence: React.FC = () => {
   const desk = useDesk();
   const item = desk.selected;
+  const inContext = !!item && desk.inContext(item.item_id);
   const [failure, setFailure] = useState<string | null>(null);
 
   const open = (page?: number | null) => {
@@ -107,6 +97,8 @@ const Evidence: React.FC = () => {
         }
       }}
     >
+      <ReadingList />
+
       <div className="panel-head">
         <h2 className="panel-head__title">Evidence{item ? ` · result ${item.rank}` : ""}</h2>
         <button type="button" className="evidence__close btn" onClick={() => desk.setPane("browse")}>
@@ -127,6 +119,16 @@ const Evidence: React.FC = () => {
                 </button>
               )}
               {item.citation && <button type="button" className="btn" onClick={() => showInZotero(item.citation)}>Show in Zotero</button>}
+              <button type="button" className="btn" onClick={() => desk.moreLike(item)}>More like this</button>
+              <button
+                type="button"
+                className="btn btn--context"
+                aria-pressed={inContext}
+                title={inContext ? "In the RAG Chat context. Click to remove it." : "Add this item and its matched passage to the RAG Chat context"}
+                onClick={() => (inContext ? desk.removeFromContext(item.item_id) : desk.addToContext([item]))}
+              >
+                {inContext ? "Added to context" : "Add to context"}
+              </button>
             </div>
             {failure && <p className="desk-notice desk-notice--error">{failure}</p>}
             <p className="evidence__count">
@@ -168,8 +170,6 @@ const Evidence: React.FC = () => {
       )}
 
       {item && <Chain key={item.item_id} item={item} />}
-
-      <ReadingList />
     </div>
   );
 };

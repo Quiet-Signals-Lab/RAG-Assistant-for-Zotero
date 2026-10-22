@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUNDLE_DIR="$PROJECT_ROOT/python-dist"
 BUILD_DIR="$PROJECT_ROOT/build-python"
-SPEC_FILE="$PROJECT_ROOT/backend_bundle.spec"
+SPEC_FILE="$PROJECT_ROOT/build/pyinstaller/backend_bundle.spec"
 
 echo " Creating standalone Python bundle with PyInstaller..."
 echo "=================================================="

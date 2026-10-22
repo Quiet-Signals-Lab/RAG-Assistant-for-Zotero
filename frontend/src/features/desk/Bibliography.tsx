@@ -8,7 +8,6 @@ import { BUNDLED_STYLES, LOCALE_EN_US } from "./styles";
 import { apiFetch, request } from "../../api/client";
 import { FACETS, groupBy, refinements, type Facet, type Refinement } from "./facets";
 import { BandMark, Highlighted, itemTypeLabel, openPdf, pageSpan, Reference, showInZotero } from "./parts";
-import { useChatAbout } from "./useChatAbout";
 
 function sortItems(items: DeskItem[], sort: Sort): DeskItem[] {
   if (sort === "relevance") return items;
@@ -121,9 +120,6 @@ type RowProps = { item: DeskItem; selected: boolean; pinned: boolean; onPick: ()
 
 const Row = React.forwardRef<HTMLButtonElement, RowProps>(
   ({ item, selected, pinned, onPick }, ref) => {
-    const desk = useDesk();
-    const chatAbout = useChatAbout();
-    const best = item.passages[0];
     const meta = [
       itemTypeLabel(item.citation?.item_type || item.item_type),
       `${item.passages.length} passage${item.passages.length === 1 ? "" : "s"}`,
@@ -153,24 +149,6 @@ const Row = React.forwardRef<HTMLButtonElement, RowProps>(
           </span>
           <span className="row__band"><BandMark band={item.band} withLabel /></span>
         </button>
-        {selected && (
-          <div className="row__actions">
-            {(item.citation?.pdf_key || item.pdf_path) && (
-              <button type="button" className="btn btn--primary" onClick={() => openPdf(item, best?.page).catch((e) => alert(e.message))}>
-                Open PDF{best?.page ? ` p. ${best.page}` : ""}
-              </button>
-            )}
-            {item.citation && <button type="button" className="btn" onClick={() => showInZotero(item.citation)}>Show in Zotero</button>}
-            {best && (
-              <button type="button" className="btn" onClick={() => desk.togglePin(item, best)}>
-                {desk.isPinned(item, best) ? "Unpin passage" : "Pin passage"}
-              </button>
-            )}
-            <button type="button" className="btn" onClick={() => desk.moreLike(item)}>More like this</button>
-            {chatAbout && <button type="button" className="btn" onClick={() => chatAbout([item.item_id], `Chat about ${shortCite(item)}`)}>Chat about this</button>}
-            <button type="button" className="btn" onClick={() => desk.setPane("verify")}>Evidence</button>
-          </div>
-        )}
       </li>
     );
   },
@@ -179,7 +157,6 @@ Row.displayName = "Row";
 
 const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
   const desk = useDesk();
-  const chatAbout = useChatAbout();
   const { result, status, error } = desk;
   const [showSeeAlso, setShowSeeAlso] = useState(false);
   const [facet, setFacet] = useState<Facet>("none");
@@ -240,7 +217,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
       desk.setPane("verify");
       document.getElementById("desk-evidence")?.focus();
     } else if (e.key === "p" && item?.passages[0]) { e.preventDefault(); desk.togglePin(item, item.passages[0]); }
-    else if (e.key === "o" && item) { e.preventDefault(); openPdf(item, item.passages[0]?.page).catch((err) => alert(err.message)); }
+    else if (e.key === "o" && item) { e.preventDefault(); openPdf(item, item.passages[0]?.page).catch((err) => setCopied(err.message)); }
   }
 
   function saveAs(format: string) {
@@ -295,54 +272,52 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
         <h2 className="panel-head__title">
           Results{result ? ` · ${result.items.length} item${result.items.length === 1 ? "" : "s"}` : ""}
         </h2>
-        {result && result.items.length > 0 && (
-          <div className="panel-head__tools">
-            <label className="tool">
-              <span>Sort</span>
-              <select value={desk.sort} onChange={(e) => desk.setSort(e.target.value as Sort)}>
-                <option value="relevance">relevance</option>
-                <option value="year">year, newest first</option>
-                <option value="author">first author</option>
-              </select>
-            </label>
-            <label className="tool">
-              <span>Group</span>
-              <select value={facet} onChange={(e) => setFacet(e.target.value as Facet)}>
-                {FACETS.filter((f) => f.id !== "theme" || desk.clerk.themes).map((f) => (
-                  <option key={f.id} value={f.id}>{f.label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="tool">
-              <span>Style</span>
-              <select value={style} onChange={(e) => { setStyle(e.target.value); try { localStorage.setItem("desk.cslStyle", e.target.value); } catch { /* per-viewer convenience only */ } }}>
-                {BUNDLED_STYLES.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-                {zoteroStyles.length > 0 && (
-                  <optgroup label="Installed in Zotero">
-                    {zoteroStyles.map((s) => <option key={s.file} value={`zotero:${s.file}`}>{s.title}</option>)}
-                  </optgroup>
-                )}
-              </select>
-            </label>
-            <button type="button" className="tool-button" onClick={copyBibliography}>Copy references</button>
-            {chatAbout && (
-              <button type="button" className="tool-button" onClick={() => chatAbout(visible.map((it) => it.item_id), `Chat about ${visible.length} items: ${result.query}`)}>
-                Chat about these
-              </button>
-            )}
-            <label className="tool">
-              <span className="sr-only">Save the list as</span>
-              <select value="" onChange={(e) => saveAs(e.target.value)} aria-label="Save the list as a file">
-                <option value="" disabled>Save as…</option>
-                <option value="txt">References in this style (.txt)</option>
-                <option value="bib">BibTeX (.bib)</option>
-                <option value="ris">RIS (.ris)</option>
-                <option value="pathfinder">Reading guide (.md)</option>
-              </select>
-            </label>
-          </div>
-        )}
       </div>
+      {result && result.items.length > 0 && (
+        <div className="toolbar" aria-label="List tools">
+          <label className="tool">
+            <span>Sort</span>
+            <select value={desk.sort} onChange={(e) => desk.setSort(e.target.value as Sort)}>
+              <option value="relevance">relevance</option>
+              <option value="year">year, newest first</option>
+              <option value="author">first author</option>
+            </select>
+          </label>
+          <label className="tool">
+            <span>Group</span>
+            <select value={facet} onChange={(e) => setFacet(e.target.value as Facet)}>
+              {FACETS.filter((f) => f.id !== "theme" || desk.clerk.themes).map((f) => (
+                <option key={f.id} value={f.id}>{f.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="tool">
+            <span>Style</span>
+            <select value={style} onChange={(e) => { setStyle(e.target.value); try { localStorage.setItem("desk.cslStyle", e.target.value); } catch { /* per-viewer convenience only */ } }}>
+              {BUNDLED_STYLES.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+              {zoteroStyles.length > 0 && (
+                <optgroup label="Installed in Zotero">
+                  {zoteroStyles.map((s) => <option key={s.file} value={`zotero:${s.file}`}>{s.title}</option>)}
+                </optgroup>
+              )}
+            </select>
+          </label>
+          <button type="button" className="btn" onClick={copyBibliography}>Copy references</button>
+          <label className="tool">
+            <span className="sr-only">Save the list as</span>
+            <select value="" onChange={(e) => saveAs(e.target.value)} aria-label="Save the list as a file">
+              <option value="" disabled>Save as…</option>
+              <option value="txt">References in this style (.txt)</option>
+              <option value="bib">BibTeX (.bib)</option>
+              <option value="ris">RIS (.ris)</option>
+              <option value="pathfinder">Reading guide (.md)</option>
+            </select>
+          </label>
+          <button type="button" className="btn" onClick={() => desk.addToContext(visible)} title="Add every item in the list to the RAG Chat context">
+            Add all to context
+          </button>
+        </div>
+      )}
       <div className="bibliography__status" role="status" aria-live="polite">
         {status === "loading" && <span className="loading-rule">Searching…</span>}
         {copied}
