@@ -543,6 +543,59 @@ async function findSystemPython(): Promise<{ path: string; version?: string; sou
 }
 
 /**
+ * Run the venv's pip. Output is appended to python-setup.log; on failure the
+ * error carries the last lines of output so the dialog can show the cause.
+ */
+function runPip(venvPath: string, args: string[], onLine?: (line: string) => void): Promise<void> {
+  const logFile = path.join(logDir(), 'python-setup.log');
+  const log = fs.createWriteStream(logFile, { flags: 'a' });
+  log.write(`\n[electron] pip ${args.join(' ')} at ${new Date().toISOString()}\n`);
+  return new Promise((resolve, reject) => {
+    const proc = spawn(path.join(venvPath, 'bin', 'pip'), args);
+    let tail = '';
+    const onData = (data: Buffer) => {
+      const text = data.toString();
+      log.write(text);
+      tail = (tail + text).slice(-2000);
+      text.split('\n').forEach((line) => onLine?.(line));
+    };
+    proc.stdout?.on('data', onData);
+    proc.stderr?.on('data', onData);
+    proc.on('close', (code) => {
+      log.end();
+      if (code === 0) resolve();
+      else reject(new Error(`pip install failed (exit ${code}). Full log: ${logFile}\n\n${tail.trim().split('\n').slice(-8).join('\n')}`));
+    });
+    proc.on('error', (err) => { log.end(); reject(err); });
+  });
+}
+
+/**
+ * Install the backend's packages into the venv, then record which
+ * requirements.txt they came from so an app update triggers a reinstall.
+ */
+async function installLinuxDeps(venvPath: string, onProgress?: (message: string, progress?: number) => void): Promise<void> {
+  const requirementsPath = path.join(process.resourcesPath, 'requirements.txt');
+  const onLine = (line: string) => {
+    const m = line.match(/^Collecting (\S+)/);
+    if (m) onProgress?.(`Installing Python packages: ${m[1]}`, 60);
+  };
+  // CPU-only torch first, as on macOS/Windows: PyPI's Linux torch pulls ~2.5 GB of CUDA libraries
+  await runPip(venvPath, ['install', '--no-cache-dir', '--index-url', 'https://download.pytorch.org/whl/cpu', 'torch'], onLine);
+  await runPip(venvPath, ['install', '--no-cache-dir', '-r', requirementsPath], onLine);
+  fs.copyFileSync(requirementsPath, path.join(venvPath, 'installed-requirements.txt'));
+}
+
+function venvIsCurrent(venvPath: string): boolean {
+  try {
+    return fs.readFileSync(path.join(venvPath, 'installed-requirements.txt'), 'utf8') ===
+      fs.readFileSync(path.join(process.resourcesPath, 'requirements.txt'), 'utf8');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Setup Linux virtual environment on first run
  * Creates venv in ~/.config/rag-assistant/venv and installs dependencies
  */
@@ -552,65 +605,49 @@ async function setupLinuxVenv(onProgress?: (message: string, progress?: number) 
   const venvPath = path.join(configDir, 'venv');
   const pythonBin = path.join(venvPath, 'bin', 'python3');
   
-  // Check if venv already exists and is valid
-  if (fs.existsSync(pythonBin)) {
-    console.log(`Found existing venv at: ${venvPath}`);
-    
-    // Verify uvicorn is installed (critical dependency check)
-    const hasUvicorn = await new Promise<boolean>((resolve) => {
-      const proc = spawn(pythonBin, ['-m', 'uvicorn', '--version']);
-      proc.on('close', (code) => resolve(code === 0));
-      proc.on('error', () => resolve(false));
-      setTimeout(() => { proc.kill(); resolve(false); }, 3000);
-    });
-    
-    if (hasUvicorn) {
-      console.log(`✓ Linux venv valid with all dependencies at: ${venvPath}`);
-      return { pythonPath: pythonBin, venvPath };
-    } else {
-      console.warn('WARNING: Existing venv missing dependencies (uvicorn not found)');
-      console.log('Reinstalling dependencies...');
-      
-      // Try to repair by reinstalling dependencies
-      try {
-        const requirementsPath = path.join(process.resourcesPath, 'requirements.txt');
-        if (fs.existsSync(requirementsPath)) {
-          onProgress?.('Updating Python dependencies...', 50);
-          const pipBin = path.join(venvPath, 'bin', 'pip');
-          await new Promise<void>((resolve, reject) => {
-            const proc = spawn(pipBin, ['install', '--no-cache-dir', '-r', requirementsPath]);
-            proc.stdout?.on('data', (data) => console.log(data.toString()));
-            proc.stderr?.on('data', (data) => console.error(data.toString()));
-            proc.on('close', (code) => code === 0 ? resolve() : reject(new Error('Dependency install failed')));
-            proc.on('error', reject);
-          });
-          console.log('✓ Dependencies reinstalled successfully');
-          onProgress?.('Dependencies updated!', 100);
-          return { pythonPath: pythonBin, venvPath };
-        }
-      } catch (error) {
-        console.error('✗ Failed to repair venv:', error);
-        console.log('Will recreate venv from scratch...');
-        // Fall through to recreate venv
-      }
+  // A distro upgrade (python3.12 -> 3.14) leaves bin/python3 working but its
+  // packages in lib/python3.12, so that venv is rebuilt rather than reused
+  const venvMatchesPython = () => {
+    try {
+      const real = path.basename(fs.realpathSync(pythonBin));
+      return !/^python3\.\d+$/.test(real) || fs.existsSync(path.join(venvPath, 'lib', real));
+    } catch {
+      return false;
     }
+  };
+
+  // An existing venv is reused; it is brought up to date when the install never
+  // finished or an app update changed requirements.txt
+  if (venvMatchesPython()) {
+    console.log(`Found existing venv at: ${venvPath}`);
+    if (venvIsCurrent(venvPath)) {
+      console.log(`✓ Linux venv matches requirements.txt: ${venvPath}`);
+      return { pythonPath: pythonBin, venvPath };
+    }
+    try {
+      onProgress?.('Updating Python packages (this can take several minutes)...', 50);
+      await installLinuxDeps(venvPath, onProgress);
+      console.log('✓ Dependencies updated');
+    } catch (error) {
+      // Keep the old venv rather than block startup (e.g. offline); retried next launch
+      console.error('✗ Failed to update venv, starting with the existing one:', error);
+    }
+    return { pythonPath: pythonBin, venvPath };
   }
   
   console.log('================================================================================');
   console.log('Linux: First run setup - creating virtual environment');
   console.log('================================================================================');
   
-  // Find system Python
-  const systemPython = await findSystemPython();
+  // The .deb depends on python3 (>= 3.11), which is /usr/bin/python3; a PATH
+  // python3 (pyenv, conda) may be older
+  const systemPython = fs.existsSync('/usr/bin/python3') ? { path: '/usr/bin/python3' } : await findSystemPython();
   if (!systemPython) {
     console.error('✗ System Python 3.11+ not found');
-    console.error('Please install: sudo apt install python3 python3-pip python3-venv');
-    if (mainWindow) {
-      dialog.showErrorBox(
-        'Python Required',
-        'Python 3.11 or later is required.\n\nPlease install:\nsudo apt install python3 python3-pip python3-venv\n\nThen restart the application.'
-      );
-    }
+    dialog.showErrorBox(
+      'Python Required',
+      'Python 3.11 or later is required.\n\nPlease install:\nsudo apt install python3 python3-venv\n\nThen restart the application.'
+    );
     return null;
   }
   
@@ -620,11 +657,11 @@ async function setupLinuxVenv(onProgress?: (message: string, progress?: number) 
     fs.mkdirSync(configDir, { recursive: true });
     console.log(`✓ Created config directory: ${configDir}`);
     
-    // Create virtual environment
+    // Create virtual environment; --clear replaces a venv broken by a Python upgrade
     onProgress?.('Creating Python virtual environment...', 20);
     console.log(`Creating venv with ${systemPython.path}...`);
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn(systemPython.path, ['-m', 'venv', venvPath]);
+      const proc = spawn(systemPython.path, ['-m', 'venv', '--clear', venvPath]);
       let stderr = '';
       
       proc.stderr?.on('data', (data) => { stderr += data.toString(); });
@@ -638,59 +675,12 @@ async function setupLinuxVenv(onProgress?: (message: string, progress?: number) 
     });
     console.log('✓ Virtual environment created');
     
-    // Upgrade pip
     onProgress?.('Upgrading pip...', 40);
-    console.log('Upgrading pip...');
-    await new Promise<void>((resolve, reject) => {
-      const pipBin = path.join(venvPath, 'bin', 'pip');
-      const proc = spawn(pipBin, ['install', '--upgrade', 'pip']);
-      
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error('pip upgrade failed'));
-      });
-      
-      proc.on('error', reject);
-    });
+    await runPip(venvPath, ['install', '--upgrade', 'pip']);
     console.log('✓ pip upgraded');
     
-    // Install dependencies
-    onProgress?.('Installing Python dependencies (this may take 2-5 minutes)...', 50);
-    console.log('Installing dependencies from requirements.txt...');
-    const requirementsPath = path.join(process.resourcesPath, 'requirements.txt');
-    
-    if (!fs.existsSync(requirementsPath)) {
-      throw new Error(`requirements.txt not found at: ${requirementsPath}`);
-    }
-    
-    await new Promise<void>((resolve, reject) => {
-      const pipBin = path.join(venvPath, 'bin', 'pip');
-      const proc = spawn(pipBin, ['install', '--no-cache-dir', '-r', requirementsPath]);
-      let lastOutput = '';
-      
-      proc.stdout?.on('data', (data) => {
-        lastOutput = data.toString();
-        console.log(lastOutput);
-        
-        // Parse progress from pip output
-        const match = lastOutput.match(/Downloading.*\((\d+)\/(\d+)\)/);
-        if (match) {
-          const current = parseInt(match[1]);
-          const total = parseInt(match[2]);
-          const progress = 50 + Math.floor((current / total) * 40);
-          onProgress?.(`Installing dependencies (${current}/${total})...`, progress);
-        }
-      });
-      
-      proc.stderr?.on('data', (data) => { console.error(data.toString()); });
-      
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error('Dependency installation failed'));
-      });
-      
-      proc.on('error', reject);
-    });
+    onProgress?.('Installing Python packages (about 1 GB; this can take several minutes)...', 50);
+    await installLinuxDeps(venvPath, onProgress);
     
     onProgress?.('Setup complete!', 100);
     console.log('✓ Dependencies installed successfully');
@@ -709,20 +699,16 @@ async function setupLinuxVenv(onProgress?: (message: string, progress?: number) 
       userMessage += 'Python venv module is missing.\n\n' +
         'Install it with:\n' +
         '  sudo apt install python3-venv\n\n';
-    } else if (errorMsg.includes('pip upgrade failed') || errorMsg.includes('Dependency installation failed')) {
-      userMessage += 'Failed to install required Python packages.\n\n' +
-        'This may be due to:\n' +
-        '  - Network connectivity issues\n' +
-        '  - Missing build tools\n\n' +
-        'Try installing build essentials:\n' +
-        '  sudo apt install build-essential python3-dev\n\n';
+    } else if (errorMsg.includes('pip install failed')) {
+      userMessage += 'Failed to download the required Python packages.\n\n' +
+        'Check your internet connection and that about 3 GB of disk space is free,\n' +
+        'then restart the application to retry.\n\n';
     } else {
       userMessage += 'Please ensure Python 3.11+ is installed:\n' +
-        '  sudo apt install python3 python3-pip python3-venv\n\n';
+        '  sudo apt install python3 python3-venv\n\n';
     }
     
-    userMessage += `Error details: ${errorMsg}\n\n` +
-      'Check the console logs for more information.';
+    userMessage += `Error details: ${errorMsg}`;
     
     dialog.showErrorBox('Python Environment Setup Failed', userMessage);
     return null;
@@ -785,23 +771,8 @@ async function getBackendPath(): Promise<{ command: string; args: string[]; cwd:
       }
       
       if (!venvSetup) {
-        console.error('================================================================================');
+        // setupLinuxVenv has already shown a dialog with the specific cause
         console.error('✗ FATAL: Failed to set up Linux virtual environment');
-        console.error('================================================================================');
-        console.error('  Please ensure Python 3.11+ is installed:');
-        console.error('    sudo apt install python3 python3-pip python3-venv');
-        console.error('================================================================================');
-        
-        // Show detailed error dialog
-        dialog.showErrorBox(
-          'Python Environment Setup Failed',
-          'Failed to set up the Python environment required to run this application.\n\n' +
-          'Required: Python 3.11 or later with venv support\n\n' +
-          'Please install:\n' +
-          '  sudo apt install python3 python3-pip python3-venv\n\n' +
-          'Then restart the application.\n\n' +
-          'If Python is already installed, check the console logs for specific errors.'
-        );
         return null;
       }
       
@@ -1007,8 +978,8 @@ async function startBackend(): Promise<boolean> {
         'Python Not Found',
         `The application requires Python 3 to run the backend service.\n\n${instructions}`
       );
-    } else {
-      // Production mode: this is a packaging error
+    } else if (process.platform !== 'linux') {
+      // Production mode: this is a packaging error (Linux has no bundle; setupLinuxVenv explained its failure)
       dialog.showErrorBox(
         'Application Installation Error',
         `The bundled Python interpreter is missing from this installation.\n\n` +

@@ -9,10 +9,15 @@
 #     hf-hub 0.x->1.x is a major bump that needs a PyInstaller bundle test).
 #     All open CVEs require loading an UNTRUSTED model (config.json/checkpoint/
 #     trust_remote_code/Trainer); we only load a fixed list of trusted models.
-#   - protobuf <5 cap: fix needs 4->6 major bump; the CVE is a DoS in ParseDict on
-#     untrusted protobuf JSON, which we never parse (protobuf is transitive only).
-#   - chromadb 1.3.5: no fix released; CVE requires the Chroma HTTP server API +
+#   - protobuf <6 cap: fix needs a bump to 6.x, which google-ai-generativelanguage
+#     forbids (<6); the CVE is a DoS in ParseDict on untrusted protobuf JSON, which
+#     we never parse (protobuf is transitive only). 5.x is the floor for Python
+#     3.14 (Ubuntu 26.04): 4.x's C extension fails to import there.
+#   - chromadb: no fix released; CVE requires the Chroma HTTP server API +
 #     trust_remote_code — we use embedded PersistentClient, not the server.
+#     1.5.3+ is the floor for Python 3.14 (Ubuntu 26.04): older releases build
+#     their Settings on pydantic.v1, which fails there. PyPika 0.48.9 (sdist
+#     only) also fails to build on 3.14, hence 0.51.1.
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.14.2
@@ -23,7 +28,7 @@ build==1.3.0
 cachetools==6.2.2
 certifi==2025.11.12
 charset-normalizer==3.4.4
-chromadb==1.3.5
+chromadb==1.5.9
 click==8.3.3
 coloredlogs==15.0.1
 distro==1.9.0
@@ -65,7 +70,7 @@ overrides==7.7.0
 packaging==25.0
 pillow==12.3.0
 posthog==5.4.0
-protobuf>=3.20.2,<5.0.0
+protobuf>=3.20.2,<6.0.0
 pyasn1==0.6.4
 pyasn1_modules==0.4.2
 pybase64==1.4.2
@@ -73,7 +78,7 @@ pydantic==2.12.4
 pydantic_core==2.41.5
 Pygments==2.20.0
 PyMuPDF==1.26.7
-PyPika==0.48.9
+PyPika==0.51.1
 pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
@@ -105,7 +110,6 @@ transformers==5.10.1
 typer==0.20.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
-unicorn==2.1.4
 urllib3==2.8.0
 uvicorn==0.38.0
 uvloop==0.22.1; sys_platform != 'win32'

@@ -64,4 +64,8 @@ def main():
     )
 
 if __name__ == "__main__":
+    # Frozen apps re-run this script for multiprocessing helpers (e.g. the resource
+    # tracker that tqdm's lock starts); without this each helper started another server
+    import multiprocessing
+    multiprocessing.freeze_support()
     main()

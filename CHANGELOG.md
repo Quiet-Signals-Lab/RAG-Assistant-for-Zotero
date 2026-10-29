@@ -5,6 +5,22 @@ All notable changes to RAG Assistant for Zotero will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-10-29
+
+### Upgrading from 0.7.2
+Nothing to run. On Linux the first launch after the update installs the changed Python packages, which takes a minute or two. The index is untouched: chromadb 1.5.9 reads an index written by 1.3.5.
+
+### Fixed
+- **macOS and Windows: stray backend servers.** After the first search, the bundled backend started another copy of itself every few seconds, up to ten, which held ports 8000–8009 and kept running after the app quit. Python's multiprocessing helper re-ran the bundle's entry script, which started a server instead of the helper; the entry script now calls `multiprocessing.freeze_support()`.
+- **Linux: the first launch failed on Ubuntu 26.04**, whose Python is 3.14. PyPika 0.48.9 could not be built there, and chromadb 1.3.5 and protobuf 4 do not run on it. The app now pins PyPika 0.51.1, chromadb 1.5.9 and protobuf 5.
+- **Linux: the first launch downloads about 1 GB instead of 3.3 GB.** torch comes from PyTorch's CPU-only index, as on macOS and Windows; PyPI's Linux torch adds 2.5 GB of CUDA libraries.
+- Linux: an app update that changes the Python requirements now installs them; before, the venv was only checked for uvicorn and an update could leave packages missing. An interrupted first install is retried on the next launch, and a venv left behind by a distribution upgrade to a newer Python is rebuilt.
+- Linux: a failed setup shows one dialog that names the cause and shows the end of pip's output, with the full output in `logs/python-setup.log` in the app's data folder. Before, up to four dialogs followed one another, one claiming the bundled Python was missing, and the advice to install compilers was wrong: every package has a prebuilt wheel.
+- The README's Linux install command matched no file (the release names it `RAG.Assistant-…deb`), and it said Python was bundled on Linux, where it is installed on first launch. The Linux packaging guide described an AppImage and an arm64 package that are not published.
+
+### Changed
+- Removed `unicorn`, a CPU emulator listed in the requirements by mistake for `uvicorn` and never imported.
+
 ## [0.7.2] - 2026-10-22
 
 ### Upgrading from 0.7.1

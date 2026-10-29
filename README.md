@@ -55,7 +55,7 @@ winget install aahepburn.RAGAssistantForZotero
 The app is not notarised on Windows and may throw a safety warning.
 
 
-**Linux** (Debian/Ubuntu): download the `.deb` from [Releases](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases) and install it with `sudo apt install ./RAG-Assistant-*.deb` — Python and all dependencies are bundled.
+**Linux** (Debian/Ubuntu): download the `.deb` from [Releases](https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases) and install it with `sudo apt install ./RAG.Assistant-*.deb` (Ubuntu 24.04+ or Debian 12+). On first launch the app downloads its Python packages (about 1 GB), so it needs an internet connection and a few minutes.
 
 
 ## Key Features

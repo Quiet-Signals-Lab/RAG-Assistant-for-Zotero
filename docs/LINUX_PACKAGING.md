@@ -6,57 +6,28 @@ The app provides native `.deb` packages for Debian-based distributions (Ubuntu, 
 
 **Current Approach (v0.1.10+)**: Linux uses system Python + venv for a smaller package size (~250MB vs 2.5GB with PyInstaller bundle). The app automatically sets up and repairs the Python environment on first run.
 
-## Package Types
+## Installing
 
-### 1. Debian Package (`.deb`) - Recommended for Most Users
+Only an amd64 `.deb` is published (no AppImage, no arm64). GitHub turns the
+space in the product name into a dot, so the file is `RAG.Assistant-<version>-linux-amd64.deb`:
 
-**Benefits:**
--  Native system integration (package manager, menu entries, file associations)
--  Automatic updates via `apt upgrade` (when using APT repo)
--  Proper sandbox permissions set automatically
--  Clean uninstall with `apt remove`
--  Respects system conventions (`/opt` install location)
-
-**Installation:**
 ```bash
-# Download the .deb
-wget https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/download/v0.1.7/RAG-Assistant-0.1.7-linux-amd64.deb
-
-# Install
-sudo apt install ./RAG-Assistant-0.1.7-linux-amd64.deb
-
-# Or use dpkg
-sudo dpkg -i RAG-Assistant-0.1.7-linux-amd64.deb
-sudo apt-get install -f  # Install dependencies if needed
+sudo apt install ./RAG.Assistant-*-linux-amd64.deb
+rag-assistant          # or "RAG Assistant for Zotero" in the app menu
 ```
 
-**Launch:**
-```bash
-# From application menu (shows as "RAG Assistant for Zotero")
-# OR from terminal:
-rag-assistant
-```
+Use `apt install ./…`, not `dpkg -i`: only apt installs the dependencies
+(`python3-venv` is not on a fresh Ubuntu). apt may print
+`N: Download is performed unsandboxed as root…` when the file is in your home
+folder; that notice is harmless.
 
-### 2. AppImage - Portable Alternative
-
-**Benefits:**
--  No installation required
--  Run from anywhere (USB drive, Downloads folder, etc.)
--  No root/sudo needed
-
-**Usage:**
-```bash
-# Download
-wget https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero/releases/download/v0.1.7/RAG-Assistant-0.1.7-linux-x64.AppImage
-
-# Make executable
-chmod +x RAG-Assistant-0.1.7-linux-x64.AppImage
-
-# Run (sandbox should work automatically)
-./RAG-Assistant-0.1.7-linux-x64.AppImage
-```
-
-**Note:** On modern Debian/Ubuntu, the sandbox should work without `--no-sandbox`. If you encounter issues, see troubleshooting below.
+**First launch** creates `~/.config/rag-assistant/venv` from `/usr/bin/python3`
+and downloads the Python packages: about 1 GB, a few minutes, internet required.
+torch comes from PyTorch's CPU-only index, because PyPI's Linux torch adds about
+2.5 GB of CUDA libraries. The venv records which `requirements.txt` it was built
+from (`installed-requirements.txt`), so an app update that changes the
+requirements reinstalls on next launch. A failed or interrupted install is
+retried on the next launch.
 
 ## System Requirements
 
@@ -154,31 +125,18 @@ As a one-off workaround on an affected install:
 ### Prerequisites
 
 ```bash
-# Install build dependencies
 npm install
-
-# Create Python bundle (required!)
-./scripts/bundle-python-pyinstaller.sh
 ```
+
+No Python bundle is needed for Linux; the package ships `backend/` and
+`requirements.txt`, and the venv is built on the user's machine.
 
 ### Build Command
 
 ```bash
-# Build for Linux (creates both .deb and AppImage)
-npm run build
 npm run package:linux
-
-# Output files in release/:
-# - RAG-Assistant-0.1.7-linux-amd64.deb
-# - RAG-Assistant-0.1.7-linux-arm64.deb  
-# - RAG-Assistant-0.1.7-linux-x64.AppImage
-# - latest-linux.yml (for auto-updates)
+# release/RAG Assistant-<version>-linux-amd64.deb and release/latest-linux.yml
 ```
-
-### Architecture Support
-
-- **amd64 (x86_64):** Intel/AMD 64-bit processors (most desktops/laptops)
-- **arm64 (aarch64):** ARM 64-bit (Raspberry Pi 4+, ARM servers)
 
 ## Testing the Package
 
@@ -186,13 +144,13 @@ npm run package:linux
 
 ```bash
 # Install package
-sudo apt install ./RAG-Assistant-0.1.7-linux-amd64.deb
+sudo apt install ./RAG.Assistant-0.7.3-linux-amd64.deb
 
 # Verify files installed
 dpkg -L rag-assistant
 
 # Check sandbox helper permissions
-ls -la "/opt/Zotero RAG Assistant/chrome-sandbox"
+ls -la "/opt/RAG Assistant/chrome-sandbox"
 
 # Launch from menu or terminal
 rag-assistant
@@ -205,7 +163,7 @@ rag-assistant
 
 ```bash
 # Install newer version over existing
-sudo apt install ./RAG-Assistant-0.1.8-linux-amd64.deb
+sudo apt install ./RAG.Assistant-<newer>-linux-amd64.deb
 
 # Verify upgrade worked
 rag-assistant --version
@@ -218,7 +176,7 @@ rag-assistant --version
 sudo apt remove rag-assistant
 
 # Verify files removed
-ls /opt | grep -i zotero
+ls /opt | grep -i "rag assistant"
 # Should be empty
 
 # Check menu entry removed
@@ -256,17 +214,7 @@ echo 'kernel.unprivileged_userns_clone=1' | sudo tee /etc/sysctl.d/00-local-user
 **Check:**
 1. Dependencies installed: `apt-cache policy libnotify4 libnss3 libxss1`
 2. Python environment set up: `ls ~/.config/rag-assistant/venv/bin/python3` (created on first launch from the system `python3`, 3.11+)
-3. Logs: Run `rag-assistant` from terminal to see error output
-
-### AppImage Sandbox Issues
-
-**Workaround (not ideal but works):**
-```bash
-# Only if sandbox truly doesn't work
-./RAG-Assistant-0.1.7-linux-x64.AppImage --no-sandbox
-```
-
-**Better solution:** Use the `.deb` package instead for proper sandbox support.
+3. Logs: `~/.config/RAG Assistant/logs/` (`python-setup.log`, `backend.log`), or run `rag-assistant` from a terminal
 
 ## APT Repository (Future)
 
@@ -288,10 +236,9 @@ sudo apt upgrade
 ## Best Practices
 
 ### For Users
-1. **Prefer `.deb` packages** over AppImages for installed apps
-2. **Keep system updated** to ensure kernel namespace support
-3. **Don't modify sandbox permissions** unless instructed
-4. **Report issues** with full terminal output
+1. **Keep system updated** to ensure kernel namespace support
+2. **Don't modify sandbox permissions** unless instructed
+3. **Report issues** with full terminal output
 
 ### For Developers
 1. **Always test on clean Ubuntu/Debian VM** before releasing
@@ -309,7 +256,7 @@ sudo apt upgrade
 
 Unlike macOS/Windows (which bundle Python), the Linux build creates a virtual
 environment at `~/.config/rag-assistant/venv` on first run and installs
-dependencies there (2-5 min). Most problems are venv setup issues.
+dependencies there (about 1 GB; a few minutes). Most problems are venv setup issues.
 
 **Backend won't start (`ERR_CONNECTION_REFUSED` on `localhost:8000`)** — the venv
 didn't set up. Check `python3 --version` (needs 3.11+), then reset it (recreated on next launch):
@@ -324,14 +271,10 @@ rm -rf ~/.config/rag-assistant/venv
 sudo apt install python3-venv
 ```
 
-**"Failed to install required Python packages"** — usually no internet or missing
-build tools (Fedora: `gcc gcc-c++ python3-devel`):
-
-```bash
-sudo apt install build-essential python3-dev
-ping pypi.org
-rm -rf ~/.config/rag-assistant/venv            # then relaunch
-```
+**"Failed to download the required Python packages"** — usually no internet or a
+full disk. Every package has a prebuilt wheel for Python 3.11–3.14, so no compiler
+is needed. The dialog shows the last lines of pip's output; the full output is in
+`~/.config/RAG Assistant/logs/python-setup.log`. Relaunching retries the install.
 
 **"Permission denied"**:
 
@@ -345,10 +288,9 @@ chmod -R u+rwX ~/.config/rag-assistant
 sudo lsof -i :8000 && kill -9 <PID>
 ```
 
-**Seeing detailed errors** — launch from a terminal (`rag-assistant` or the
-AppImage path) to see stdout/stderr, or press `Ctrl+Shift+I` → Console and look
+**Seeing detailed errors** — launch `rag-assistant` from a terminal to see stdout/stderr, or press `Ctrl+Shift+I` → Console and look
 for `[Backend Error]`. The backend's own output is appended to
-`~/.config/rag-assistant/logs/backend.log` (previous generation in `backend.log.1`).
+`~/.config/RAG Assistant/logs/backend.log` (previous generation in `backend.log.1`).
 
 **Running the bundled backend manually** (advanced):
 
