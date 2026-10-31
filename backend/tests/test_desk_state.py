@@ -78,6 +78,7 @@ def test_a_failed_save_keeps_the_old_settings(client, monkeypatch):
     with monkeypatch.context() as patched:
         patched.setattr("backend.profile_manager.json.dump", full_disk)
         assert pm.save_profile_settings("default", {"providers": {}}) is False
+    assert not list(pm.get_profile_dir("default").glob("*.tmp"))  # no half-written keys left behind
     assert pm.load_profile_settings("default")["providers"]["openai"]["credentials"]["api_key"] == "sk-x"
 
 
@@ -113,6 +114,7 @@ def test_settings_are_private_to_the_user(client):
     _, pm = client
     pm.save_profile_settings("default", {"providers": {}})
     assert pm.get_profile_settings_file("default").stat().st_mode & 0o777 == 0o600
+    assert pm.BASE_DIR.stat().st_mode & 0o777 == 0o700
 
 
 def test_deleting_the_active_profile_leaves_a_usable_one(client):

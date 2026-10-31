@@ -84,6 +84,7 @@ def test_a_web_page_cannot_drive_the_backend(client):
     c, bot, _ = client
     assert c.post("/api/index_cancel", headers={"Origin": "https://evil.example"}).status_code == 403
     assert c.post("/api/index_cancel", headers={"Origin": "null"}).status_code == 403
+    assert c.post("/api/index_cancel", headers={"Origin": "http://localhost:3000"}).status_code == 403
     assert c.get("/health", headers={"Host": "rebind.evil.example"}).status_code == 400
     bot.cancel_indexing.assert_not_called()
 

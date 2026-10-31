@@ -39,12 +39,16 @@ class ProfileManager:
         """Write through a temporary file, so a crash or a full disk never costs the old file."""
         tmp = path.with_name(path.name + ".tmp")
         with cls._io_lock:
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            os.chmod(tmp, 0o600)  # settings.json holds API keys
-            os.replace(tmp, path)
+            try:
+                # Private from the first byte: settings.json holds API keys.
+                with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, path)
+            except BaseException:
+                tmp.unlink(missing_ok=True)
+                raise
 
     @classmethod
     def _read_json(cls, path: Path) -> Any:
@@ -69,6 +73,7 @@ class ProfileManager:
     def __init__(self):
         """Initialize profile manager and ensure directory structure exists."""
         self.BASE_DIR.mkdir(parents=True, exist_ok=True)
+        os.chmod(self.BASE_DIR, 0o700)  # chat history and API keys are one person's
         self.PROFILES_DIR.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"[ProfileManager] Initialized with BASE_DIR: {self.BASE_DIR}")

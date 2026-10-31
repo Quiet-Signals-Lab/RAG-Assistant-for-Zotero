@@ -35,7 +35,6 @@ logging.getLogger('grpc').setLevel(logging.CRITICAL)
 logging.getLogger('google.auth').setLevel(logging.WARNING)
 
 from contextlib import asynccontextmanager
-from urllib.parse import urlsplit
 from fastapi import FastAPI, Query, Body, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
@@ -96,12 +95,14 @@ def _fail(e: Exception, status: int = 500) -> HTTPException:
     return HTTPException(status_code=status, detail=str(e))
 
 
+DEV_ORIGINS = ["http://localhost:8080", "http://localhost:5173", "http://127.0.0.1:5173"]
+
 # CORS setup: matches your frontend HTML server (e.g., http://localhost:8080)
 app.add_middleware(
     CORSMiddleware,
     # Allow the typical dev server origins (Vite default 5173 and older 8080),
     # plus localhost variants used during development.
-    allow_origins=["http://localhost:8080", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=DEV_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -111,15 +112,16 @@ app.add_middleware(
 class LocalPagesOnly:
     """Refuse requests sent by a web page. CORS only hides the answer from it; the request
     still runs, and the port is predictable. The packaged app's file:// page sends no Origin
-    (measured in Electron), so any Origin must be localhost. "null" stays refused: sandboxed
-    iframes on any site send it. Pure ASGI, so /api/annotate still sees disconnects."""
+    (measured in Electron), so any Origin must be a dev server's exactly: another port on
+    localhost could be anyone's page. "null" stays refused: sandboxed iframes on any site send
+    it. Pure ASGI, so /api/annotate still sees disconnects."""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
         origin = dict(scope.get("headers") or []).get(b"origin")
-        if origin and urlsplit(origin.decode("latin-1")).hostname not in ("localhost", "127.0.0.1"):
+        if origin and origin.decode("latin-1") not in DEV_ORIGINS:
             await PlainTextResponse("Forbidden origin", status_code=403)(scope, receive, send)
             return
         await self.app(scope, receive, send)
