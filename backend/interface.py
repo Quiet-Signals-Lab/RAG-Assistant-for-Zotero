@@ -4,7 +4,8 @@ from backend.zotero_dbase import ZoteroLibrary
 from backend.zoteroitem import ZoteroItem
 from backend.pdf import PDF
 from backend.chunking import chunk_blocks, context_header
-from backend.vector_db import ChromaClient
+from backend.vector_db import ChromaClient, POOL_PER_ITEM
+from backend.metadata_utils import year_of
 from backend.embed_utils import get_embeddings_batch, get_embedding_dimension, rerank_passages
 from backend.model_providers import ProviderManager, Message
 from backend.model_providers.base import (
@@ -318,8 +319,7 @@ class ZoteroChatbot:
     @staticmethod
     def _year_of(meta) -> int:
         """0 means unknown."""
-        match = re.search(r'\b(19|20)\d{2}\b', meta.get("date") or "")
-        return int(match.group(0)) if match else 0
+        return year_of(meta.get("date"))
 
     def _chunk_metadata(self, item, chunks):
         """Per-chunk metadata: primitives only, no None (ChromaDB rejects it)."""
@@ -340,9 +340,13 @@ class ZoteroChatbot:
             for i, chunk in enumerate(chunks)
         ]
 
-    def _index_one(self, item) -> int:
+    def _index_one(self, item, replace: bool = False) -> int:
         """Extract, chunk, embed and store one Zotero item. Returns the chunk
-        count, or raises _SkipItem with the reason it could not be indexed."""
+        count, or raises _SkipItem with the reason it could not be indexed.
+
+        `replace` drops the item's old chunks, which an older chunking of the same PDF
+        must not leave behind, but only once the new ones are ready: a PDF on a drive
+        that is unplugged today keeps the passages it has."""
         item_id = str(item['item_id'])
         if not (item.filepath and os.path.exists(item.filepath)):
             raise _SkipItem(f"PDF not found at {item.filepath}")
@@ -369,6 +373,8 @@ class ZoteroChatbot:
         if vectors and len(vectors[0]) != expected_dim:
             raise _SkipItem(f"Unexpected embedding dimension {len(vectors[0])}, expected {expected_dim}")
         try:
+            if replace:
+                self.chroma.delete_item(item_id)
             self.chroma.add_chunks(
                 ids=[f"{item_id}:{i}" for i in range(len(chunks))],
                 documents=texts,
@@ -421,11 +427,7 @@ class ZoteroChatbot:
                     break
                 item_id = str(item['item_id'])
                 try:
-                    if not incremental:
-                        # A full reindex replaces the item, so chunks from an older
-                        # chunking of the same PDF must not survive.
-                        self.chroma.delete_item(item_id)
-                    n = self._index_one(item)
+                    n = self._index_one(item, replace=not incremental)
                     logger.info("Indexed item %s with %d chunks", item_id, n)
                     streak = 0
                 except _SkipItem as skip:
@@ -580,7 +582,7 @@ class ZoteroChatbot:
             item_where = merge_where_clauses(item_where, {"item_id": {"$nin": list(exclude_item_ids)}})
         return merge_where_clauses(item_where, metadata_where), extracted or None, item_where
 
-    def _search_and_rerank(self, query, where, k, rerank_top_k, fallback_where=None):
+    def _search_and_rerank(self, query, where, k, rerank_top_k, fallback_where=None, scoped_per_item=POOL_PER_ITEM):
         """Hybrid search (RRF) under `where`, then cross-encoder rerank.
 
         When the search finds nothing and `fallback_where` differs from `where`, it
@@ -593,7 +595,8 @@ class ZoteroChatbot:
         search_prompt = self.build_search_prompt(query)
 
         def run(w):
-            results = search(query=search_prompt, k=k, where=w, embedding_model_id=self.embedding_model_id) or {}
+            per_item = scoped_per_item if w else POOL_PER_ITEM
+            results = search(query=search_prompt, k=k, where=w, embedding_model_id=self.embedding_model_id, per_item=per_item) or {}
             return (results.get("documents") or [[]])[0] or [], (results.get("metadatas") or [[]])[0] or []
 
         docs, metas = run(where)
@@ -740,7 +743,7 @@ class ZoteroChatbot:
             }
         except Exception as e:
             logger.warning("Could not read the library's vocabulary: %s", e)
-            vocab = {"authors": [], "tags": [], "collections": [], "item_types": [], "common_tags": set()}
+            return {"authors": [], "tags": [], "collections": [], "item_types": [], "common_tags": set()}
         self._vocab, self._vocab_at = vocab, time.time()
         return vocab
 
@@ -981,6 +984,8 @@ class ZoteroChatbot:
             k=limits["retrieval_k"],
             rerank_top_k=limits["rerank_top_k"],
             fallback_where=fallback_where,
+            # Under a scope one item may be all there is to read.
+            scoped_per_item=max(POOL_PER_ITEM, limits["max_total_snippets"]),
         )
         among_prior = bool(prior_ids) and not fell_back
 

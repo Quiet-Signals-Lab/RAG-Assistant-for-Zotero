@@ -57,12 +57,15 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ className = '' }) => 
     setIsDeleting(true);
     
     try {
+      const other = profiles.find((p) => p.id !== activeProfileId);
       const success = await deleteProfile(activeProfileId, true);
       if (success) {
-        // Profile deletion will trigger app reload, so no need for additional actions
         alert('Profile deleted successfully. The application will now reload.');
+        // Activating reloads the backend off the deleted profile's index, then the page.
+        if (other) await switchProfile(other.id);
       } else {
-        alert('Failed to delete profile. Please try again.');
+        alert('The profile could not be fully deleted. Restart the app and delete it again if it is still listed.');
+        window.location.reload(); // the backend may already have moved to another profile
       }
     } catch (error) {
       console.error('Error deleting profile:', error);

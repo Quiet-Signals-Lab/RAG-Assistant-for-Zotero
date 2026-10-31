@@ -16,6 +16,7 @@ def client(monkeypatch):
     bot.embedding_model_id = "bge-base"
     bot.index_progress = {"processed_items": 1, "total_items": 2}
     bot.chroma.has_pdf_path.return_value = False
+    bot.chroma.collection_name = "zotero_lib_bge_base"
     bot.zlib.db_path = "/nowhere/zotero.sqlite"
     bot.zlib.storage_path = None
     monkeypatch.setattr(main, "chatbot", bot)
@@ -52,6 +53,82 @@ def test_exceptions_become_500_with_detail(client):
     r = c.get("/api/index_stats")
     assert r.status_code == 500
     assert r.json() == {"detail": "disk on fire"}
+
+
+def test_index_stats_does_not_count_excluded_items_as_new(client):
+    c, bot, pm = client
+    bot.chroma.get_indexed_item_ids.return_value = {"1"}
+    bot.chroma.get_document_count.return_value = 5
+    bot.zlib.search_parent_items_with_pdfs.return_value = [
+        {"item_id": 1, "item_type": "journalArticle", "collections": "", "tags": ""},
+        {"item_id": 2, "item_type": "journalArticle", "collections": "", "tags": ""},
+        {"item_id": 3, "item_type": "book", "collections": "", "tags": ""},
+    ]
+    pm.load_profile_settings.return_value = {"excludedItemTypes": ["book"]}
+    body = c.get("/api/index_stats").json()
+    assert (body["zotero_items"], body["new_items"], body["zotero_error"]) == (2, 1, None)
+
+
+def test_index_stats_reports_an_unreadable_zotero_database(client):
+    c, bot, _ = client
+    bot.chroma.get_indexed_item_ids.return_value = set()
+    bot.chroma.get_document_count.return_value = 0
+    bot.zlib.search_parent_items_with_pdfs.side_effect = main.sqlite3.OperationalError("unable to open database file")
+    r = c.get("/api/index_stats")
+    assert r.status_code == 200
+    assert r.json()["zotero_error"] == "unable to open database file"
+    assert r.json()["zotero_path"] == "/nowhere/zotero.sqlite"
+
+
+def test_a_web_page_cannot_drive_the_backend(client):
+    c, bot, _ = client
+    assert c.post("/api/index_cancel", headers={"Origin": "https://evil.example"}).status_code == 403
+    assert c.post("/api/index_cancel", headers={"Origin": "null"}).status_code == 403
+    assert c.get("/health", headers={"Host": "rebind.evil.example"}).status_code == 400
+    bot.cancel_indexing.assert_not_called()
+
+
+def test_the_apps_own_pages_can_reach_the_backend(client):
+    c, _, _ = client
+    assert c.post("/api/index_cancel").status_code == 200  # the packaged file:// page sends no Origin
+    assert c.post("/api/index_cancel", headers={"Origin": "http://localhost:5173"}).status_code == 200
+    assert c.get("/health", headers={"Host": "127.0.0.1:8000"}).status_code == 200
+
+
+def test_changing_the_zotero_path_takes_effect_without_a_restart(client, tmp_path):
+    c, bot, pm = client
+    pm.save_profile_settings.return_value = True
+    bot.zlib = main.ZoteroLibrary("/old/zotero.sqlite")
+    new = tmp_path / "zotero.sqlite"
+    assert c.post("/api/settings", json={"zoteroPath": str(new)}).status_code == 200
+    assert bot.zlib.db_path == str(new)
+    assert bot._vocab is None
+
+
+def test_a_new_api_key_takes_effect_without_a_restart(client):
+    c, bot, pm = client
+    pm.save_profile_settings.return_value = True
+    keys = {"providers": {"openai": {"enabled": True, "credentials": {"api_key": "sk-new"}}}}
+    assert c.post("/api/settings", json=keys).status_code == 200
+    assert bot.update_provider_settings.call_args.kwargs["credentials"]["openai"]["api_key"] == "sk-new"
+
+
+def test_the_zotero_path_cannot_change_under_a_running_index(client):
+    c, bot, pm = client
+    bot.is_indexing = True
+    assert c.post("/api/settings", json={"zoteroPath": "/elsewhere/zotero.sqlite"}).status_code == 409
+    pm.save_profile_settings.assert_not_called()
+
+
+def test_a_chat_after_a_restart_continues_the_saved_conversation(client):
+    c, bot, pm = client
+    bot.chat.return_value = {"summary": "hi", "citations": [], "snippets": [], "generated_title": None}
+    bot.conversation_store = main.ZoteroChatbot.__init__.__globals__["ConversationStore"]()
+    pm.load_profile_sessions.return_value = {"sessions": {"s1": {"messages": [
+        {"role": "user", "content": "first question"}, {"role": "assistant", "content": "first answer"},
+    ]}}}
+    assert c.post("/api/chat", json={"query": "and then?", "session_id": "s1"}).status_code == 200
+    assert [m.content for m in bot.conversation_store.get_messages("s1") if m.role != "system"] == ["first question", "first answer"]
 
 
 def test_missing_query_is_400(client):

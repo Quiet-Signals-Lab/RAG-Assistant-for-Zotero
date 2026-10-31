@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { Citation, DeskItem, KnownItem, ScopeFilters } from "../../types/desk";
+import { useNavigate } from "react-router-dom";
+import type { Citation, DeskItem, IndexStats, KnownItem, ScopeFilters } from "../../types/desk";
 import { shortCite, sortName } from "./cite";
 import { useDesk, type Sort } from "./DeskContext";
 import { bibtex, pathfinder, ris } from "./exports";
@@ -116,6 +117,42 @@ const KnownItemCard: React.FC<{ known: KnownItem; others: KnownItem[] }> = ({ kn
   );
 };
 
+/** Why search cannot work yet, and the one step that fixes it. */
+const NotReady: React.FC<{ stats: IndexStats }> = ({ stats }) => {
+  const desk = useDesk();
+  const navigate = useNavigate();
+  if (stats.zotero_error && /locked/i.test(stats.zotero_error)) {
+    return (
+      <div className="desk-intro">
+        <h2>Zotero is holding its library.</h2>
+        <p>The app cannot read your library while Zotero has it locked. Close Zotero, then check again.</p>
+        <button type="button" className="btn btn--primary" onClick={() => window.location.reload()}>Check again</button>
+      </div>
+    );
+  }
+  if (stats.zotero_error) {
+    return (
+      <div className="desk-intro">
+        <h2>Your Zotero library was not found.</h2>
+        <p>
+          The app looked for it at <code>{stats.zotero_path}</code>. It is a file called <code>zotero.sqlite</code> in your
+          Zotero data folder, which Zotero shows under Settings → Advanced → Files and Folders.
+        </p>
+        <button type="button" className="btn btn--primary" onClick={() => navigate("/settings")}>Set the path in Settings</button>
+      </div>
+    );
+  }
+  return (
+    <div className="desk-intro">
+      <h2>Your library is not indexed yet.</h2>
+      <p>Search covers the full text of your PDFs, so it needs an index first. The index is built on this computer and nothing leaves it.</p>
+      {desk.room !== "library" && (
+        <button type="button" className="btn btn--primary" onClick={() => desk.setRoom("library")}>Open the library to index it</button>
+      )}
+    </div>
+  );
+};
+
 type RowProps = { item: DeskItem; selected: boolean; pinned: boolean; onPick: () => void };
 
 const Row = React.forwardRef<HTMLButtonElement, RowProps>(
@@ -155,7 +192,7 @@ const Row = React.forwardRef<HTMLButtonElement, RowProps>(
 );
 Row.displayName = "Row";
 
-const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
+const Bibliography: React.FC<{ stats: IndexStats | null }> = ({ stats }) => {
   const desk = useDesk();
   const { result, status, error } = desk;
   const [showSeeAlso, setShowSeeAlso] = useState(false);
@@ -196,6 +233,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
     else desk.putAside(r.item_ids);
   };
   const pinnedItems = useMemo(() => new Set(desk.pins.map((p) => p.itemId)), [desk.pins]);
+  const notReady = stats?.indexed_items === 0 ? <NotReady stats={stats} /> : null;
 
   useEffect(() => setShowSeeAlso(false), [result]);
 
@@ -272,6 +310,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
         <h2 className="panel-head__title">
           Results{result ? ` · ${result.items.length} item${result.items.length === 1 ? "" : "s"}` : ""}
         </h2>
+        {result && result.items.length > 0 && <span className="panel-head__hint" aria-hidden="true">↑ ↓ move · p pin · o open PDF</span>}
       </div>
       {result && result.items.length > 0 && (
         <div className="toolbar" aria-label="List tools">
@@ -331,26 +370,18 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
       )}
 
       {!result && status !== "error" && (
-        <div className="desk-intro">
-          {indexEmpty ? (
-            <>
-              <h2>Your library is not indexed yet.</h2>
-              <p>Search covers the full text of your PDFs, so it needs an index first. The index is built on this computer and nothing leaves it.</p>
-              <button type="button" className="btn btn--primary" onClick={() => desk.setRoom("library")}>Open the library to index it</button>
-            </>
-          ) : (
-            <>
-              <h2>Search your library.</h2>
-              <p>Type a topic, a title, or an author and year. You get the items in your library that bear on it, ranked, with the passages that matched. No answer is written for you.</p>
-              <ul className="desk-intro__examples">
-                <li><span className="mono">a topic</span> how platform workers organise</li>
-                <li><span className="mono">a title</span> “Cruel optimism”</li>
-                <li><span className="mono">a name</span> Woodcock 2020</li>
-                <li><span className="mono">a scope</span> courier strikes since 2015</li>
-              </ul>
-            </>
-          )}
-        </div>
+        notReady ?? (
+          <div className="desk-intro">
+            <h2>Search your library.</h2>
+            <p>Type a topic, a title, or an author and year. You get the items in your library that bear on it, ranked, with the passages that matched. No answer is written for you.</p>
+            <ul className="desk-intro__examples">
+              <li><span className="mono">a topic</span> how platform workers organise</li>
+              <li><span className="mono">a title</span> “Cruel optimism”</li>
+              <li><span className="mono">a name</span> Woodcock 2020</li>
+              <li><span className="mono">a scope</span> courier strikes since 2015</li>
+            </ul>
+          </div>
+        )
       )}
 
       {result && (
@@ -374,7 +405,7 @@ const Bibliography: React.FC<{ indexEmpty: boolean }> = ({ indexEmpty }) => {
           )}
 
           {result.items.length === 0 ? (
-            <div className="desk-empty">
+            notReady ?? <div className="desk-empty">
               <h2>Nothing in your library matches this.</h2>
               <p>Try other words for the same idea, or a wider scope.</p>
               {(Object.keys(desk.scope).length > 0 || desk.within) && (

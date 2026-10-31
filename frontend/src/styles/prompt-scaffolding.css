@@ -96,7 +96,7 @@
 .search-input {
   width: 100%;
   padding: 8px 11px 8px 34px;
-  border: 1.5px solid var(--border-subtle);
+  border: 1.5px solid var(--edge);
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-family: var(--font-sans);
@@ -327,19 +327,6 @@
   opacity: 0.6;
 }
 
-.date-input-group {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.date-input-group label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-main);
-}
-
 /* Text Filter (Title/Author) */
 .text-filter {
   position: relative;
@@ -559,7 +546,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  font: 500 11px/1.2 var(--font-sans);
+  font: 500 12px/1.2 var(--font-sans);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

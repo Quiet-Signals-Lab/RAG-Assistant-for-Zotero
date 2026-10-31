@@ -12,7 +12,7 @@ const SnippetsPanel: React.FC = () => {
   const { currentSessionId, getSession } = useSessions();
   const { selectedResponseId } = useResponseSelection();
   const session = currentSessionId ? getSession(currentSessionId) : null;
-  const [groupedSnippets, setGroupedSnippets] = useState<Map<string, { source: Source, snippets: Snippet[], citationIndex: number }>>(new Map());
+  const [groupedSnippets, setGroupedSnippets] = useState<Map<string, { source: Source, snippets: Snippet[] }>>(new Map());
 
   // Update snippets when selected response changes
   useEffect(() => {
@@ -24,14 +24,14 @@ const SnippetsPanel: React.FC = () => {
     // Find the selected message
     const selectedMessage = session.messages.find(m => m.id === selectedResponseId);
     if (selectedMessage && selectedMessage.role === "assistant" && selectedMessage.sources) {
-      // Group snippets by source, preserving citation index
-      const grouped = new Map<string, { source: Source, snippets: Snippet[], citationIndex: number }>();
+      // Group snippets by source
+      const grouped = new Map<string, { source: Source, snippets: Snippet[] }>();
       
-      selectedMessage.sources.forEach((source, index) => {
+      selectedMessage.sources.forEach((source) => {
         if (source.snippets && source.snippets.length > 0) {
           // Sort snippets by confidence (highest first)
           const sortedSnippets = [...source.snippets].sort((a, b) => b.confidence - a.confidence);
-          grouped.set(source.documentId, { source, snippets: sortedSnippets, citationIndex: index + 1 });
+          grouped.set(source.documentId, { source, snippets: sortedSnippets });
         }
       });
       
@@ -43,7 +43,7 @@ const SnippetsPanel: React.FC = () => {
 
   const state = !session
     ? "Ask a question to see the passages the answer was written from."
-    : !selectedResponseId
+    : !session.messages.some((m) => m.id === selectedResponseId)
       ? "Choose an answer in the conversation to see its passages."
       : groupedSnippets.size === 0
         ? "This answer cites no passages from your library."
@@ -63,10 +63,10 @@ const SnippetsPanel: React.FC = () => {
       {state ? (
         <p className="side-panel__empty">{state}</p>
       ) : (
-        Array.from(groupedSnippets.values()).map(({ source, snippets, citationIndex }) => (
+        Array.from(groupedSnippets.values()).map(({ source, snippets }) => (
           <section key={source.documentId} className="evidence-source">
             <h3 className="evidence-source__title">
-              <span className="evidence-source__cite">[{citationIndex}]</span> {source.title}
+              <span className="evidence-source__cite">[{source.documentId}]</span> {source.title}
             </h3>
             <p className="evidence-source__meta">
               {source.author}

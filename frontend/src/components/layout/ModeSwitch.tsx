@@ -8,7 +8,7 @@ const ModeSwitch: React.FC = () => {
   return (
     <div className="segmented" role="group" aria-label="Mode">
       {([["desk", "Search"], ["chat", "RAG Chat"]] as const).map(([id, label]) => (
-        <button key={id} type="button" data-mode={id} aria-pressed={mode === id} onClick={() => mode !== id && updateSettings({ interfaceMode: id })}>
+        <button key={id} type="button" data-mode={id} aria-pressed={mode === id} onClick={() => { if (mode !== id) updateSettings({ interfaceMode: id }).catch(() => undefined); /* the error banner shows it */ }}>
           {label}
         </button>
       ))}

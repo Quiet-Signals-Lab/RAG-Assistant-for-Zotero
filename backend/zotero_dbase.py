@@ -8,7 +8,9 @@ from pathlib import Path
 
 class ZoteroLibrary:
     def __init__(self, db_path, storage_path=None):
-        self.db_path = db_path
+        path = Path(db_path).expanduser()
+        # People paste the data folder as often as the file inside it.
+        self.db_path = str(path / "zotero.sqlite" if path.is_dir() else path)
         self.storage_path = storage_path
         self._local = threading.local()
         self._lock = threading.Lock()
@@ -17,8 +19,9 @@ class ZoteroLibrary:
         """Get or create thread-local database connection."""
         if not hasattr(self._local, 'conn') or self._local.conn is None:
             self._local.conn = sqlite3.connect(
-                f'file:{self.db_path}?mode=ro', 
+                Path(self.db_path).resolve().as_uri() + '?mode=ro',  # as_uri: a '#' or '%' in the path stays a path
                 uri=True, 
+                timeout=0.25,  # waiting out a lock would stall every search that reads Zotero
                 check_same_thread=True  # Changed to True for safety
             )
             # Enable shared cache for read-only connections
@@ -111,7 +114,7 @@ class ZoteroLibrary:
             GROUP_CONCAT(DISTINCT t.name) AS tags,
             GROUP_CONCAT(DISTINCT c.collectionName) AS collections,
             att.key AS attachment_key,
-            att_path.path AS attachment_path,
+            ia.path AS attachment_path,
             itemType.typeName AS item_type
         FROM items i
         JOIN itemTypes itemType ON i.itemTypeID = itemType.itemTypeID
@@ -126,13 +129,13 @@ class ZoteroLibrary:
         LEFT JOIN collectionItems ci ON i.itemID = ci.itemID
         LEFT JOIN collections c ON ci.collectionID = c.collectionID
 
-        LEFT JOIN itemAttachments ia ON i.itemID = ia.parentItemID
-        LEFT JOIN items att ON ia.itemID = att.itemID
-        LEFT JOIN itemData att_data ON att.itemID = att_data.itemID AND att_data.fieldID = (SELECT fieldID FROM fields WHERE fieldName = 'mimeType')
-        LEFT JOIN itemDataValues att_mime ON att_data.valueID = att_mime.valueID
-        LEFT JOIN itemAttachments att_path ON att.itemID = att_path.itemID
+        JOIN itemAttachments ia ON i.itemID = ia.parentItemID
+            AND ia.path IS NOT NULL
+            AND (ia.contentType = 'application/pdf' OR ia.path LIKE '%.pdf')
+            AND ia.itemID NOT IN (SELECT itemID FROM deletedItems)
+        JOIN items att ON ia.itemID = att.itemID
 
-        WHERE (att_mime.value = 'application/pdf' OR att_path.path LIKE '%.pdf')
+        WHERE i.itemID NOT IN (SELECT itemID FROM deletedItems)
         GROUP BY i.itemID
         """
 

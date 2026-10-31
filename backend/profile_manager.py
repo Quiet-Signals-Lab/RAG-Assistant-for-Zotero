@@ -22,12 +22,45 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import shutil
 import logging
+import threading
+import time
 
 logger = logging.getLogger(__name__)
 
 
 class ProfileManager:
     """Manages user profiles with isolated settings and data."""
+
+    # Requests run on a thread pool, and Windows refuses to replace a file that is open.
+    _io_lock = threading.Lock()
+
+    @classmethod
+    def _write_json(cls, path: Path, data: Any) -> None:
+        """Write through a temporary file, so a crash or a full disk never costs the old file."""
+        tmp = path.with_name(path.name + ".tmp")
+        with cls._io_lock:
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.chmod(tmp, 0o600)  # settings.json holds API keys
+            os.replace(tmp, path)
+
+    @classmethod
+    def _read_json(cls, path: Path) -> Any:
+        """Read a JSON file. A brief error (antivirus or a sync tool holding it) is retried; one that
+        lasts is raised, since treating it as "no data" would let the next save overwrite the file."""
+        for attempts_left in (2, 1, 0):
+            try:
+                with cls._io_lock:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+            except FileNotFoundError:
+                raise
+            except OSError:
+                if not attempts_left:
+                    raise
+                time.sleep(0.1)
     
     BASE_DIR = Path.home() / ".zotero-llm"
     PROFILES_DIR = BASE_DIR / "profiles"
@@ -92,7 +125,8 @@ class ProfileManager:
         
         profile_dir = self.get_profile_dir(profile_id)
         
-        if profile_dir.exists():
+        # A folder whose profile.json is unreadable can be repaired; only that file is rewritten.
+        if self.get_profile(profile_id):
             raise ValueError(f"Profile '{profile_id}' already exists")
         
         # Create profile directory structure
@@ -110,18 +144,17 @@ class ProfileManager:
         }
         
         metadata_file = self.get_profile_metadata_file(profile_id)
-        with open(metadata_file, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2)
+        self._write_json(metadata_file, metadata)
         
         # Initialize empty settings (will use defaults)
         settings_file = self.get_profile_settings_file(profile_id)
-        with open(settings_file, 'w', encoding='utf-8') as f:
-            json.dump({}, f, indent=2)
+        if not settings_file.exists():
+            self._write_json(settings_file, {})
         
         # Initialize empty sessions
         sessions_file = self.get_profile_sessions_file(profile_id)
-        with open(sessions_file, 'w', encoding='utf-8') as f:
-            json.dump({"sessions": {}, "currentSessionId": None}, f, indent=2)
+        if not sessions_file.exists():
+            self._write_json(sessions_file, {"sessions": {}, "currentSessionId": None})
         
         logger.info(f"Created profile: {profile_id} ({name})")
         return metadata
@@ -145,9 +178,7 @@ class ProfileManager:
             metadata_file = profile_dir / "profile.json"
             if metadata_file.exists():
                 try:
-                    with open(metadata_file, 'r', encoding='utf-8') as f:
-                        metadata = json.load(f)
-                        profiles.append(metadata)
+                    profiles.append(self._read_json(metadata_file))
                 except Exception as e:
                     logger.warning(f"Warning: Failed to load profile metadata for {profile_dir.name}: {e}")
         
@@ -171,8 +202,7 @@ class ProfileManager:
             return None
         
         try:
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return self._read_json(metadata_file)
         except Exception as e:
             logger.error(f"Error reading profile metadata: {e}")
             return None
@@ -202,8 +232,7 @@ class ProfileManager:
         
         metadata_file = self.get_profile_metadata_file(profile_id)
         try:
-            with open(metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2)
+            self._write_json(metadata_file, metadata)
             return True
         except Exception as e:
             logger.error(f"Error updating profile metadata: {e}")
@@ -223,10 +252,12 @@ class ProfileManager:
         Raises:
             ValueError: If trying to delete active profile without force=True
         """
-        if not force:
-            active = self.get_active_profile()
-            if active and active.get('id') == profile_id:
-                raise ValueError("Cannot delete active profile. Switch to another profile first or use force=True")
+        active = self.get_active_profile()
+        is_active = bool(active) and active.get('id') == profile_id
+        if is_active and not force:
+            raise ValueError("Cannot delete active profile. Switch to another profile first or use force=True")
+        if is_active and len(self.list_profiles()) < 2:
+            raise ValueError("Cannot delete the only profile")
         
         profile_dir = self.get_profile_dir(profile_id)
         
@@ -238,8 +269,7 @@ class ProfileManager:
             logger.info(f"Deleted profile: {profile_id}")
             
             # If this was the active profile, clear active profile
-            active = self.get_active_profile()
-            if active and active.get('id') == profile_id:
+            if is_active:
                 self.ACTIVE_PROFILE_FILE.unlink(missing_ok=True)
             
             return True
@@ -254,31 +284,23 @@ class ProfileManager:
         Returns:
             Profile metadata dictionary or None if no active profile
         """
-        if not self.ACTIVE_PROFILE_FILE.exists():
-            logger.info(f"[ProfileManager] Active profile file not found at: {self.ACTIVE_PROFILE_FILE}")
-            # Auto-select first available profile
-            profiles = self.list_profiles()
-            if profiles:
-                logger.info(f"[ProfileManager] Auto-selecting first profile: {profiles[0]['id']}")
-                self.set_active_profile(profiles[0]['id'])
-                return profiles[0]
-            logger.info("[ProfileManager] No profiles available to auto-select")
-            return None
-        
         try:
-            with open(self.ACTIVE_PROFILE_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                profile_id = data.get('activeProfileId')
-                if profile_id:
-                    profile = self.get_profile(profile_id)
-                    if profile:
-                        logger.info(f"[ProfileManager] Active profile: {profile_id}")
-                        return profile
-                    else:
-                        logger.info(f"[ProfileManager] WARNING: Active profile '{profile_id}' not found")
+            profile_id = self._read_json(self.ACTIVE_PROFILE_FILE).get('activeProfileId')
+            profile = self.get_profile(profile_id) if profile_id else None
+            if profile:
+                return profile
+            logger.warning(f"[ProfileManager] Active profile '{profile_id}' not found")
+        except FileNotFoundError:
+            pass
         except Exception as e:
-            logger.info(f"[ProfileManager] Error reading active profile: {e}")
-        
+            logger.warning(f"[ProfileManager] Error reading active profile: {e}")
+
+        # No file, or one naming a deleted profile: any profile beats refusing to start.
+        profiles = self.list_profiles()
+        if profiles:
+            logger.info(f"[ProfileManager] Auto-selecting first profile: {profiles[0]['id']}")
+            self.set_active_profile(profiles[0]['id'])
+            return profiles[0]
         return None
     
     def set_active_profile(self, profile_id: str) -> bool:
@@ -296,11 +318,10 @@ class ProfileManager:
             return False
         
         try:
-            with open(self.ACTIVE_PROFILE_FILE, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "activeProfileId": profile_id,
-                    "switchedAt": datetime.utcnow().isoformat() + "Z"
-                }, f, indent=2)
+            self._write_json(self.ACTIVE_PROFILE_FILE, {
+                "activeProfileId": profile_id,
+                "switchedAt": datetime.utcnow().isoformat() + "Z"
+            })
             logger.info(f"Switched to profile: {profile_id}")
             return True
         except Exception as e:
@@ -319,23 +340,20 @@ class ProfileManager:
         """
         settings_file = self.get_profile_settings_file(profile_id)
         
-        logger.info(f"[ProfileManager] Loading settings from: {settings_file}")
-        
         if not settings_file.exists():
             logger.info(f"[ProfileManager] Settings file not found, returning empty dict")
             return {}
         
         try:
-            with open(settings_file, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-                logger.info(f"[ProfileManager] Loaded settings with keys: {list(settings.keys())}")
-                if 'zoteroPath' in settings:
-                    logger.info(f"[ProfileManager] Zotero path: {settings['zoteroPath']}")
-                if 'chromaPath' in settings:
-                    logger.info(f"[ProfileManager] Chroma path: {settings['chromaPath']}")
-                return settings
-        except Exception as e:
-            logger.info(f"[ProfileManager] Error loading profile settings: {e}")
+            return self._read_json(settings_file)
+        except ValueError as e:
+            # The app carries on with defaults, and the next save would overwrite this file:
+            # keep it, since it may hold the only copy of the user's API keys.
+            logger.error(f"Unreadable settings, moved to settings.json.bad: {e}")
+            try:
+                os.replace(settings_file, settings_file.with_suffix(".json.bad"))
+            except OSError as move_error:
+                logger.error(f"Could not move the unreadable settings aside: {move_error}")
             return {}
     
     def save_profile_settings(self, profile_id: str, settings: Dict[str, Any]) -> bool:
@@ -352,16 +370,13 @@ class ProfileManager:
         settings_file = self.get_profile_settings_file(profile_id)
         
         try:
-            with open(settings_file, 'w', encoding='utf-8') as f:
-                json.dump(settings, f, indent=2)
+            self._write_json(settings_file, settings)
             
             # Update profile metadata timestamp
             metadata = self.get_profile(profile_id)
             if metadata:
                 metadata["updatedAt"] = datetime.utcnow().isoformat() + "Z"
-                metadata_file = self.get_profile_metadata_file(profile_id)
-                with open(metadata_file, 'w', encoding='utf-8') as mf:
-                    json.dump(metadata, mf, indent=2)
+                self._write_json(self.get_profile_metadata_file(profile_id), metadata)
             
             return True
         except Exception as e:
@@ -383,12 +398,8 @@ class ProfileManager:
         if not sessions_file.exists():
             return {"sessions": {}, "currentSessionId": None}
         
-        try:
-            with open(sessions_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading profile sessions: {e}")
-            return {"sessions": {}, "currentSessionId": None}
+        # An unreadable file raises: answering "no sessions" would let the UI save over them.
+        return self._read_json(sessions_file)
     
     def save_profile_sessions(self, profile_id: str, sessions_data: Dict[str, Any]) -> bool:
         """
@@ -404,16 +415,13 @@ class ProfileManager:
         sessions_file = self.get_profile_sessions_file(profile_id)
         
         try:
-            with open(sessions_file, 'w', encoding='utf-8') as f:
-                json.dump(sessions_data, f, indent=2)
+            self._write_json(sessions_file, sessions_data)
             
             # Update profile metadata timestamp
             metadata = self.get_profile(profile_id)
             if metadata:
                 metadata["updatedAt"] = datetime.utcnow().isoformat() + "Z"
-                metadata_file = self.get_profile_metadata_file(profile_id)
-                with open(metadata_file, 'w', encoding='utf-8') as mf:
-                    json.dump(metadata, mf, indent=2)
+                self._write_json(self.get_profile_metadata_file(profile_id), metadata)
             
             return True
         except Exception as e:
@@ -432,30 +440,25 @@ class ProfileManager:
         """
         path = self.get_profile_desk_file(profile_id)
         try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            data = self._read_json(path)
             if not isinstance(data, dict):
                 raise ValueError("not an object")
             return {"pins": data.get("pins") or [], "log": data.get("log") or [], "context": data.get("context") or []}
         except FileNotFoundError:
             return {"pins": [], "log": [], "context": []}
-        except (OSError, ValueError) as e:
+        except ValueError as e:
             logger.error(f"Unreadable desk state, moved to desk.json.bad: {e}")
             try:
                 os.replace(path, path.with_suffix(".json.bad"))
-            except OSError:
-                pass
+            except OSError as move_error:
+                logger.error(f"Could not move the unreadable desk state aside: {move_error}")
             return {"pins": [], "log": [], "context": []}
 
     def save_desk_state(self, profile_id: str, state: Dict[str, Any]) -> bool:
-        """Write the desk state through a temporary file, so a crash never leaves half a file."""
         path = self.get_profile_desk_file(profile_id)
-        tmp = path.with_suffix(".json.tmp")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(state, f, ensure_ascii=False, indent=1)
-            os.replace(tmp, path)
+            self._write_json(path, state)
             return True
         except Exception as e:
             logger.error(f"Error saving desk state: {e}")

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 
 interface Props {
   onSend: (content: string) => void;
@@ -8,19 +8,6 @@ interface Props {
 
 const ChatInput: React.FC<Props> = ({ onSend, onStop, disabled }) => {
   const [value, setValue] = useState("");
-
-  useEffect(() => {
-    function onInsert(e: Event) {
-      try {
-        const text = (e as CustomEvent<{ text?: string }>).detail?.text;
-        if (text) setValue((v) => (v ? v + "\n" + text : text));
-      } catch (err) {
-        // ignore
-      }
-    }
-    window.addEventListener("zotero:insert-snippet", onInsert as EventListener);
-    return () => window.removeEventListener("zotero:insert-snippet", onInsert as EventListener);
-  }, []);
 
   function submit() {
     if (!value.trim()) return;
@@ -46,7 +33,7 @@ const ChatInput: React.FC<Props> = ({ onSend, onStop, disabled }) => {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
+          readOnly={disabled} // disabled would drop focus on every question
           rows={2}
         />
         {disabled ? (

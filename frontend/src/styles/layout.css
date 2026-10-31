@@ -250,7 +250,7 @@
   min-height: 28px;
   padding: 0 11px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--rule);
+  border: 1px solid var(--edge);
   background: transparent;
   color: var(--ink);
   font: 500 12px/1.2 var(--font-sans);
@@ -317,12 +317,20 @@
   color: var(--error);
 }
 
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: 12px var(--font-sans);
-  color: var(--ink-3);
+/* Over every screen, below the 44px header. */
+.app-banners {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  z-index: 100;
+  width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+}
+
+.app-banners .error-banner {
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
 }
 
 /* ---- Widths --------------------------------------------------------------- */

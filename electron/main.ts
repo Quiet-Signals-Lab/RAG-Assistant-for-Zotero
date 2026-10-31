@@ -32,6 +32,20 @@ let isShuttingDown = false; // FIX: Prevent duplicate shutdown attempts
 let updateDownloaded = false;
 let updateInfo: { version: string; releaseNotes?: string } | null = null;
 let splashWindow: BrowserWindow | null = null; // Splash screen shown during startup
+let detachedBackendPid: number | null = null; // Packaged Linux: the wrapper exits at once, leaving only this pid
+
+// A second instance would kill this one's backend in killExistingBackendProcesses
+if (!app.requestSingleInstanceLock()) {
+  console.log('Another instance is already running, handing over to it');
+  app.exit(0);
+}
+
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
 
 /**
  * Handle command-line arguments for Linux compatibility
@@ -142,12 +156,16 @@ function logDir(): string {
   return dir;
 }
 
+function backendLogFile(): string {
+  return path.join(logDir(), 'backend.log');
+}
+
 /**
  * Open backend.log for appending. One previous generation is kept once the
  * file passes 10 MB, so a long-running install never fills the disk.
  */
 function openBackendLog(): fs.WriteStream {
-  const file = path.join(logDir(), 'backend.log');
+  const file = backendLogFile();
   try {
     if (fs.existsSync(file) && fs.statSync(file).size > 10 * 1024 * 1024) {
       fs.renameSync(file, `${file}.1`);
@@ -156,6 +174,7 @@ function openBackendLog(): fs.WriteStream {
     console.warn('Could not rotate backend log:', e);
   }
   const stream = fs.createWriteStream(file, { flags: 'a' });
+  stream.on('error', (e) => console.warn('Could not write backend log:', e));
   stream.write(`\n[electron] backend starting at ${new Date().toISOString()} (app ${app.getVersion()})\n`);
   console.log(`Backend log: ${file}`);
   return stream;
@@ -313,7 +332,7 @@ async function killExistingBackendProcesses(): Promise<void> {
               try {
                 // Check if it's our backend process
                 const procInfo = execSync(`ps -p ${pid} -o command= 2>/dev/null || true`, { encoding: 'utf-8' });
-                if (procInfo.includes('backend_server') || procInfo.includes('uvicorn') || procInfo.includes('zotero-rag')) {
+                if (procInfo.includes('backend_server') || procInfo.includes('backend.main:app')) {
                   console.log(`  Killing backend process ${pid}...`);
                   execSync(`kill -9 ${pid} 2>/dev/null || true`);
                   console.log(`  ✓ Killed process ${pid}`);
@@ -331,7 +350,7 @@ async function killExistingBackendProcesses(): Promise<void> {
       // Windows: Use netstat to find PIDs on our ports, then verify they are our
       // backend process before killing (to avoid killing unrelated servers).
       const { execSync } = require('child_process');
-      const appProcessNames = ['backend_server', 'uvicorn', 'zotero-rag', 'python'];
+      const appProcessNames = ['backend_server'];
 
       for (let port = 8000; port <= 8010; port++) {
         try {
@@ -549,6 +568,7 @@ async function findSystemPython(): Promise<{ path: string; version?: string; sou
 function runPip(venvPath: string, args: string[], onLine?: (line: string) => void): Promise<void> {
   const logFile = path.join(logDir(), 'python-setup.log');
   const log = fs.createWriteStream(logFile, { flags: 'a' });
+  log.on('error', (e) => console.warn('Could not write setup log:', e));
   log.write(`\n[electron] pip ${args.join(' ')} at ${new Date().toISOString()}\n`);
   return new Promise((resolve, reject) => {
     const proc = spawn(path.join(venvPath, 'bin', 'pip'), args);
@@ -631,6 +651,10 @@ async function setupLinuxVenv(onProgress?: (message: string, progress?: number) 
     } catch (error) {
       // Keep the old venv rather than block startup (e.g. offline); retried next launch
       console.error('✗ Failed to update venv, starting with the existing one:', error);
+      dialog.showErrorBox(
+        'Python Packages Not Updated',
+        `Starting with the packages already installed. This is retried on the next launch.\n\n${error instanceof Error ? error.message : String(error)}`
+      );
     }
     return { pythonPath: pythonBin, venvPath };
   }
@@ -785,7 +809,7 @@ async function getBackendPath(): Promise<{ command: string; args: string[]; cwd:
         console.log(`🔧 Using detached shell wrapper: ${wrapperPath}`);
         return {
           command: wrapperPath,
-          args: [venvSetup.pythonPath, '-m', 'uvicorn', 'backend.main:app', '--port', BACKEND_PORT.toString()],
+          args: [venvSetup.pythonPath, '-m', 'uvicorn', 'backend.main:app', '--port', BACKEND_PORT.toString(), '--no-access-log'],
           cwd: resourcesPath,
           pythonInfo: { version: 'venv', source: 'linux-venv-detached' }
         };
@@ -793,7 +817,7 @@ async function getBackendPath(): Promise<{ command: string; args: string[]; cwd:
       
       return {
         command: venvSetup.pythonPath,
-        args: ['-m', 'uvicorn', 'backend.main:app', '--port', BACKEND_PORT.toString()],
+        args: ['-m', 'uvicorn', 'backend.main:app', '--port', BACKEND_PORT.toString(), '--no-access-log'],
         cwd: resourcesPath,
         pythonInfo: { version: 'venv', source: 'linux-venv' }
       };
@@ -853,14 +877,20 @@ async function getBackendPath(): Promise<{ command: string; args: string[]; cwd:
  * @param maxRetries - Maximum number of health check attempts
  * @param delayMs - Delay between attempts
  * @param modelDownloadInProgress - Callback to check if model download is happening (extends timeout)
+ * @param backendDied - Callback to stop waiting for a process that has already exited
  */
-async function waitForBackend(maxRetries = 30, delayMs = 1000, modelDownloadInProgress?: () => boolean): Promise<boolean> {
+async function waitForBackend(maxRetries = 30, delayMs = 1000, modelDownloadInProgress?: () => boolean, backendDied?: () => boolean): Promise<boolean> {
   console.log(`Waiting for backend to be ready (checking ${BACKEND_URL}/health)...`);
-  
+
   let attempts = 0;
   const startTime = Date.now();
-  
+
   while (attempts < maxRetries) {
+    if (backendDied?.()) {
+      console.error('✗ Backend process exited while waiting for it to become ready');
+      return false;
+    }
+
     try {
       // Use generous timeout as connections can be slower on first startup
       // especially with indexing or slow disk I/O
@@ -888,21 +918,21 @@ async function waitForBackend(maxRetries = 30, delayMs = 1000, modelDownloadInPr
       if ((attempts + 1) % 5 === 0) {
         console.log(`  Attempt ${attempts + 1}/${maxRetries}: Backend not responding yet...`);
       }
-      
-      // If model download is in progress, don't count against max retries
-      // This prevents timeout during lengthy first-run model downloads
-      if (modelDownloadInProgress && modelDownloadInProgress()) {
-        const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
-        console.log(`  Model download in progress (${elapsedSeconds}s elapsed) - extending timeout...`);
-        // Don't increment attempts counter, but still wait
-      } else {
-        attempts++;
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
+
+    // If model download is in progress, don't count against max retries
+    // This prevents timeout during lengthy first-run model downloads
+    if (modelDownloadInProgress && modelDownloadInProgress()) {
+      const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
+      console.log(`  Model download in progress (${elapsedSeconds}s elapsed) - extending timeout...`);
+      // Don't increment attempts counter, but still wait
+    } else {
+      attempts++;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, delayMs));
   }
-  
+
   console.error(`✗ Backend failed to start within ${maxRetries * delayMs / 1000}s timeout`);
   console.error('Troubleshooting tips:');
   console.error('  1. Check if Python executable exists at the expected path');
@@ -910,6 +940,75 @@ async function waitForBackend(maxRetries = 30, delayMs = 1000, modelDownloadInPr
   console.error('  3. Verify backend dependencies are properly bundled');
   console.error(`  4. Try accessing ${BACKEND_URL}/health in a browser`);
   return false;
+}
+
+/**
+ * The backend stopped outside a quit. Requests from the open window would keep
+ * failing, so offer a restart instead of leaving it running without a backend.
+ */
+function reportBackendLost(detail: string): void {
+  if (isInitializing || isShuttingDown) return;
+  dialog.showMessageBox({
+    type: 'error',
+    title: 'Backend Stopped',
+    message: 'The backend service stopped unexpectedly. Restart the application to continue.',
+    detail: `${detail}\n\nBackend log: ${backendLogFile()}`,
+    buttons: ['Restart', 'Quit'],
+    defaultId: 0
+  }).then(result => {
+    if (result.response === 0) app.relaunch();
+    app.quit();
+  });
+}
+
+/**
+ * Packaged Linux: the wrapper has exited, so the backend sends no exit event.
+ * Remember the pid it wrote, for quit, and poll it to notice a crash.
+ */
+function trackDetachedBackend(): void {
+  let pid: number;
+  try {
+    pid = Number(fs.readFileSync(path.join(logDir(), 'backend.pid'), 'utf8'));
+  } catch (e) {
+    console.warn('Could not read backend.pid:', e);
+    return;
+  }
+  // 0 and 1 are not pids here: as process groups they mean this app and every process
+  if (!Number.isInteger(pid) || pid <= 1) {
+    console.warn(`Ignoring invalid backend.pid: ${pid}`);
+    return;
+  }
+
+  detachedBackendPid = pid;
+  const watch = setInterval(() => {
+    if (detachedBackendPid === null) {
+      clearInterval(watch);
+      return;
+    }
+    try {
+      process.kill(detachedBackendPid, 0);
+    } catch {
+      clearInterval(watch);
+      detachedBackendPid = null;
+      console.error('Backend process is gone');
+      reportBackendLost('The process has exited.');
+    }
+  }, 5000);
+}
+
+/**
+ * Stop the backend started by the Linux wrapper. Its setsid made the backend a
+ * group leader, so the pid is also the id of the group holding any helpers.
+ */
+function stopDetachedBackend(): void {
+  if (detachedBackendPid === null) return;
+  try {
+    process.kill(-detachedBackendPid, 'SIGTERM');
+    console.log('✓ Detached backend stopped');
+  } catch (e) {
+    console.warn('Could not stop detached backend:', e);
+  }
+  detachedBackendPid = null;
 }
 
 /**
@@ -1084,7 +1183,8 @@ async function startBackend(): Promise<boolean> {
   }
   
   try {
-    // Store backend output for diagnostics
+    // Store recent backend output for diagnostics; the full output is in backend.log
+    const MAX_CAPTURED_LINES = 200;
     let backendOutput: string[] = [];
     let backendErrors: string[] = [];
     
@@ -1130,13 +1230,18 @@ async function startBackend(): Promise<boolean> {
     // the backend's stdio; everywhere else we pipe it and write the log file here.
     const useLogFiles = process.platform === 'linux' && app.isPackaged;
     const backendLog = useLogFiles ? null : openBackendLog();
-    
+
+    // For detached launches (shell wrapper), the wrapper exits with code 0
+    // immediately, which is expected
+    const isDetachedLaunch = pythonInfo?.source === 'linux-venv-detached';
+
     const spawnOptions: any = {
       cwd,
-      stdio: useLogFiles 
+      stdio: useLogFiles
         ? ['ignore', 'inherit', 'inherit'] // Write directly to console (for debugging)
         : ['ignore', 'pipe', 'pipe'], // Explicitly pipe stdout and stderr
-      env: backendEnv
+      env: backendEnv,
+      windowsHide: true // backend_server.exe is a console app; without this Windows opens a console window for it
     };
     
     // On Unix, create a new process group (detached but we keep reference)
@@ -1193,6 +1298,7 @@ async function startBackend(): Promise<boolean> {
       backendProcess.stdout?.on('data', (data) => {
         const output = data.toString().trim();
         backendOutput.push(output);
+        if (backendOutput.length > MAX_CAPTURED_LINES) backendOutput.shift();
         backendLog?.write(data);
         const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
         console.log(`[Backend ${timestamp}] ${output}`);
@@ -1201,6 +1307,7 @@ async function startBackend(): Promise<boolean> {
       backendProcess.stderr?.on('data', (data) => {
         const output = data.toString().trim();
         backendErrors.push(output);
+        if (backendErrors.length > MAX_CAPTURED_LINES) backendErrors.shift();
         backendLog?.write(data);
         const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
         
@@ -1287,27 +1394,21 @@ async function startBackend(): Promise<boolean> {
       }
       
       backendProcess = null;
-      
-      // If backend crashes unexpectedly after startup, notify user
-      if (code !== 0 && code !== null && mainWindow && !mainWindow.isDestroyed()) {
-        const recentErrors = backendErrors.slice(-5).join('\n').substring(0, 300);
-        dialog.showErrorBox(
-          'Backend Crashed',
-          `The backend process exited unexpectedly (exit code: ${code}).\n\n` +
-          `This may be due to:\n` +
-          `  - Missing Python dependencies\n` +
-          `  - Corrupted virtual environment\n` +
-          `  - File permission issues\n\n` +
-          `Check the console logs for details.\n\n` +
-          `Recent errors:\n${recentErrors}`
-        );
+
+      if (isDetachedLaunch) {
+        trackDetachedBackend();
+        return;
       }
+
+      // If backend stops unexpectedly after startup, notify user
+      const recentErrors = backendErrors.slice(-5).join('\n').substring(0, 300);
+      reportBackendLost(
+        `The backend process exited (${signal ? `signal: ${signal}` : `exit code: ${code}`}).` +
+        (recentErrors ? `\n\nRecent errors:\n${recentErrors}` : '')
+      );
     });
-    
-    // For detached launches (shell wrapper), skip early exit check
-    // The wrapper exits with code 0 immediately, which is expected
-    const isDetachedLaunch = pythonInfo?.source === 'linux-venv-detached';
-    
+
+    // For detached launches, skip early exit check
     if (isDetachedLaunch) {
       console.log('✓ Using detached launch - skipping process exit check, going straight to health check...');
     } else {
@@ -1380,12 +1481,13 @@ async function startBackend(): Promise<boolean> {
     // Wait for backend to be ready with retry logic
     // Use generous timeouts as initialization can be slow (especially on first run with indexing)
     // The model download callback will extend timeout indefinitely while downloads are active
-    let isReady = await waitForBackend(30, 1000, isModelDownloading);  // Pass download check
+    const backendDied = () => !isDetachedLaunch && !backendProcess;
+    let isReady = await waitForBackend(30, 1000, isModelDownloading, backendDied);  // Pass download check
     if (!isReady) {
       console.log('Initial startup phase incomplete, continuing with longer intervals (3000ms)...');
       updateLoadingWindow(splashWindow, 'Continuing initialization...');
-      isReady = await waitForBackend(20, 3000, isModelDownloading);  // Pass download check
-      
+      isReady = await waitForBackend(20, 3000, isModelDownloading, backendDied);  // Pass download check
+
       // If still not ready, dump comprehensive diagnostics
       if (!isReady) {
         console.error('================================================================================');
@@ -1412,8 +1514,8 @@ async function startBackend(): Promise<boolean> {
           errorMessage += 'The process has stopped or crashed.\n\n';
         }
         
-        errorMessage += `Recent errors:\n${allErrors.substring(allErrors.length - 400)}`;
-        
+        errorMessage += `Recent errors:\n${allErrors.substring(allErrors.length - 400)}\n\nBackend log: ${backendLogFile()}`;
+
         // Close splash window before showing error dialog
         if (splashWindow && !splashWindow.isDestroyed()) {
           splashWindow.close();
@@ -1560,7 +1662,8 @@ function stopBackendSync(): void {
   
   const pid = backendProcess.pid;
   console.log('Stopping backend process (sync)...');
-  
+  isShuttingDown = true; // this exit is ours, so reportBackendLost stays quiet
+
   try {
     if (process.platform === 'win32') {
       spawn('taskkill', ['/pid', pid.toString(), '/T', '/F']);
@@ -1616,18 +1719,7 @@ function createWindow(): void {
     windowOptions.titleBarStyle = 'hiddenInset'; // macOS-only feature
     windowOptions.trafficLightPosition = { x: 16, y: 16 };
   }
-  // Linux-specific settings
-  else if (process.platform === 'linux') {
-    // Use default title bar on Linux for better compatibility
-    // Some Linux desktop environments don't handle custom title bars well
-    windowOptions.frame = true;
-  }
-  // Windows-specific settings
-  else if (process.platform === 'win32') {
-    // Windows uses default frame
-    windowOptions.frame = true;
-  }
-  
+
   mainWindow = new BrowserWindow(windowOptions);
   
   // Load the frontend
@@ -1735,7 +1827,7 @@ function createWindow(): void {
       `Reason: ${reasonText}\n` +
       `Exit code: ${details.exitCode}\n\n` +
       `If this persists on Linux, try launching with:\n` +
-      `  /opt/RAGAssistant/rag-assistant --disable-gpu-sandbox\n\n` +
+      `  "/opt/RAG Assistant/rag-assistant" --disable-gpu-sandbox\n\n` +
       `Or report this issue on GitHub.`
     );
     
@@ -1751,16 +1843,6 @@ function createWindow(): void {
     console.error(`  Description: ${errorDescription}`);
     console.error(`  URL: ${validatedURL}`);
     console.error('================================================================================');
-    
-    // Don't quit on load failures in production (might be transient)
-    if (!IS_DEV && errorCode !== -3) { // -3 is ERR_ABORTED (user navigation)
-      console.warn('Attempting to reload after load failure...');
-      setTimeout(() => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.reload();
-        }
-      }, 2000);
-    }
   });
   
   // Handle renderer becoming unresponsive
@@ -1792,39 +1874,25 @@ function createWindow(): void {
     openExternalUrl(url);
     return { action: 'deny' };
   });
+
+  // The app never leaves its page: a dropped file or stray link would replace it with no way back.
+  // A reload fires this too, so the page's own URL passes.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.split('#')[0] === mainWindow?.webContents.getURL().split('#')[0]) return;
+    event.preventDefault();
+    openExternalUrl(url);
+  });
 }
 
 /**
  * Setup IPC handlers for communication with renderer process
  */
 function setupIpcHandlers(): void {
-  // Send backend configuration to renderer
-  ipcMain.handle('get-backend-config', () => {
-    return { backendUrl: BACKEND_URL };
-  });
-  
-  // Check if backend is healthy
-  ipcMain.handle('check-backend-health', async () => {
-    try {
-      // Use generous timeout for consistency with startup health checks
-      const timeout = 3000;
-      const response = await axios.get(`${BACKEND_URL}/`, { timeout });
-      return { healthy: true, status: response.status };
-    } catch (error) {
-      return { healthy: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  });
-  
   // Get app version
   ipcMain.handle('get-app-version', () => {
     return app.getVersion();
   });
-  
-  // Get platform
-  ipcMain.handle('get-platform', () => {
-    return process.platform; // Returns 'darwin', 'win32', 'linux', etc.
-  });
-  
+
   // Open external links
   ipcMain.handle('open-external', (_event, url: string) => {
     openExternalUrl(url);
@@ -2146,7 +2214,8 @@ app.on('window-all-closed', () => {
  * Activate event (macOS)
  */
 app.on('activate', () => {
-  if (mainWindow === null) {
+  // During startup the ready handler creates the window once the backend is up
+  if (mainWindow === null && !isInitializing) {
     createWindow();
   }
 });
@@ -2175,6 +2244,7 @@ app.on('will-quit', (event) => {
     console.log('Emergency cleanup on will-quit...');
     stopBackendSync();
   }
+  stopDetachedBackend();
 });
 
 /**
@@ -2184,6 +2254,7 @@ process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
   stopBackendSync();
   dialog.showErrorBox('Application Error', `An unexpected error occurred: ${error.message}`);
+  app.quit();
 });
 
 /**

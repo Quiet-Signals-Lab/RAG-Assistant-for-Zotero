@@ -4,6 +4,8 @@ Unit tests for metadata migration (MetadataMigration in metadata_migration.py).
 The library is read once and keyed by item id; Chroma is paged.
 """
 
+import sqlite3
+
 import pytest
 from unittest.mock import Mock
 from backend.metadata_migration import MetadataMigration
@@ -25,7 +27,9 @@ def _chroma(ids=(), metadatas=()):
 
 @pytest.fixture
 def zotero():
-    return Mock()
+    mock = Mock()
+    mock.search_parent_items_with_pdfs.return_value = []
+    return mock
 
 
 @pytest.fixture
@@ -60,11 +64,13 @@ class TestFetchUpdatedMetadata:
     def test_year_parsing(self, migration, zotero):
         zotero.search_parent_items_with_pdfs.return_value = [
             _item(1, date="2021-03-10"), _item(2, date="2022"), _item(3, date="unknown"), _item(4, date=""),
+            _item(5, date="1859"),
         ]
         assert migration._fetch_updated_metadata("1")["year"] == 2021
         assert migration._fetch_updated_metadata("2")["year"] == 2022
-        assert migration._fetch_updated_metadata("3")["year"] is None
-        assert migration._fetch_updated_metadata("4")["year"] is None
+        assert migration._fetch_updated_metadata("3")["year"] == 0
+        assert migration._fetch_updated_metadata("4")["year"] == 0
+        assert migration._fetch_updated_metadata("5")["year"] == 1859
 
     def test_not_found(self, migration, zotero):
         zotero.search_parent_items_with_pdfs.return_value = [_item(1)]
@@ -195,6 +201,27 @@ class TestMigrateAll:
         assert summary["total_chunks"] == 25
         assert summary["updated_chunks"] == 25
         assert chroma.collection.update.call_count == 3
+
+    def test_sync_writes_string_item_ids_and_repairs_damaged_ones(self, zotero):
+        zotero.search_parent_items_with_pdfs.return_value = [_item(1)]
+        meta = {"item_id": 1, "chunk_idx": 0, "page": 1, "pdf_path": "/p.pdf", "title": "Paper 1", "authors": "",
+                "tags": "", "collections": "", "year": 2020, "item_type": ""}
+        chroma = _chroma(["1:0"], [meta])
+        chroma.collection.get.side_effect = [{"ids": ["1:0"], "metadatas": [meta]}, {"ids": [], "metadatas": []}]
+        MetadataMigration(chroma, zotero).migrate_all_metadata()
+        written = chroma.collection.update.call_args.kwargs["metadatas"][0]
+        assert written["item_id"] == "1"
+
+    def test_a_changed_title_is_synced(self, migration):
+        old = {"item_id": "1", "title": "Old", "year": 2020}
+        assert migration._needs_update(old, {**old, "title": "New"})
+        assert not migration._needs_update(old, dict(old))
+
+    def test_an_unreadable_library_stops_the_sync_once(self, zotero):
+        zotero.search_parent_items_with_pdfs.side_effect = sqlite3.OperationalError("database is locked")
+        with pytest.raises(sqlite3.OperationalError):
+            MetadataMigration(_chroma(["1:0"], [{"item_id": "1"}]), zotero).migrate_all_metadata()
+        assert zotero.search_parent_items_with_pdfs.call_count == 1
 
     def test_empty_database(self, zotero):
         summary = MetadataMigration(_chroma(), zotero).migrate_all_metadata()

@@ -198,3 +198,22 @@ def test_fused_pool_caps_chunks_per_item(client, monkeypatch):
     for cid in out["ids"][0]:
         by_item[cid.split(":")[0]] = by_item.get(cid.split(":")[0], 0) + 1
     assert by_item["1"] == 2 and "2" in by_item, by_item
+
+
+def test_keyword_search_finds_a_scoped_item_that_others_outrank(client):
+    _add_items(client, {str(i): ["neural neural neural neural"] for i in range(1, 9)})
+    _add_items(client, {"9": ["a long passage that mentions neural once among many other ordinary words"]})
+    assert [h["id"] for h in client.query_bm25("neural", k=3, item_ids={"9"})] == ["9:0"]
+    assert client.query_bm25("neural", k=3, item_ids=set()) == []
+
+
+def test_a_scope_too_wide_to_bind_falls_back_to_filtering(client, monkeypatch):
+    _add_items(client, {"1": ["needle here"], "2": ["needle there"]})
+    monkeypatch.setattr("backend.vector_db.BM25_MAX_SCOPE_IDS", 1)
+    monkeypatch.setattr("backend.embed_utils.get_embedding", lambda q, model_id=None: np.zeros(4, dtype=np.float32))
+    seen = {}
+    real = client.query_bm25
+    monkeypatch.setattr(client, "query_bm25", lambda q, k=10, item_ids=None: seen.update(ids=item_ids) or real(q, k=k, item_ids=item_ids))
+    client.query_hybrid_rrf("needle", k=2, where={"item_id": {"$in": ["1", "2"]}})
+    assert seen["ids"] is None
+

@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { request } from "../../api/client";
-import { annotate, deskModel, search } from "../../api/search";
+import { BACKEND_BACK, request } from "../../api/client";
+import { annotate, search } from "../../api/search";
 import { useProfile } from "../../contexts/ProfileContext";
-import type { DeskItem, DeskModel, Passage, ScopeFilters, SearchResponse, Suggestion, Theme } from "../../types/desk";
+import type { DeskItem, Passage, ScopeFilters, SearchResponse, Suggestion, Theme } from "../../types/desk";
 import { shortCite } from "./cite";
 
 export type Sort = "relevance" | "year" | "author";
@@ -71,8 +71,6 @@ interface DeskState {
   useExtracted: boolean;
   result: SearchResponse | null;
   clerk: ClerkWork;
-  /** The language model the app would use, or null while unknown; re-read when the room changes. */
-  model: DeskModel | null;
   status: Status;
   error: string | null;
   selectedId: string | null;
@@ -80,6 +78,8 @@ interface DeskState {
   selected: DeskItem | null;
   sort: Sort;
   setSort: (s: Sort) => void;
+  /** "failed" once the pins, log and context could not be read: edits stay in memory, unsaved. */
+  fileStatus: FileState["status"];
   pins: Pin[];
   log: LogEntry[];
   /** The context folder for RAG Chat: one entry per item, with the passage that matched. */
@@ -157,7 +157,7 @@ function forgetLegacy(profileId: string): void {
  * Nothing is written until the file has loaded: a failed load is retried, never
  * followed by a save that would replace the reader's pins with an empty list.
  */
-function useDeskFile(profileId: string): [DeskFile, (update: (prev: DeskFile) => DeskFile) => void] {
+function useDeskFile(profileId: string): [DeskFile, (update: (prev: DeskFile) => DeskFile) => void, FileState["status"]] {
   const [state, setState] = useState<FileState>({ profile: profileId, status: "loading", file: EMPTY_FILE });
   // Unsaved changes are edits.current > saved.current; counting avoids losing an
   // edit made while an older save was in flight.
@@ -195,10 +195,15 @@ function useDeskFile(profileId: string): [DeskFile, (update: (prev: DeskFile) =>
         });
     };
     load(0);
+    const retry = () => {
+      if (latest.current.status === "failed") load(0);
+    };
+    window.addEventListener(BACKEND_BACK, retry);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      window.removeEventListener(BACKEND_BACK, retry);
       // Leaving this profile: write its pending changes now rather than drop them.
       const last = latest.current;
       if (edits.current > saved.current && last.profile === profileId && last.status === "ready") {
@@ -228,7 +233,7 @@ function useDeskFile(profileId: string): [DeskFile, (update: (prev: DeskFile) =>
     edits.current += 1;
     setState((prev) => ({ ...prev, file: fn(prev.file) }));
   }, []);
-  return [state.profile === profileId ? state.file : EMPTY_FILE, update];
+  return state.profile === profileId ? [state.file, update, state.status] : [EMPTY_FILE, update, "loading"];
 }
 
 function sameScope(a: ScopeFilters, b: ScopeFilters): boolean {
@@ -267,10 +272,6 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const { activeProfileId } = useProfile();
 
   const [room, setRoom] = useState<Room>("desk");
-  const [model, setModel] = useState<DeskModel | null>(null);
-  useEffect(() => {
-    deskModel().then(setModel).catch(() => setModel(null));
-  }, [room]);
   const [query, setQuery] = useState("");
   const [scope, setScopeState] = useState<ScopeFilters>({});
   const [within, setWithin] = useState<Within | null>(null);
@@ -282,7 +283,7 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("relevance");
-  const [deskFile, updateDeskFile] = useDeskFile(activeProfileId || "default");
+  const [deskFile, updateDeskFile, fileStatus] = useDeskFile(activeProfileId || "default");
   const { pins, log, context } = deskFile;
   const setContext = useCallback(
     (fn: (prev: ContextEntry[]) => ContextEntry[]) => updateDeskFile((prev) => ({ ...prev, context: fn(prev.context) })),
@@ -555,7 +556,7 @@ export const DeskProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   );
 
   const value: DeskState = {
-    room, setRoom, query, setQuery, scope, within, searchWithin, setAside, putAside, moreLike, pane, setPane, useExtracted, result, clerk, model, status, error,
+    room, setRoom, query, setQuery, scope, within, searchWithin, setAside, putAside, moreLike, pane, setPane, useExtracted, result, clerk, status, error, fileStatus,
     selectedId, select: setSelectedId, selected, sort, setSort, pins, log,
     context, addToContext, addPinsToContext, inContext, setAttached, removeFromContext, clearContext,
     submit, setScope, dropExtracted, restore, forget, togglePin, isPinned, clearPins,

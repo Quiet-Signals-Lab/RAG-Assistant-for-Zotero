@@ -4,6 +4,7 @@
 import asyncio
 import os
 import re
+import sqlite3
 import sys
 import logging
 
@@ -34,19 +35,17 @@ logging.getLogger('grpc').setLevel(logging.CRITICAL)
 logging.getLogger('google.auth').setLevel(logging.WARNING)
 
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 from fastapi import FastAPI, Query, Body, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 from typing import Optional
-from backend.zoteroitem import ZoteroItem
-from backend.external_api_utils import fetch_semantic_scholar_data
-from backend.pdf import PDF
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from backend.interface import ZoteroChatbot
 from backend.vector_db import ChromaClient
+from backend.zotero_dbase import ZoteroLibrary
 from backend.profile_manager import ProfileManager
-from backend.metadata_version import check_metadata_compatibility
-from backend.metadata_migration import MetadataMigration
 import datetime
 import platform
 import subprocess
@@ -107,6 +106,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class LocalPagesOnly:
+    """Refuse requests sent by a web page. CORS only hides the answer from it; the request
+    still runs, and the port is predictable. The packaged app's file:// page sends no Origin
+    (measured in Electron), so any Origin must be localhost. "null" stays refused: sandboxed
+    iframes on any site send it. Pure ASGI, so /api/annotate still sees disconnects."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        origin = dict(scope.get("headers") or []).get(b"origin")
+        if origin and urlsplit(origin.decode("latin-1")).hostname not in ("localhost", "127.0.0.1"):
+            await PlainTextResponse("Forbidden origin", status_code=403)(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(LocalPagesOnly)
+# A local name only, so a rebinding DNS entry cannot reach this server. "testserver" is TestClient's.
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 
 # Default paths - use user's home directory for cross-platform compatibility
 _home = Path.home()
@@ -473,110 +494,6 @@ async def shutdown():
     
     return {"status": "shutting_down", "message": "Server will shutdown in 2 seconds"}
 
-@app.get("/api/pdfsample")
-def pdf_sample(
-    filename: str = Query(..., description="Path to PDF file, e.g. backend/sample_pdfs/test_article.pdf"),
-    max_chars: Optional[int] = Query(2000, description="Maximum number of characters to extract"),
-):
-    """Extracts sample text from a PDF for testing purposes."""
-    try:
-        safe_path = _validate_pdf_path(filename)
-        pdf = PDF(filepath=str(safe_path))
-        text = pdf.extract_text(max_chars=max_chars)
-        return {"sample": text}
-    except ValueError as e:
-        raise _fail(e, 400)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise _fail(e)
-
-@app.get("/api/item_metadata")
-def get_item_metadata(
-    filename: str = Query(..., description="Path to PDF or metadata file"),
-):
-    """Retrieves metadata from the ZoteroItem class."""
-    try:
-        safe_path = _validate_pdf_path(filename)
-        item = ZoteroItem(filepath=str(safe_path))
-        title = item.get_title()
-        author = item.get_author()
-        return {"title": title,
-                "author": author}
-    except ValueError as e:
-        raise _fail(e, 400)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise _fail(e)
-
-@app.get("/api/search_items")
-def search_items(
-    authors: Optional[str] = Query("", description="Comma separated authors"),
-    titles: Optional[str] = Query("", description="Comma separated titles"),
-    dates: Optional[str] = Query("", description="Comma separated dates")
-):
-    """Query the Zotero library using authors, titles, and dates."""
-    try:
-        authors_list = [a.strip() for a in authors.split(",") if a.strip()]
-        titles_list = [t.strip() for t in titles.split(",") if t.strip()]
-        dates_list = [d.strip() for d in dates.split(",") if d.strip()]
-        results = chatbot.zlib.search_parent_items(authors=authors_list, titles=titles_list, dates=dates_list)
-        return {"results": list(results)}  # Convert set to list for JSON serialization
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise _fail(e)
-
-@app.post("/api/external/semantic_scholar")
-def lookup_semantic_scholar(payload: dict = Body(...)):
-    """
-    Look up paper metadata on Semantic Scholar.
-    
-    Request body:
-        {
-            "doi": "10.xxx/xxx",      // Optional - preferred method
-            "title": "Paper title",   // Optional - fallback
-            "authors": "Author names" // Optional - helps with matching
-        }
-    
-    Returns:
-        {
-            "success": true/false,
-            "data": {
-                "title": str,
-                "abstract": str,
-                "year": int,
-                "authors": [str],
-                "citation_count": int,
-                "citations": [dict],
-                "references": [dict],
-                "url": str,
-                "doi": str
-            },
-            "error": str (if success=false)
-        }
-    """
-    try:
-        result = fetch_semantic_scholar_data(
-            doi=payload.get('doi'),
-            title=payload.get('title'),
-            authors=payload.get('authors')
-        )
-        
-        if result:
-            return {"success": True, "data": result}
-        else:
-            return {
-                "success": False,
-                "error": "Paper not found on Semantic Scholar"
-            }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
 @app.post("/api/index_library")
 def index_library(payload: dict = Body(default={"incremental": True})):
     """Index Zotero parent items and PDFs in the vector database.
@@ -630,14 +547,19 @@ def purge_exclusions():
     except Exception as e:
         raise _fail(e)
 
-@app.get("/api/chat")
-def chat(query: str, item_ids: Optional[str] = Query("", description="Comma separated Zotero item IDs to scope search")):
+def _restore_session(session_id: str) -> None:
+    """The model's memory of a conversation is lost on restart, but the UI still shows it.
+    Seed it from the saved session. Saved turns lack their passages, so old citations don't carry over."""
+    if chatbot.conversation_store.session_exists(session_id):
+        return
     try:
-        filter_ids = [id_.strip() for id_ in item_ids.split(",") if id_.strip()]
-        payload = chatbot.chat(query, filter_item_ids=filter_ids if filter_ids else None)
-        return payload
-    except Exception as e:
-        raise _fail(e)
+        saved = profile_manager.load_profile_sessions(profile_manager.get_active_profile()["id"])
+    except (OSError, ValueError) as e:
+        logger.warning("Could not restore session %s: %s", session_id, e)
+        return
+    for message in saved.get("sessions", {}).get(session_id, {}).get("messages", []):
+        if message.get("role") in ("user", "assistant") and message.get("content"):
+            chatbot.conversation_store.append_message(session_id, message["role"], message["content"])
 
 
 @app.post("/api/chat")
@@ -683,6 +605,9 @@ def chat_post(payload: dict = Body(...)):
         use_rrf = payload.get("use_rrf", True)
         # 0 = auto (dynamic, model-based); > 0 = user-specified evidence snippet cap
         max_sources = int(payload.get("max_sources", 0) or 0)
+
+        if session_id:
+            _restore_session(session_id)
 
         payload_out = chatbot.chat(
             query, 
@@ -934,20 +859,6 @@ def index_status():
         raise _fail(e)
 
 
-@app.get("/api/db_health")
-def db_health():
-    """Check the health and configuration of the vector database.
-    Validates that embedding dimensions are consistent.
-    """
-    try:
-        validation = chatbot.chroma.validate_embedding_dimension()
-        return validation
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise _fail(e)
-
-
 def _zotero_styles_dir() -> Path:
     """Zotero keeps the CSL styles a user installs next to its database."""
     return Path(chatbot.zlib.db_path).parent / "styles"
@@ -986,8 +897,9 @@ def index_stats():
     Returns:
         - indexed_items: Number of unique items in the database
         - total_chunks: Total number of text chunks indexed
-        - zotero_items: Total number of items in Zotero library with PDFs
-        - new_items: Number of items in Zotero not yet indexed
+        - zotero_items: Items in the Zotero library with PDFs, less the excluded ones
+        - new_items: Number of those items not yet indexed
+        - zotero_error: Why the Zotero database could not be read, else None
     """
     try:
         # Get indexed item IDs
@@ -996,9 +908,20 @@ def index_stats():
         # Get total chunks
         total_chunks = chatbot.chroma.get_document_count()
 
-        # Get all Zotero items
-        raw_items = chatbot.zlib.search_parent_items_with_pdfs()
-        zotero_item_ids = {str(it['item_id']) for it in raw_items}
+        # Not finding Zotero is a setup state the UI explains, not a server fault.
+        zotero_error = None
+        try:
+            raw_items = chatbot.zlib.search_parent_items_with_pdfs()
+        except sqlite3.Error as e:
+            logger.warning("Zotero database not readable at %s: %s", chatbot.zlib.db_path, e)
+            raw_items, zotero_error = [], str(e)
+
+        # An excluded item is never indexed, so it must not count as waiting to be.
+        settings = load_settings()
+        excl = ZoteroChatbot._exclusion_sets(
+            settings.get("excludedCollections"), settings.get("excludedTags"), settings.get("excludedItemTypes")
+        )
+        zotero_item_ids = {str(it['item_id']) for it in raw_items if not ZoteroChatbot._item_is_excluded(it, *excl)}
 
         # Calculate new items
         new_item_ids = zotero_item_ids - indexed_ids
@@ -1009,6 +932,8 @@ def index_stats():
             "zotero_items": len(zotero_item_ids),
             "new_items": len(new_item_ids),
             "needs_sync": len(new_item_ids) > 0,
+            "zotero_error": zotero_error,
+            "zotero_path": chatbot.zlib.db_path,
             "current_embedding_model": chatbot.embedding_model_id,
             "collection_name": chatbot.chroma.collection_name
         }
@@ -1176,114 +1101,6 @@ def metadata_sync():
             "message": f"Successfully synced metadata for {summary.get('unique_items', 0)} items",
             "summary": summary
         }
-    except Exception as e:
-        raise _fail(e)
-
-
-@app.get("/api/diagnose_unindexed")
-def diagnose_unindexed():
-    """Diagnose why specific items aren't being indexed.
-    
-    Returns detailed information about items that should be indexed but aren't.
-    """
-    try:
-        # Get indexed item IDs
-        indexed_ids = chatbot.chroma.get_indexed_item_ids()
-        
-        # Get all Zotero items
-        raw_items = chatbot.zlib.search_parent_items_with_pdfs()
-        zotero_item_ids = {str(it['item_id']) for it in raw_items}
-        
-        # Find unindexed items
-        unindexed_ids = zotero_item_ids - indexed_ids
-        
-        # Get details for each unindexed item
-        unindexed_items = [it for it in raw_items if str(it['item_id']) in unindexed_ids]
-        
-        diagnostics = []
-        for item in unindexed_items:
-            item_id = str(item['item_id'])
-            pdf_path = item.get('pdf_path', '')
-            
-            diagnosis = {
-                "item_id": item_id,
-                "title": item.get('title', 'Unknown'),
-                "pdf_path": pdf_path,
-                "pdf_exists": os.path.exists(pdf_path) if pdf_path else False,
-                "issues": []
-            }
-            
-            # Check for issues
-            if not pdf_path:
-                diagnosis["issues"].append("No PDF path specified")
-            elif not os.path.exists(pdf_path):
-                diagnosis["issues"].append(f"PDF file not found at: {pdf_path}")
-            else:
-                # The same extraction indexing uses, so the diagnosis matches what indexing would see.
-                try:
-                    blocks = PDF(pdf_path).extract_blocks()
-                    if not blocks:
-                        diagnosis["issues"].append("PDF has no extractable text")
-                    else:
-                        diagnosis["text_length"] = sum(len(b["text"]) for b in blocks)
-                        diagnosis["page_count"] = blocks[-1]["page"]
-                        diagnosis["issues"].append("PDF appears valid - may need manual reindex")
-                except Exception as e:
-                    diagnosis["issues"].append(f"PDF extraction error: {str(e)}")
-            
-            diagnostics.append(diagnosis)
-        
-        return {
-            "unindexed_count": len(unindexed_items),
-            "indexed_count": len(indexed_ids),
-            "zotero_count": len(zotero_item_ids),
-            "diagnostics": diagnostics
-        }
-    except Exception as e:
-        raise _fail(e)
-
-
-@app.get("/api/embedding_collections")
-def list_embedding_collections():
-    """List all available embedding model collections in the database.
-    Shows which embedding models have been used to index the library.
-    """
-    try:
-        settings = load_settings()
-        # Use profile-specific chroma path
-        active = profile_manager.get_active_profile()
-        profile_chroma_path = profile_manager.get_profile_chroma_path(active['id'])
-        chroma_path = settings.get("chromaPath", profile_chroma_path)
-        
-        # Create a temporary ChromaDB client to list collections
-        import chromadb
-        from chromadb.config import Settings
-        client = chromadb.PersistentClient(path=chroma_path, settings=Settings(anonymized_telemetry=False))
-        
-        collections = client.list_collections()
-        
-        # Parse collection names to extract embedding models
-        embedding_collections = []
-        for col in collections:
-            # Collection names follow pattern: zotero_lib_{embedding_model_id}
-            # Cloud model IDs have ':' replaced with '-' in collection names.
-            if col.name.startswith("zotero_lib_"):
-                embedding_model_id = col.name.replace("zotero_lib_", "")
-                item_count = col.count()
-                current_safe = chatbot.embedding_model_id.replace(":", "-")
-                embedding_collections.append({
-                    "collection_name": col.name,
-                    "embedding_model_id": embedding_model_id,
-                    "item_count": item_count,
-                    "is_current": embedding_model_id == current_safe,
-                })
-        
-        return {
-            "collections": embedding_collections,
-            "current_embedding_model": chatbot.embedding_model_id
-        }
-    except HTTPException:
-        raise
     except Exception as e:
         raise _fail(e)
 
@@ -1712,9 +1529,20 @@ def update_profile(profile_id: str, payload: dict = Body(...)):
 @app.delete("/api/profiles/{profile_id}")
 def delete_profile(profile_id: str, force: bool = Query(False)):
     """Delete a profile and all its data."""
+    global chatbot
     try:
         _validate_profile_id(profile_id)
+        if chatbot.is_indexing:
+            raise HTTPException(status_code=409, detail="Indexing is running. Wait for it to finish or stop it before deleting a profile.")
+        active = profile_manager.get_active_profile()
+        others = [p for p in profile_manager.list_profiles() if p["id"] != profile_id]
+        if force and active and active["id"] == profile_id and others:
+            # The chatbot has this profile's index open, so it must move off it first.
+            profile_manager.set_active_profile(others[0]["id"])
+            chatbot = initialize_chatbot()
         success = profile_manager.delete_profile(profile_id, force=force)
+        if not success and profile_manager.get_profile_dir(profile_id).exists():
+            raise HTTPException(status_code=500, detail="Some of the profile's files are in use. Restart the app and delete it again.")
         if not success:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_id}' not found")
         return {"success": True}
@@ -1896,13 +1724,23 @@ def update_settings(settings: dict = Body(...)):
                 updated_settings["activeProviderId"] = _fallback_pid
                 updated_settings["activeModel"] = ""
 
+        zotero_keys = ("zoteroPath", "pdfStoragePath")
+        zotero_moved = any(k in settings and settings[k] != current_settings.get(k) for k in zotero_keys)
+        if zotero_moved and chatbot.is_indexing:
+            raise HTTPException(status_code=409, detail="Indexing is running. Wait for it to finish or stop it before changing where Zotero is.")
+
         if save_settings(updated_settings):
             # Update global paths if they changed
             if "zoteroPath" in settings:
                 DB_PATH = settings["zoteroPath"]
+
+            if zotero_moved:
+                chatbot.zlib = ZoteroLibrary(updated_settings["zoteroPath"], storage_path=updated_settings.get("pdfStoragePath") or None)
+                chatbot._vocab = None
             
             # Reinitialize chatbot with new provider or embedding settings
-            if "activeProviderId" in settings or "activeModel" in settings or "embeddingModel" in settings:
+            provider_keys = ("activeProviderId", "activeModel", "providers")
+            if any(k in settings for k in provider_keys) or "embeddingModel" in settings:
                 try:
                     provider_credentials = {}
                     for pid, pconfig in updated_settings.get("providers", {}).items():
@@ -1915,7 +1753,7 @@ def update_settings(settings: dict = Body(...)):
                         set_embedding_credentials(pid, creds)
 
                     # Update provider settings if changed
-                    if "activeProviderId" in settings or "activeModel" in settings:
+                    if any(k in settings for k in provider_keys):
                         chatbot.update_provider_settings(
                             active_provider_id=updated_settings.get("activeProviderId", "ollama"),
                             active_model=updated_settings.get("activeModel"),

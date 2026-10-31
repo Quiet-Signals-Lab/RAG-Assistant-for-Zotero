@@ -5,6 +5,35 @@ All notable changes to RAG Assistant for Zotero will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-10-31
+
+### Upgrading from 0.7.3
+Run **Library → Advanced → Update details from Zotero** once. It repairs item ids damaged by earlier metadata syncs and gives items dated before 1900 their real year. Then **Sync** to pick up PDFs that were missed before (see below). Settings, sessions, pins and the index otherwise carry over.
+
+### Fixed
+- **Data safety.** Settings, sessions and profile files are written through a temporary file, so a crash or a full disk can no longer truncate them and lose API keys. A damaged settings file is kept as `settings.json.bad`, and a damaged sessions file is an error rather than an empty history that the next save writes over. On macOS and Linux `settings.json` is now readable by you alone. Failed loads no longer overwrite chat history, and saving one setting no longer sends the whole settings object.
+- **Metadata sync.** It wrote item ids as numbers, which broke scoped search, "more like this", removal from the index and exclusions for the items it touched, and it ignored changed titles, authors and years. An unreadable library now stops the sync once with an error, not once per passage.
+- **Items that were missed or wrongly indexed.** PDFs whose path does not end in `.pdf` are now indexed, and items and PDFs in Zotero's trash are skipped. Excluded items no longer count as "new", so the sync button can reach zero.
+- **First run.** If Zotero is not found, or is holding its database locked, search says so and shows the way out, instead of "Nothing in your library matches this". A new Zotero path, PDF folder or API key takes effect without a restart, the Zotero path may be the data folder, and `~` and `#` in paths work.
+- **Search.** Keyword search is up to about 75 times faster on a 62,000-passage library. It now respects limits, so a scoped item is not lost among stronger matches elsewhere. "Before 1990" no longer includes undated items, and items from before 1900 keep their year. Excluding a plural such as "organisations" works.
+- **RAG Chat.** A scoped question can read more than 8 passages of one item. Follow-ups work on the first turn and after a restart. Source numbers match the citations in the answer. Answers no longer pull you back to another session, and renaming a session sticks.
+- **Profiles.** Switching profile no longer leaves a blank window in the packaged app, and deleting the active profile no longer stops the app from starting.
+- **Full rebuild.** A PDF that cannot be read today, such as one on an unplugged drive, keeps the passages it has.
+- **Desktop shell.** Quitting on Linux stops the backend. A second launch focuses the first window instead of killing its backend. Launching no longer kills your own servers on ports 8000–8010. If the backend dies, a dialog offers Restart or Quit. Reopening right after quitting on macOS no longer fails to start. Dragging a PDF onto the window no longer replaces the app.
+- The Evidence panel starts at the top of each new item, and the window no longer scrolls sideways below 1100 pixels wide.
+
+### Security
+- The backend refuses requests from web pages and from other host names. Before, any site you visited could send it requests, such as stopping an index or starting a chat. Eight unused endpoints were removed.
+
+### Changed
+- **Library panel.** Status and Sync come first; item details, the embedding model and the rebuild sit under Advanced, and a rebuild asks before it starts. Leaving the panel no longer loses track of a running sync.
+- Readability: all text meets AA contrast on every panel in both themes, citation numbers and small labels are larger, field and button outlines are easier to see, and empty-state headings use the interface font.
+- RAG Chat's Scope panel and the Language model panel use plain words. "Streaming: Enabled" is gone, since answers do not stream.
+- A banner appears while the background service is unreachable and clears itself. Errors that only reached the developer console now show in the app.
+- Settings keep typed text when another setting changes, and ask before you leave with unsaved changes.
+- Down arrow moves from the search box into the results. Clearing the context asks first.
+- Removed over 1,500 lines of unused code.
+
 ## [0.7.3] - 2026-10-29
 
 ### Upgrading from 0.7.2

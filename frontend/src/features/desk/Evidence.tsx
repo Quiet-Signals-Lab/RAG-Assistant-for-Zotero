@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Chain from "./Chain";
 import { useDesk, type Pin } from "./DeskContext";
 import { BandMark, Highlighted, opening, openPdf, Reference, showInZotero } from "./parts";
@@ -78,6 +78,12 @@ const Evidence: React.FC = () => {
   const item = desk.selected;
   const inContext = !!item && desk.inContext(item.item_id);
   const [failure, setFailure] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // A new item starts at its reference, not wherever the last one was scrolled to.
+  useEffect(() => {
+    rootRef.current?.closest(".desk__verify")?.scrollTo(0, 0);
+  }, [item?.item_id]);
 
   const open = (page?: number | null) => {
     if (!item) return;
@@ -87,6 +93,7 @@ const Evidence: React.FC = () => {
 
   return (
     <div
+      ref={rootRef}
       className="evidence"
       id="desk-evidence"
       tabIndex={-1}

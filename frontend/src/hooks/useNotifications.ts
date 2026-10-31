@@ -11,7 +11,7 @@ export function useNotifications() {
   // Initialize audio element on first use
   const getAudio = useCallback(() => {
     if (!audioRef.current) {
-      audioRef.current = new Audio('/addons/just-maybe-577.mp3');
+      audioRef.current = new Audio('./addons/just-maybe-577.mp3');
       audioRef.current.volume = 0.5; // Set to 50% volume
     }
     return audioRef.current;
@@ -40,11 +40,11 @@ export function useNotifications() {
     if (Notification.permission === 'default') {
       Notification.requestPermission().then((permission) => {
         if (permission === 'granted') {
-          new Notification(title, { body, icon: '/icon.png', silent: true });
+          new Notification(title, { body, silent: true });
         }
       });
     } else if (Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '/icon.png', silent: true });
+      new Notification(title, { body, silent: true });
     }
   }, []);
 
@@ -72,9 +72,5 @@ export function useNotifications() {
     [settings.showSystemNotification, settings.playSoundNotification, showSystemNotification, playSound]
   );
 
-  return {
-    notifyResponse,
-    playSound,
-    showSystemNotification,
-  };
+  return { notifyResponse };
 }

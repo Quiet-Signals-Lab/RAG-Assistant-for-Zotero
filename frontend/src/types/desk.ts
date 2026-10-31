@@ -166,3 +166,15 @@ export interface ChainResponse {
   references?: ChainEntry[];
   cited_by?: ChainEntry[];
 }
+
+/** GET /api/index_stats. */
+export type IndexStats = {
+  indexed_items: number;
+  total_chunks: number;
+  zotero_items: number;
+  new_items: number;
+  zotero_error: string | null;
+  zotero_path: string;
+  current_embedding_model: string;
+  collection_name: string;
+};

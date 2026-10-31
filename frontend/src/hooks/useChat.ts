@@ -7,7 +7,6 @@ export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastResponse, setLastResponse] = useState<ChatResponse | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   async function sendMessage(
@@ -53,16 +52,14 @@ export function useChat() {
         id: crypto.randomUUID(),
         role: "assistant",
         content: res.summary,
-        citations: res.citations,
-        reasoning: res.reasoning, // Include reasoning if present
       };
-      setMessages((prev) => [...prev, assistantMessage]);
-      setLastResponse(res);
+      // Not added to messages: the view reloads from the session the answer is saved to,
+      // which may no longer be the one on screen.
       return { userMessage, assistantMessage, response: res };
-    } catch (e: any) {
+    } catch (e) {
       // Don't show error if request was intentionally aborted
-      if (e.name !== 'AbortError') {
-        setError(e.message ?? "Failed to get answer");
+      if (!(e instanceof DOMException && e.name === 'AbortError')) {
+        setError(e instanceof Error ? e.message : "Failed to get answer");
       }
       return null;
     } finally {
@@ -79,17 +76,10 @@ export function useChat() {
     }
   }, []);
 
-  const loadThread = useCallback((thread: { id: string; title?: string; messages: ChatMessage[]; lastResponse?: ChatResponse }) => {
-    if (!thread) return;
-    setMessages(thread.messages || []);
-    if (thread.lastResponse) setLastResponse(thread.lastResponse);
-  }, []);
-
   const clearMessages = useCallback(() => {
     setMessages([]);
-    setLastResponse(null);
     setError(null);
   }, []);
 
-  return { messages, loading, error, lastResponse, sendMessage, stopGeneration, loadThread, clearMessages };
+  return { messages, loading, error, sendMessage, stopGeneration, loadThread: setMessages, clearMessages };
 }

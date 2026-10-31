@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useDesk } from "../desk/DeskContext";
 import { opening } from "../desk/parts";
 
@@ -10,13 +10,23 @@ const ContextTray: React.FC = () => {
   const desk = useDesk();
   const entries = desk.context;
   const attached = entries.filter((e) => e.attached).length;
+  const [confirming, setConfirming] = useState(false);
   return (
     <section className={entries.length ? "context-tray context-tray--filled" : "context-tray"} aria-label="Context">
       <div className="context-tray__head">
         <span className="desk-label">
           Context · {entries.length} item{entries.length === 1 ? "" : "s"}{entries.length ? ` · ${attached} attached` : ""}
         </span>
-        {entries.length > 0 && <button type="button" className="link-button" onClick={desk.clearContext}>Clear</button>}
+        {entries.length > 0 && (confirming ? (
+          <span>
+            <button type="button" className="btn btn--danger" onClick={() => { desk.clearContext(); setConfirming(false); }}>
+              Clear all {entries.length}
+            </button>{" "}
+            <button type="button" className="btn" onClick={() => setConfirming(false)}>Keep them</button>
+          </span>
+        ) : (
+          <button type="button" className="link-button" onClick={() => setConfirming(true)}>Clear</button>
+        ))}
       </div>
       {entries.length === 0 ? (
         <p className="context-tray__empty">Add items from search with “Add to context”. Attached items are the only ones RAG Chat answers from.</p>

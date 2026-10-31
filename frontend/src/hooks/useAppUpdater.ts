@@ -71,48 +71,52 @@ export function useAppUpdater(): UseAppUpdaterReturn {
   useEffect(() => {
     if (!window.electron) return;
 
-    // Checking for update
-    window.electron.onUpdateChecking(() => {
-      setStatus('checking');
-      setError(null);
-      setDownloadProgress(null);
-    });
+    const unsubscribers = [
+      // Checking for update
+      window.electron.onUpdateChecking(() => {
+        setStatus('checking');
+        setError(null);
+        setDownloadProgress(null);
+      }),
 
-    // Update available
-    window.electron.onUpdateAvailable((info: UpdateInfo) => {
-      setStatus('available');
-      setUpdateInfo(info);
-      setError(null);
-    });
+      // Update available
+      window.electron.onUpdateAvailable((info: UpdateInfo) => {
+        setStatus('available');
+        setUpdateInfo(info);
+        setError(null);
+      }),
 
-    // No update available
-    window.electron.onUpdateNotAvailable(() => {
-      setStatus('not-available');
-      setUpdateInfo(null);
-      setError(null);
-    });
+      // No update available
+      window.electron.onUpdateNotAvailable(() => {
+        setStatus('not-available');
+        setUpdateInfo(null);
+        setError(null);
+      }),
 
-    // Download progress
-    window.electron.onUpdateDownloadProgress((progress: DownloadProgress) => {
-      setStatus('downloading');
-      setDownloadProgress(progress);
-      setError(null);
-    });
+      // Download progress
+      window.electron.onUpdateDownloadProgress((progress: DownloadProgress) => {
+        setStatus('downloading');
+        setDownloadProgress(progress);
+        setError(null);
+      }),
 
-    // Update downloaded
-    window.electron.onUpdateDownloaded((info: UpdateInfo) => {
-      setStatus('downloaded');
-      setUpdateInfo(info);
-      setDownloadProgress(null);
-      setError(null);
-    });
+      // Update downloaded
+      window.electron.onUpdateDownloaded((info: UpdateInfo) => {
+        setStatus('downloaded');
+        setUpdateInfo(info);
+        setDownloadProgress(null);
+        setError(null);
+      }),
 
-    // Update error
-    window.electron.onUpdateError((err: { message: string }) => {
-      setStatus('error');
-      setError(err.message);
-      setDownloadProgress(null);
-    });
+      // Update error
+      window.electron.onUpdateError((err: { message: string }) => {
+        setStatus('error');
+        setError(err.message);
+        setDownloadProgress(null);
+      }),
+    ];
+
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, []);
 
   const checkForUpdates = useCallback(async () => {

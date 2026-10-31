@@ -73,18 +73,9 @@ pre {
 
 /* Utility */
 
-.app-heading {
-  font-family: var(--font-sans);
-  font-size: 1.1rem;
-  color: var(--text-soft);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-}
-
 .muted {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 13px;
 }
 
 /* Animations */
@@ -140,7 +131,7 @@ pre {
 }
 
 .message--user .message__body {
-  font: 19px/1.4 var(--font-sans);
+  font: 18px/1.4 var(--font-sans);
   color: var(--ink);
 }
 
@@ -258,7 +249,7 @@ pre {
 
 /* [1] [2]: the citation numbers that tie a sentence to a source. */
 .citation-ref {
-  font: 500 0.68em var(--font-sans);
+  font: 500 11px var(--font-sans);
   color: var(--ink-3);
   margin: 0 1px;
   text-decoration: underline;

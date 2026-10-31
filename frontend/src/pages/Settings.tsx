@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSettings, ModelInfo, ProviderInfo } from '../contexts/SettingsContext';
+import { useSettings, ProviderInfo } from '../contexts/SettingsContext';
+import { withEdits, type SettingsEdits } from '../contexts/settingsEdits';
 import { apiFetch } from '../api/client';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -12,13 +13,12 @@ import '../styles/settings.css';
 
 const Settings: React.FC = () => {
   const navigate = useNavigate();
-  const { settings, updateSettings, loading, availableProviders } = useSettings();
-  const [formData, setFormData] = useState(settings);
+  const { settings, updateSettings, loading, loadFailed, availableProviders } = useSettings();
+  const [edits, setEdits] = useState<SettingsEdits>({});
+  const formData = withEdits(settings, edits);
+  const dirty = JSON.stringify(formData) !== JSON.stringify(settings);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [availableModels, setAvailableModels] = useState<Record<string, ModelInfo[]>>({});
-  const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
   const [validatingProvider, setValidatingProvider] = useState<string | null>(null);
   const [providerValidation, setProviderValidation] = useState<Record<string, { valid: boolean; message?: string }>>({});
   const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
@@ -27,10 +27,6 @@ const Settings: React.FC = () => {
   
   // Auto-updater hook (only used in Electron)
   const updater = useAppUpdater();
-
-  useEffect(() => {
-    setFormData(settings);
-  }, [settings]);
 
   // Detect environment variable API keys on mount
   useEffect(() => {
@@ -48,67 +44,35 @@ const Settings: React.FC = () => {
     detectKeys();
   }, []);
 
-  const handleInputChange = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const handleInputChange = <K extends keyof SettingsEdits>(field: K, value: SettingsEdits[K]) => {
+    setEdits(prev => ({ ...prev, [field]: value }));
     setSaveSuccess(false);
-    setSaveError(null);
   };
 
-  const handleBooleanChange = (field: keyof typeof formData, value: boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setSaveSuccess(false);
-    setSaveError(null);
-  };
-
-  const handleProviderEnabledChange = (providerId: string, enabled: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      providers: {
-        ...prev.providers,
-        [providerId]: {
-          ...prev.providers[providerId],
-          enabled
+  const editProvider = (providerId: string, change: { enabled?: boolean; credentials?: Record<string, string> }) => {
+    setEdits(prev => {
+      const before = prev.providers?.[providerId];
+      return {
+        ...prev,
+        providers: {
+          ...prev.providers,
+          [providerId]: { ...before, ...change, credentials: { ...before?.credentials, ...change.credentials } }
         }
-      }
-    }));
+      };
+    });
     setSaveSuccess(false);
-    setSaveError(null);
   };
 
-  const handleProviderCredentialChange = (providerId: string, key: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      providers: {
-        ...prev.providers,
-        [providerId]: {
-          ...prev.providers[providerId],
-          credentials: {
-            ...prev.providers[providerId].credentials,
-            [key]: value
-          }
-        }
-      }
-    }));
-    // Clear cached models so they reload with the new credentials/endpoint
-    setAvailableModels(prev => { const updated = { ...prev }; delete updated[providerId]; return updated; });
-    setSaveSuccess(false);
-    setSaveError(null);
-  };
+  const handleProviderEnabledChange = (providerId: string, enabled: boolean) => editProvider(providerId, { enabled });
 
-  const loadModelsForProvider = async (providerId: string) => {
-    setLoadingModels(prev => ({ ...prev, [providerId]: true }));
-    try {
-      const response = await apiFetch(`/api/providers/${providerId}/models`);
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableModels(prev => ({ ...prev, [providerId]: data.models || [] }));
-      }
-    } catch (err) {
-      // A local server that is not running is a normal state for an optional provider.
-      console.warn(`${providerId} is not reachable; its models will load once it is running.`, err);
-    } finally {
-      setLoadingModels(prev => ({ ...prev, [providerId]: false }));
-    }
+  const handleProviderCredentialChange = (providerId: string, key: string, value: string) =>
+    editProvider(providerId, { credentials: { [key]: value } });
+
+  // Controls that apply at once; the error banner shows a failure.
+  const applyNow = (changes: SettingsEdits) => { updateSettings(changes).catch(() => undefined); };
+
+  const leave = () => {
+    if (!dirty || window.confirm('Leave without saving your changes?')) navigate('/');
   };
 
   const validateProvider = async (providerId: string) => {
@@ -131,18 +95,6 @@ const Settings: React.FC = () => {
           message: data.error || data.message || data.details || (data.valid ? 'Connection successful' : 'Validation failed')
         }
       }));
-      
-      // If valid, handle models
-      if (data.valid) {
-        // For providers that return models in validation response
-        if (data.models && data.models.length > 0) {
-          console.log(`[Settings] Received ${data.models.length} dynamic models from validation for ${providerId}`);
-          setAvailableModels(prev => ({ ...prev, [providerId]: data.models }));
-        } else {
-          // Otherwise, load models separately
-          await loadModelsForProvider(providerId);
-        }
-      }
     } catch (err) {
       setProviderValidation(prev => ({
         ...prev,
@@ -156,46 +108,20 @@ const Settings: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    // Load models for enabled providers on mount
-    Object.entries(formData.providers).forEach(([providerId, config]) => {
-      if (config.enabled && !loadingModels[providerId] && !availableModels[providerId]) {
-        loadModelsForProvider(providerId);
-      }
-    });
-  }, [formData.providers]);
+  const saveEdits = async () => {
+    const sent = edits;
+    await updateSettings(sent);
+    setEdits((current) => (current === sent ? {} : current)); // typed during the save stays, and saves next
+  };
 
   const handleSave = async () => {
     try {
       setSaving(true);
-      setSaveError(null);
-      
-      // Filter out masked API keys before saving
-      // Masked keys contain • (bullet) characters and shouldn't be saved
-      const dataToSave = {
-        ...formData,
-        providers: { ...formData.providers }
-      };
-      
-      Object.keys(dataToSave.providers).forEach(providerId => {
-        const providerData = dataToSave.providers[providerId];
-        if (providerData.credentials?.api_key && providerData.credentials.api_key.includes('•')) {
-          // Don't send masked key - backend will keep existing key
-          dataToSave.providers[providerId] = {
-            ...providerData,
-            credentials: {
-              ...providerData.credentials,
-              api_key: settings.providers[providerId]?.credentials?.api_key || ''
-            }
-          };
-        }
-      });
-      
-      await updateSettings(dataToSave);
+      await saveEdits();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save settings');
+    } catch {
+      // the error banner shows it, and the edits stay in the form
     } finally {
       setSaving(false);
     }
@@ -203,38 +129,12 @@ const Settings: React.FC = () => {
 
   const handleSaveAndTest = async (providerId: string) => {
     try {
-      // First, save the settings
       setSaving(true);
-      setSaveError(null);
-      
-      // Filter out masked API keys before saving
-      const dataToSave = {
-        ...formData,
-        providers: { ...formData.providers }
-      };
-      
-      Object.keys(dataToSave.providers).forEach(pid => {
-        const providerData = dataToSave.providers[pid];
-        if (providerData.credentials?.api_key && providerData.credentials.api_key.includes('•')) {
-          // Don't send masked key - backend will keep existing key
-          dataToSave.providers[pid] = {
-            ...providerData,
-            credentials: {
-              ...providerData.credentials,
-              api_key: settings.providers[pid]?.credentials?.api_key || ''
-            }
-          };
-        }
-      });
-      
-      await updateSettings(dataToSave);
+      if (dirty) await saveEdits();
       setSaving(false);
-      
-      // Then, validate the provider
       await validateProvider(providerId);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save settings');
-      setSaving(false);
+    } catch {
+      setSaving(false); // the error banner shows it
     }
   };
 
@@ -352,7 +252,7 @@ const Settings: React.FC = () => {
               </div>
             )}
 
-            <Button onClick={() => handleSaveAndTest(provider.id)} variant="secondary" disabled={isValidating || saving}>
+            <Button onClick={() => handleSaveAndTest(provider.id)} variant="secondary" disabled={isValidating || saving || loadFailed}>
               {isValidating ? 'Testing…' : saving ? 'Saving…' : 'Save and test'}
             </Button>
           </div>
@@ -378,7 +278,7 @@ const Settings: React.FC = () => {
     <div className="settings-page">
       <RoomHeader title="Settings">
         <div className="room-header__fill" />
-        <button type="button" className="btn" onClick={() => navigate('/')}>← {backLabel}</button>
+        <button type="button" className="btn" onClick={leave}>← {backLabel}</button>
       </RoomHeader>
 
       <div className="settings-body">
@@ -413,7 +313,7 @@ const Settings: React.FC = () => {
                       name="interfaceMode"
                       value="desk"
                       checked={settings.interfaceMode !== 'chat'}
-                      onChange={() => updateSettings({ interfaceMode: 'desk' })}
+                      onChange={() => applyNow({ interfaceMode: 'desk' })}
                     />
                     <span>
                       <span className="settings-check__label">Search</span>
@@ -429,7 +329,7 @@ const Settings: React.FC = () => {
                       name="interfaceMode"
                       value="chat"
                       checked={settings.interfaceMode === 'chat'}
-                      onChange={() => updateSettings({ interfaceMode: 'chat' })}
+                      onChange={() => applyNow({ interfaceMode: 'chat' })}
                     />
                     <span>
                       <span className="settings-check__label">RAG Chat</span>
@@ -447,7 +347,7 @@ const Settings: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={settings.theme === 'dark'}
-                    onChange={(e) => updateSettings({ theme: e.target.checked ? 'dark' : 'light' })}
+                    onChange={(e) => applyNow({ theme: e.target.checked ? 'dark' : 'light' })}
                   />
                   <span>
                     <span className="settings-check__label">Dark theme</span>
@@ -541,7 +441,7 @@ const Settings: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={formData.showSystemNotification ?? true}
-                    onChange={(e) => handleBooleanChange('showSystemNotification', e.target.checked)}
+                    onChange={(e) => handleInputChange('showSystemNotification', e.target.checked)}
                   />
                   <span>
                     <span className="settings-check__label">System notification</span>
@@ -552,7 +452,7 @@ const Settings: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={formData.playSoundNotification ?? false}
-                    onChange={(e) => handleBooleanChange('playSoundNotification', e.target.checked)}
+                    onChange={(e) => handleInputChange('playSoundNotification', e.target.checked)}
                   />
                   <span>
                     <span className="settings-check__label">Sound</span>
@@ -618,12 +518,7 @@ const Settings: React.FC = () => {
                   id="max-sources"
                   className="settings-input"
                   value={formData.maxSources ?? 0}
-                  onChange={e => {
-                    const v = parseInt(e.target.value, 10);
-                    setFormData(prev => ({ ...prev, maxSources: v }));
-                    setSaveSuccess(false);
-                    setSaveError(null);
-                  }}
+                  onChange={e => handleInputChange('maxSources', parseInt(e.target.value, 10))}
                 >
                   <option value={0}>Automatic, from the model's context window (recommended)</option>
                   {[4, 6, 8, 10, 12, 16, 20, 30].map(n => <option key={n} value={n}>{n} passages</option>)}
@@ -642,10 +537,9 @@ const Settings: React.FC = () => {
       <footer className="settings-savebar">
         <div className="settings-savebar__status" role="status" aria-live="polite">
           {saveSuccess && <span className="settings-success">Saved</span>}
-          {saveError && <span className="settings-error">{saveError}</span>}
         </div>
-        <Button onClick={() => navigate('/')} variant="secondary">Cancel</Button>
-        <Button onClick={handleSave} disabled={saving} variant="primary">{saving ? 'Saving…' : 'Save settings'}</Button>
+        <Button onClick={leave} variant="secondary">Cancel</Button>
+        <Button onClick={handleSave} disabled={saving || !dirty || loadFailed} variant="primary">{saving ? 'Saving…' : 'Save settings'}</Button>
       </footer>
     </div>
   );

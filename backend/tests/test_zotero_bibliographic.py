@@ -184,3 +184,43 @@ def test_doi_and_title_index_covers_parent_items_only(zlib):
     assert dois == {"10.1177/0950017019862954": "2"}
     assert titles["Riders on the storm"] == "2" and titles["Group paper 100% real"] == "6"
     assert "The gig economy full text PDF" not in titles and "The gig economy deleted copy" not in titles
+
+
+def test_items_with_pdfs_go_by_content_type_and_skip_the_trash(zlib):
+    conn = sqlite3.connect(zlib.db_path)
+    lib = Library.__new__(Library)
+    lib.conn = conn
+    lib.add(10, "report", "NOSUFFIX", {"title": "PDF stored without a suffix", "date": "2020"})
+    lib.add(11, "attachment", "ATTACH11", {"title": "PDF"})
+    conn.execute("INSERT INTO itemAttachments VALUES (11, 10, 'application/pdf', 'storage:download')")
+    lib.add(12, "report", "TRASHED1", {"title": "Trashed parent", "date": "2020"})
+    lib.add(13, "attachment", "ATTACH13", {"title": "PDF"})
+    conn.execute("INSERT INTO itemAttachments VALUES (13, 12, 'application/pdf', 'storage:bin.pdf')")
+    conn.execute("INSERT INTO deletedItems VALUES (12)")
+    lib.add(14, "report", "TRASHPDF", {"title": "Only its PDF is in the trash", "date": "2020"})
+    lib.add(15, "attachment", "ATTACH15", {"title": "PDF"})
+    conn.execute("INSERT INTO itemAttachments VALUES (15, 14, 'application/pdf', 'storage:gone.pdf')")
+    conn.execute("INSERT INTO deletedItems VALUES (15)")
+    lib.add(16, "report", "WEBLINK1", {"title": "A linked URL has no file", "date": "2020"})
+    lib.add(17, "attachment", "ATTACH17", {"title": "PDF"})
+    conn.execute("INSERT INTO itemAttachments VALUES (17, 16, 'application/pdf', NULL)")
+    conn.commit()
+    assert {it["item_id"] for it in zlib.search_parent_items_with_pdfs()} == {"1", "8", "10"}
+
+
+@pytest.mark.parametrize("folder", ["Research #2", "what%20now"])
+def test_a_library_path_with_uri_characters_still_opens_read_only(tmp_path, folder):
+    path = tmp_path / folder / "zotero.sqlite"
+    path.parent.mkdir()
+    Library(path).conn.commit()
+    lib = ZoteroLibrary(str(path))
+    with lib._cursor() as cur:
+        cur.execute("SELECT count(*) FROM items")
+        with pytest.raises(sqlite3.OperationalError):
+            cur.execute("INSERT INTO groups VALUES (1, 1, 'no')")
+
+
+def test_the_data_folder_is_as_good_as_the_database_file(tmp_path):
+    (tmp_path / "zotero.sqlite").touch()
+    assert ZoteroLibrary(str(tmp_path)).db_path == str(tmp_path / "zotero.sqlite")
+

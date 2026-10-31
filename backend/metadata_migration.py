@@ -3,10 +3,11 @@ Migrate ChromaDB metadata from legacy format to current format.
 Updates metadata in-place without re-embedding documents.
 """
 
-import re
 import time
 from typing import Dict, List, Any, Optional
 import logging
+
+from backend.metadata_utils import year_of
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class MetadataMigration:
         """
         logger.info("Starting metadata migration...")
         self.progress["start_time"] = time.time()
+        self._library_by_item_id()  # an unreadable library stops here, not once per chunk
 
         cache: Dict[str, Dict] = {}
         offset = 0
@@ -92,24 +94,18 @@ class MetadataMigration:
         return self._library
 
     def _fetch_updated_metadata(self, item_id: str) -> Optional[Dict]:
-        """Current metadata for one item from Zotero, normalised (year as int
-        or None), or None if the item is not in the library."""
+        """Current metadata for one item from Zotero, normalised (year as int,
+        0 when unknown), or None if the item is not in the library."""
         try:
             item = self._library_by_item_id().get(str(item_id))
             if item is None:
                 return None
-            year_str = item.metadata.get("date", "")
-            year_int: Optional[int] = None
-            if year_str:
-                match = re.search(r'\b(19|20)\d{2}\b', year_str)
-                if match:
-                    year_int = int(match.group(0))
             return {
                 "title":       item.metadata.get("title", ""),
                 "authors":     item.metadata.get("authors", ""),
                 "tags":        item.metadata.get("tags", ""),
                 "collections": item.metadata.get("collections", ""),
-                "year":        year_int,
+                "year":        year_of(item.metadata.get("date")),
                 "item_type":   item.metadata.get("item_type", ""),
             }
         except Exception as e:
@@ -154,7 +150,7 @@ class MetadataMigration:
                 
                 # Build new metadata dict (preserve chunk-specific fields)
                 new_meta = {
-                    "item_id": int(item_id) if item_id.isdigit() else item_id,
+                    "item_id": item_id,
                     "chunk_idx": int(old_meta.get("chunk_idx", 0)),
                     "page": int(old_meta.get("page", 0)),
                     "pdf_path": old_meta.get("pdf_path", ""),
@@ -164,14 +160,9 @@ class MetadataMigration:
                     "authors": updated_item_meta.get("authors", ""),
                     "tags": updated_item_meta.get("tags") or "",  # Don't store None - ChromaDB strips it
                     "collections": updated_item_meta.get("collections") or "",  # Don't store None
-                    "year": updated_item_meta.get("year"),  # Integer or None - but ChromaDB may strip None
+                    "year": updated_item_meta.get("year"),
                     "item_type": updated_item_meta.get("item_type", ""),
                 }
-                
-                # CRITICAL: ChromaDB strips None values, so we need to handle that
-                # For year, if it's None, we should store it as -1 to preserve the key
-                if new_meta["year"] is None:
-                    new_meta["year"] = -1  # Sentinel value for "no year"
                 
                 # Check if update is actually needed
                 if self._needs_update(old_meta, new_meta):
@@ -193,32 +184,7 @@ class MetadataMigration:
     
     def _needs_update(self, old_meta: Dict, new_meta: Dict) -> bool:
         """Check if metadata actually needs updating."""
-        # Check if year format changed (string -> int or None)
-        old_year = old_meta.get('year')
-        new_year = new_meta.get('year')
-        
-        # Year needs update if it's currently a string (including empty strings)
-        # and needs to be an int or None
-        if isinstance(old_year, str):
-            # Old format: year as string, new format: year as int or None
-            if isinstance(new_year, int) or new_year is None:
-                return True
-        
-        # If old year is None but new year exists (shouldn't happen in v1, but be safe)
-        if old_year is None and isinstance(new_year, int):
-            return True
-        
-        # Check if tags/collections content changed (not just existence)
-        if old_meta.get('tags', '') != new_meta.get('tags', ''):
-            return True
-        if old_meta.get('collections', '') != new_meta.get('collections', ''):
-            return True
-        
-        # Check if item_type is missing (new field)
-        if 'item_type' not in old_meta and new_meta.get('item_type'):
-            return True
-        
-        return False
+        return any(old_meta.get(key) != value for key, value in new_meta.items())
     
     def _apply_metadata_updates(self, updates: List[tuple]):
         """Apply metadata updates to ChromaDB."""

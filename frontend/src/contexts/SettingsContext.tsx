@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { apiFetch } from '../api/client';
+import { apiFetch, BACKEND_BACK } from '../api/client';
+import type { SettingsEdits } from './settingsEdits';
 
 export interface ProviderCredentials {
   api_key?: string;
@@ -55,11 +56,13 @@ export interface Settings {
 
 interface SettingsContextType {
   settings: Settings;
-  updateSettings: (newSettings: Partial<Settings>) => Promise<void>;
+  updateSettings: (changes: SettingsEdits) => Promise<void>;
   loading: boolean;
+  /** The saved settings could not be read: `settings` holds the defaults. */
+  loadFailed: boolean;
   error: string | null;
+  clearError: () => void;
   availableProviders: ProviderInfo[];
-  loadProviders: () => Promise<void>;
 }
 
 const defaultSettings: Settings = {
@@ -115,6 +118,13 @@ const defaultSettings: Settings = {
   }
 };
 
+// The backend's file may predate a provider.
+const withDefaults = (data: Partial<Settings>): Settings => ({
+  ...defaultSettings,
+  ...data,
+  providers: { ...defaultSettings.providers, ...(data.providers || {}) },
+});
+
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -123,92 +133,78 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [error, setError] = useState<string | null>(null);
   const [availableProviders, setAvailableProviders] = useState<ProviderInfo[]>([]);
 
+  const [loadFailed, setLoadFailed] = useState(false);
+
   // Load available providers from backend
   const loadProviders = async () => {
     try {
       const response = await apiFetch('/api/providers');
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableProviders(data.providers || []);
-      }
+      const data = await response.json();
+      setAvailableProviders(data.providers || []);
     } catch (err) {
       console.error('Failed to load providers:', err);
     }
   };
 
+  // Never sets loading: a retry must not unmount the app under what the user is typing.
+  const loadSettings = async () => {
+    try {
+      const response = await apiFetch('/api/settings');
+      setSettings(withDefaults(await response.json()));
+      setLoadFailed(false);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to load settings:', err);
+      setLoadFailed(true);
+      setError(err instanceof Error ? err.message : 'Your settings could not be read.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Load settings from backend on mount
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const response = await apiFetch('/api/settings');
-        if (response.ok) {
-          const text = await response.text();
-          try {
-            const data = JSON.parse(text);
-            
-            // Merge with defaults to ensure all providers exist
-            const mergedSettings = {
-              ...defaultSettings,
-              ...data,
-              providers: {
-                ...defaultSettings.providers,
-                ...(data.providers || {})
-              }
-            };
-            
-            setSettings(mergedSettings);
-          } catch (parseErr) {
-            console.error('Failed to parse settings JSON:', parseErr);
-            setError('Failed to parse settings. Using defaults.');
-            setSettings(defaultSettings);
-          }
-        } else {
-          console.error('Settings request failed:', response.status);
-          setError('Failed to load settings from server');
-        }
-      } catch (err) {
-        console.error('Failed to load settings:', err);
-        setError('Failed to load settings');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadSettings();
     loadProviders();
   }, []);
+
+  // A failed load tries again until it works.
+  useEffect(() => {
+    if (!loadFailed) return;
+    const retry = () => {
+      loadSettings();
+      loadProviders();
+    };
+    window.addEventListener(BACKEND_BACK, retry);
+    const timer = window.setInterval(retry, 5000); // a 500 is no network failure, so no event follows it
+    return () => {
+      window.removeEventListener(BACKEND_BACK, retry);
+      window.clearInterval(timer);
+    };
+  }, [loadFailed]);
 
   // Apply the selected theme to the document root (drives [data-theme="dark"] CSS)
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme === 'dark' ? 'dark' : 'light');
   }, [settings.theme]);
 
-  const updateSettings = async (newSettings: Partial<Settings>) => {
+  // Sends only what changed: the backend merges by key, and a whole object from
+  // this render could undo a save in flight or write the defaults over a failed load.
+  const updateSettings = async (changes: SettingsEdits) => {
     try {
       setError(null);
-      const updatedSettings = { ...settings, ...newSettings };
-      
-      const response = await apiFetch('/api/settings', {
+      await apiFetch('/api/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updatedSettings),
+        body: JSON.stringify(changes),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to save settings');
-      }
 
       // After saving, reload settings to get the masked versions
       const reloadResponse = await apiFetch('/api/settings');
-      if (reloadResponse.ok) {
-        const data = await reloadResponse.json();
-        setSettings(data);
-      } else {
-        // If reload fails, still update local state
-        setSettings(updatedSettings);
-      }
+      setSettings(withDefaults(await reloadResponse.json()));
+      setLoadFailed(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save settings';
       setError(errorMessage);
@@ -217,7 +213,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, loading, error, availableProviders, loadProviders }}>
+    <SettingsContext.Provider value={{ settings, updateSettings, loading, loadFailed, error, clearError: () => setError(null), availableProviders }}>
       {children}
     </SettingsContext.Provider>
   );

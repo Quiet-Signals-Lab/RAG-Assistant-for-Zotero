@@ -184,7 +184,7 @@ const QueryDesk: React.FC = () => {
       >
         <div className="panel-head">
           <h2 className="panel-head__title">Search</h2>
-          <span className="panel-head__hint" aria-hidden="true">/ to return here</span>
+          <span className="panel-head__hint" aria-hidden="true">press / to come back here</span>
         </div>
         <label htmlFor="desk-query" className="desk-label">What are you looking for</label>
         <textarea
@@ -200,6 +200,9 @@ const QueryDesk: React.FC = () => {
               e.preventDefault();
               if (desk.query.trim() && desk.status !== "loading") desk.submit();
             }
+            // Down from the end of the query steps into the results, where the list keys work.
+            const end = e.currentTarget.selectionStart === desk.query.length;
+            if (e.key === "ArrowDown" && end) document.querySelector<HTMLElement>(".row__select")?.focus();
           }}
           placeholder={desk.within ? "What to look for inside it" : "A topic, a title, or an author and year"}
           autoComplete="off"
@@ -307,7 +310,7 @@ const QueryDesk: React.FC = () => {
               const isCurrent = entry.query.toLocaleLowerCase() === current;
               return (
                 <li key={`${entry.query}-${entry.at}`} className={isCurrent ? "log__row log__row--current" : "log__row"}>
-                  <button type="button" className="log__open" onClick={() => desk.restore(entry)} aria-current={isCurrent || undefined}>
+                  <button type="button" className="log__open" title={entry.query} onClick={() => desk.restore(entry)} aria-current={isCurrent || undefined}>
                     <span className="log__marker" aria-hidden="true">{isCurrent ? "▸" : ""}</span>
                     <span className="log__query">{entry.query}</span>
                     <span className="log__count">{entry.count}</span>

@@ -24,9 +24,6 @@ export type Source = {
   authors?: string; // Backward compatibility with full authors list
 };
 
-// Legacy type alias for backward compatibility
-export type SourceRef = Source;
-
 export type Message = { 
   id: string; 
   role: "user" | "assistant"; 
@@ -43,8 +40,6 @@ export type Session = {
   createdAt: string;
   updatedAt: string;
   messages: Message[];
-  snippets: Snippet[];
-  sources: SourceRef[];
-  /** Zotero item ids the chat answers from, when opened from search. */
+  /** Zotero item ids the chat answers from, in sessions saved when search could open one. */
   itemIds?: string[];
 };

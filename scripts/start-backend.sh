@@ -11,6 +11,9 @@ mkdir -p "$LOG_DIR"
 BACKEND_LOG="$LOG_DIR/backend.log"
 LOG="$LOG_DIR/backend-shell-wrapper.log"
 
+# Electron signals this pid's group on quit, so a stale one must not survive a failed launch.
+rm -f "$LOG_DIR/backend.pid"
+
 # Keep one previous generation once the log passes 10 MB.
 if [ -f "$BACKEND_LOG" ] && [ "$(stat -c %s "$BACKEND_LOG" 2>/dev/null || echo 0)" -gt 10485760 ]; then
     mv -f "$BACKEND_LOG" "$BACKEND_LOG.1"

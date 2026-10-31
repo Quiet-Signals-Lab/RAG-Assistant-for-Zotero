@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../api/client';
 import { useSettings } from '../../contexts/SettingsContext';
+import type { IndexStats } from '../../types/desk';
 import '../../styles/library-management.css';
 
 interface IndexProgress {
@@ -18,15 +19,6 @@ interface IndexProgress {
 interface IndexStatus {
   status: string;
   progress?: IndexProgress;
-}
-
-interface IndexStats {
-  indexed_items: number;
-  total_chunks: number;
-  zotero_items: number;
-  new_items: number;
-  current_embedding_model: string;
-  collection_name: string;
 }
 
 const LibraryManagementPanel: React.FC = () => {
@@ -53,6 +45,10 @@ const LibraryManagementPanel: React.FC = () => {
   const [savingExclusions, setSavingExclusions] = useState(false);
   const [exclusionsSaved, setExclusionsSaved] = useState(false);
   const [exclusionMessage, setExclusionMessage] = useState<string | null>(null);
+  const [exclusionError, setExclusionError] = useState<string | null>(null);
+
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [confirmingRebuild, setConfirmingRebuild] = useState(false);
 
   // Metadata sync state
   const [syncingMetadata, setSyncingMetadata] = useState(false);
@@ -68,11 +64,14 @@ const LibraryManagementPanel: React.FC = () => {
   }, [settings.embeddingModel]);
 
   // Keep local exclusion selections in sync with saved settings
+  // (by value: every settings save brings new arrays, which must not undo ticks not saved yet)
+  const savedExclusions = JSON.stringify([settings.excludedCollections, settings.excludedTags, settings.excludedItemTypes]);
   useEffect(() => {
-    setExclCollections(settings.excludedCollections || []);
-    setExclTags(settings.excludedTags || []);
-    setExclItemTypes(settings.excludedItemTypes || []);
-  }, [settings.excludedCollections, settings.excludedTags, settings.excludedItemTypes]);
+    const [saved, savedTags, savedTypes] = JSON.parse(savedExclusions);
+    setExclCollections(saved || []);
+    setExclTags(savedTags || []);
+    setExclItemTypes(savedTypes || []);
+  }, [savedExclusions]);
 
   // Load the library's collections, tags, and item types for the exclusion pickers
   useEffect(() => {
@@ -104,6 +103,7 @@ const LibraryManagementPanel: React.FC = () => {
   const handleSaveExclusions = async () => {
     setSavingExclusions(true);
     setExclusionMessage(null);
+    setExclusionError(null);
     try {
       await updateSettings({
         excludedCollections: exclCollections,
@@ -112,20 +112,16 @@ const LibraryManagementPanel: React.FC = () => {
       });
       // Apply immediately: remove matching items from the index so users don't
       // have to reindex. (Un-excluding still needs a Sync to re-embed items.)
-      try {
-        const resp = await apiFetch('/api/exclusions/purge', { method: 'POST' });
-        const data = await resp.json();
-        if (data?.purged_items > 0) {
-          setExclusionMessage(`Removed ${data.purged_items} item${data.purged_items !== 1 ? 's' : ''} from the index.`);
-          await fetchStats();
-        }
-      } catch (err) {
-        console.error('Failed to purge excluded items', err);
+      const resp = await apiFetch('/api/exclusions/purge', { method: 'POST' });
+      const data = await resp.json();
+      if (data?.purged_items > 0) {
+        setExclusionMessage(`Removed ${data.purged_items} item${data.purged_items !== 1 ? 's' : ''} from the index.`);
       }
+      await fetchStats();
       setExclusionsSaved(true);
       setTimeout(() => setExclusionsSaved(false), 3000);
     } catch (err) {
-      console.error('Failed to save exclusions', err);
+      setExclusionError(err instanceof Error ? err.message : 'The exclusions could not be saved.');
     } finally {
       setSavingExclusions(false);
     }
@@ -136,14 +132,16 @@ const LibraryManagementPanel: React.FC = () => {
     setExclTags([]);
     setExclItemTypes([]);
     setExclusionMessage(null);
+    setExclusionError(null);
     // Persist immediately so a following Sync actually restores excluded items.
     // (Clearing only removes the rules; run Sync to re-index what was removed.)
     setSavingExclusions(true);
     try {
       await updateSettings({ excludedCollections: [], excludedTags: [], excludedItemTypes: [] });
-      setExclusionMessage('Exclusions cleared — click "Sync Library" to restore any removed items.');
+      setExclusionMessage('Exclusions cleared. Sync to bring back any removed items.');
+      await fetchStats();
     } catch (err) {
-      console.error('Failed to clear exclusions', err);
+      setExclusionError(err instanceof Error ? err.message : 'The exclusions could not be cleared.');
     } finally {
       setSavingExclusions(false);
     }
@@ -178,8 +176,8 @@ const LibraryManagementPanel: React.FC = () => {
       await updateSettings({ embeddingModel });
       setModelSaveSuccess(true);
       setTimeout(() => setModelSaveSuccess(false), 3000);
-    } catch (err) {
-      console.error('Failed to save embedding model', err);
+    } catch {
+      // the error banner shows it, including the refusal while indexing runs
     } finally {
       setSavingModel(false);
     }
@@ -191,13 +189,26 @@ const LibraryManagementPanel: React.FC = () => {
       const resp = await apiFetch('/api/index_stats');
       const data = await resp.json();
       setIndexStats(data);
+      setStatsError(null);
     } catch (err) {
-      console.error('Failed to fetch index stats', err);
+      setStatsError(err instanceof Error ? err.message : 'The index could not be read.');
     }
   };
 
   useEffect(() => {
     fetchStats();
+    // This panel unmounts when you leave it; a job started earlier is still running.
+    apiFetch('/api/index_status')
+      .then(r => r.json())
+      .then((js: IndexStatus) => {
+        setIndexStatus(js);
+        if (js.status === 'indexing') {
+          indexingRef.current = true;
+          setIndexing(true);
+          followIndexing();
+        }
+      })
+      .catch(() => undefined); // fetchStats above reports an unreachable backend
   }, []);
 
   // Cleanup polling on unmount
@@ -210,11 +221,39 @@ const LibraryManagementPanel: React.FC = () => {
     };
   }, []);
 
+  /** Poll until the running job ends, then refresh the numbers. */
+  const followIndexing = () => {
+    const finish = () => {
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      setIndexing(false);
+      indexingRef.current = false;
+    };
+    const poll = async () => {
+      try {
+        const js: IndexStatus = await (await apiFetch('/api/index_status')).json();
+        setIndexStatus(js);
+        if (js.status === 'indexing') return;
+        await fetchStats();
+      } catch (err) {
+        console.error('Failed to fetch index_status', err); // one miss must not abandon a running job
+        return;
+      }
+      finish();
+    };
+    if (pollRef.current) window.clearInterval(pollRef.current);
+    pollRef.current = window.setInterval(poll, 1500);
+    poll();
+  };
+
   const startIndexing = async (incremental: boolean) => {
     if (indexing || indexingRef.current) return;
 
     indexingRef.current = true;
     setIndexing(true);
+    setConfirmingRebuild(false);
 
     try {
       await apiFetch("/api/index_library", {
@@ -222,49 +261,11 @@ const LibraryManagementPanel: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ incremental })
       });
-
-      // Start polling status
-      const poll = async () => {
-        try {
-          const r = await apiFetch('/api/index_status');
-          const js = await r.json();
-          setIndexStatus(js);
-
-          if (js?.status === 'indexing') {
-            return false;
-          }
-
-          // Refresh stats after indexing completes
-          await fetchStats();
-          return true;
-        } catch (err) {
-          console.error('Failed to fetch index_status', err);
-          return true;
-        }
-      };
-
-      const done = await poll();
-      if (!done) {
-        pollRef.current = window.setInterval(async () => {
-          const finished = await poll();
-          if (finished) {
-            if (pollRef.current) {
-              window.clearInterval(pollRef.current);
-              pollRef.current = null;
-            }
-            setIndexing(false);
-            indexingRef.current = false;
-          }
-        }, 1500) as unknown as number;
-      } else {
-        setIndexing(false);
-        indexingRef.current = false;
-      }
-    } catch (e: any) {
-      console.error("Indexing request failed", e);
+      followIndexing();
+    } catch (e) {
       setIndexing(false);
       indexingRef.current = false;
-      setIndexStatus({ status: 'error', progress: { error: 'Sync failed — check that Zotero is closed and try again.' } });
+      setIndexStatus({ status: 'error', progress: { error: e instanceof Error ? e.message : 'The sync could not start.' } });
     }
   };
 
@@ -296,20 +297,20 @@ const LibraryManagementPanel: React.FC = () => {
       const result = await response.json();
 
       if (result.status === 'completed') {
-        setMetadataSyncSuccess(
-          `Successfully synced metadata for ${result.summary?.unique_items || 0} items (${result.summary?.updated_chunks || 0} chunks updated in ${result.summary?.elapsed_seconds || 0}s)`
-        );
+        setMetadataSyncSuccess(`Updated the details of ${result.summary?.unique_items || 0} items.`);
         // Refresh stats after syncing
         await fetchStats();
       } else {
-        setMetadataSyncError('Metadata sync failed');
+        setMetadataSyncError('The details could not be updated.');
       }
     } catch (err) {
-      setMetadataSyncError(err instanceof Error ? err.message : 'Metadata sync failed');
+      setMetadataSyncError(err instanceof Error ? err.message : 'The details could not be updated.');
     } finally {
       setSyncingMetadata(false);
     }
   };
+
+  const progress = indexStatus?.status === 'indexing' ? indexStatus.progress : undefined;
 
   return (
     <div className="side-panel">
@@ -318,112 +319,98 @@ const LibraryManagementPanel: React.FC = () => {
         <span className="panel-head__hint">index and exclusions</span>
       </div>
 
-      <main className="lib-panel">
+      <div className="lib-panel">
 
-        {/* Library Status Section */}
         <section className="lib-section">
-          <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <ellipse cx="12" cy="5" rx="9" ry="3" stroke="currentColor" strokeWidth="2"/>
-              <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5" stroke="currentColor" strokeWidth="2"/>
-              <path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6" stroke="currentColor" strokeWidth="2"/>
-            </svg>
-            Library Status
-          </h3>
-
-          {indexStats ? (
+          {indexStats?.zotero_error && (
+            <p className="desk-notice desk-notice--error">
+              Zotero's database could not be read at {indexStats.zotero_path} ({indexStats.zotero_error}). If Zotero is
+              open, close it; otherwise check the path in Settings.
+            </p>
+          )}
+          {statsError ? (
+            <p className="desk-notice desk-notice--error">{statsError}</p>
+          ) : indexStats ? (
             <div className="stats-grid">
               <div className="stat-card">
-                <div className="stat-value">{indexStats.indexed_items}</div>
-                <div className="stat-label">Indexed Items</div>
+                <div className="stat-value">{indexStats.indexed_items.toLocaleString()}</div>
+                <div className="stat-label">Items indexed</div>
               </div>
               <div className="stat-card">
-                <div className="stat-value">{indexStats.total_chunks}</div>
-                <div className="stat-label">Total Chunks</div>
+                <div className="stat-value">{indexStats.total_chunks.toLocaleString()}</div>
+                <div className="stat-label">Passages</div>
               </div>
               <div className="stat-card">
-                <div className="stat-value">{indexStats.zotero_items}</div>
-                <div className="stat-label">Library Items</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-value stat-value-highlight">{indexStats.new_items}</div>
-                <div className="stat-label">New Items</div>
+                <div className="stat-value stat-value-highlight">{indexStats.new_items.toLocaleString()}</div>
+                <div className="stat-label">New in Zotero</div>
               </div>
             </div>
           ) : (
-            <div className="loading-stats">Loading stats...</div>
+            <div className="loading-stats">Reading the index…</div>
           )}
 
-          {indexStats && (
-            <div className="stat-card model-info">
-              <div className="stat-value">{indexStats.current_embedding_model}</div>
-              <div className="stat-label">Embedding model</div>
-            </div>
-          )}
-        </section>
-
-        {/* Embedding Model Section */}
-        <section className="lib-section">
-          <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-              <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Embedding Model
-          </h3>
-
-          <select
-            className="lib-select"
-            value={embeddingModel}
-            onChange={handleEmbeddingModelChange}
-          >
-            <optgroup label="Local (runs on this device)">
-              <option value="bge-base">BAAI/bge-base-en-v1.5 (768 dim) — Best quality, slower</option>
-              <option value="specter">SPECTER (768 dim) — Optimized for scientific papers</option>
-              <option value="minilm-l6">all-MiniLM-L6-v2 (384 dim) — Good quality, faster</option>
-              <option value="minilm-l3">paraphrase-MiniLM-L3-v2 (384 dim) — Fastest</option>
-            </optgroup>
-            <optgroup label="Multilingual — local, runs on this device">
-              <option value="bge-m3">BAAI/bge-m3 (1024 dim) — 100+ languages incl. Chinese, ~2.3GB download</option>
-              <option value="bge-large-zh">BAAI/bge-large-zh-v1.5 (1024 dim) — Chinese-optimised, ~1.3GB download</option>
-              <option value="multilingual-minilm">paraphrase-multilingual-MiniLM-L12-v2 (384 dim) — 50+ languages, ~470MB download</option>
-            </optgroup>
-            <optgroup label="Cloud — text sent to external API">
-              <option value="openai:text-embedding-3-small">OpenAI text-embedding-3-small (1536 dim) — Fast, cloud</option>
-              <option value="openai:text-embedding-3-large">OpenAI text-embedding-3-large (3072 dim) — Highest quality, cloud</option>
-            </optgroup>
-          </select>
-
-          <div style={{ marginTop: '10px' }}>
-            <button
-              className="btn btn--primary"
-              onClick={handleSaveModel}
-              disabled={savingModel || embeddingModel === settings.embeddingModel}
-            >
-              {savingModel ? 'Saving…' : modelSaveSuccess ? 'Saved' : 'Save model'}
+          <div className="lib-action-row">
+            <button className="btn btn--primary" onClick={() => startIndexing(true)} disabled={indexing}>
+              {indexing
+                ? (progress?.mode === 'full' ? 'Rebuilding…' : 'Syncing…')
+                : indexStats?.new_items
+                  ? `Sync ${indexStats.new_items.toLocaleString()} new item${indexStats.new_items !== 1 ? 's' : ''}`
+                  : 'Sync library'}
             </button>
+            {indexing && (
+              <button className="lib-cancel-btn" onClick={stopIndexing}>
+                {progress?.mode === 'full' ? 'Stop' : 'Pause'}
+              </button>
+            )}
           </div>
 
-          <p className="muted" style={{ fontSize: '12px', marginTop: '10px', lineHeight: '1.5', borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)', padding: '8px 0', color: 'var(--ink-2)' }}>
-            Changing the embedding model requires a full re-index of your library. To try a different model while keeping existing embeddings, create a new profile instead.
+          {progress && !progress.error && (
+            <div className="indexing-progress">
+              <div className="progress-header">
+                <span className="progress-label">{progress.mode === 'full' ? 'Rebuilding' : 'Syncing'}…</span>
+                {progress.eta_seconds != null && progress.eta_seconds > 0 && (
+                  <span className="progress-eta">
+                    ~{progress.eta_seconds < 60 ? `${progress.eta_seconds}s` : `${Math.ceil(progress.eta_seconds / 60)}m`}
+                  </span>
+                )}
+              </div>
+
+              <div className="progress-bar">
+                {progress.total_items ? (
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${Math.min(100, Math.round((100 * (progress.processed_items ?? 0)) / progress.total_items))}%` }}
+                  />
+                ) : (
+                  <div className="progress-fill-indeterminate" />
+                )}
+              </div>
+
+              <div className="progress-details">
+                {progress.processed_items ?? 0} / {progress.total_items ?? 0} items
+                {progress.mode === 'incremental' && (progress.skipped_items ?? 0) > 0 && (
+                  <span> ({progress.skipped_items} already indexed)</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {indexStatus?.progress?.error && (
+            <p className="desk-notice desk-notice--error">{indexStatus.progress.error}</p>
+          )}
+
+          <p className="lib-hint">
+            Indexes new items only. It is safe to stop or close the app: the next sync picks up where this one left off.
           </p>
         </section>
 
-        {/* Excluded from Indexing Section */}
         <section className="lib-section">
-          <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Excluded from Indexing
-          </h3>
+          <h3 className="scope-section-title">Excluded from indexing</h3>
 
-          <p className="muted" style={{ fontSize: '12px', marginBottom: '14px', lineHeight: '1.5' }}>
-            Items in an excluded collection, tag or type are skipped when indexing and removed from the index on the next sync.
+          <p className="lib-hint">
+            Items in an excluded collection, tag or type are skipped, and removed from the index when you save.
           </p>
 
-          {/* Axis selector */}
           <div className="toggle-group toggle-group--three" role="group" aria-label="Exclude by">
             {exclusionAxes.map(axis => (
               <button
@@ -439,262 +426,134 @@ const LibraryManagementPanel: React.FC = () => {
             ))}
           </div>
 
-          {/* Search field for the active axis */}
           <input
             type="text"
+            className="lib-filter"
             value={exclSearch}
             onChange={e => setExclSearch(e.target.value)}
-            placeholder={`Search ${activeAxisData.label.toLowerCase()}...`}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '7px 10px',
-              fontSize: '13px',
-              marginBottom: '8px',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--rule)',
-              background: 'var(--input-bg, transparent)',
-              color: 'var(--text-main)',
-            }}
+            placeholder={`Search ${activeAxisData.label.toLowerCase()}…`}
+            aria-label={`Search ${activeAxisData.label.toLowerCase()}`}
           />
 
-          {/* Active axis list */}
           {activeAxisData.options.length === 0 ? (
-            <div className="muted" style={{ fontSize: '12px' }}>None found in your library.</div>
+            <p className="lib-hint">None found in your library.</p>
           ) : filteredOptions.length === 0 ? (
-            <div className="muted" style={{ fontSize: '12px' }}>No matches for “{exclSearch}”.</div>
+            <p className="lib-hint">No matches for “{exclSearch}”.</p>
           ) : (
-            <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--rule)', borderRadius: 'var(--radius-sm)', padding: '8px 10px' }}>
+            <div className="lib-checklist">
               {filteredOptions.map(o => (
-                <label key={o.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', fontSize: '13px', cursor: 'pointer' }}>
+                <label key={o.name}>
                   <input
                     type="checkbox"
                     checked={activeAxisData.selected.includes(o.name)}
                     onChange={() => toggle(activeAxisData.selected, activeAxisData.setSelected, o.name)}
                   />
-                  <span style={{ flex: 1 }}>{o.name}</span>
-                  {o.count != null && <span className="muted" style={{ fontSize: '11px' }}>{o.count}</span>}
+                  <span>{o.name}</span>
+                  {o.count != null && <span className="lib-checklist__count">{o.count}</span>}
                 </label>
               ))}
             </div>
           )}
 
-          {/* Summary of all exclusion rules */}
-          <div style={{ marginTop: '12px', fontSize: '12px', lineHeight: '1.6' }}>
+          <p className="lib-hint">
             {exclusionAxes.every(a => a.selected.length === 0) ? (
-              <span className="muted">Nothing excluded — your whole library will be indexed.</span>
+              'Nothing excluded: your whole library will be indexed.'
             ) : (
               <>
-                <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Excluding: </span>
+                <strong>Excluding:</strong>{' '}
                 {exclusionAxes
                   .filter(a => a.selected.length > 0)
                   .map(a => `${a.label} (${a.selected.length}): ${a.selected.join(', ')}`)
                   .join('  ·  ')}
               </>
             )}
-          </div>
+          </p>
 
-          <div style={{ display: 'flex', gap: '8px', marginTop: '12px', maxWidth: '320px' }}>
-            <button
-              className="btn btn--primary"
-              style={{ flex: 1 }}
-              onClick={handleSaveExclusions}
-              disabled={savingExclusions || !exclusionsDirty}
-            >
-              {savingExclusions ? 'Saving...' : exclusionsSaved ? 'Saved!' : 'Save Exclusions'}
+          <div className="lib-action-row">
+            <button className="btn btn--primary" onClick={handleSaveExclusions} disabled={savingExclusions || !exclusionsDirty}>
+              {savingExclusions ? 'Saving…' : exclusionsSaved ? 'Saved' : 'Save exclusions'}
             </button>
-            <button
-              className="btn"
-              style={{ flex: 1 }}
-              onClick={handleClearExclusions}
-              disabled={savingExclusions || !hasSelections}
-            >
+            <button className="btn" onClick={handleClearExclusions} disabled={savingExclusions || !hasSelections}>
               Clear
             </button>
           </div>
 
-          {exclusionMessage && (
-            <div className="migration-result success" style={{ marginTop: '10px' }}>
-              ✓ {exclusionMessage}
-            </div>
-          )}
+          {exclusionMessage && <p className="desk-notice">{exclusionMessage}</p>}
+          {exclusionError && <p className="desk-notice desk-notice--error">{exclusionError}</p>}
         </section>
 
-        {/* Indexing Section */}
-        <section className="lib-section">
-          <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M23 4v6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M1 20v-6h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Indexing
-          </h3>
+        <details className="lib-section lib-section-last lib-advanced">
+          <summary>Advanced</summary>
 
-          <p className="muted" style={{ fontSize: '12px', marginBottom: '14px', lineHeight: '1.5' }}>
-            Index your Zotero library to enable semantic search and RAG capabilities
+          <h3 className="scope-section-title">Update item details</h3>
+          <p className="lib-hint">
+            Picks up titles, authors, tags and collections you changed in Zotero, without reading the PDFs again.
           </p>
+          <button className="btn" onClick={handleMetadataSync} disabled={syncingMetadata}>
+            {syncingMetadata ? 'Updating…' : 'Update details from Zotero'}
+          </button>
+          {metadataSyncSuccess && <p className="desk-notice">{metadataSyncSuccess}</p>}
+          {metadataSyncError && <p className="desk-notice desk-notice--error">{metadataSyncError}</p>}
 
+          <h3 className="scope-section-title">Embedding model</h3>
+          <p className="lib-hint">
+            Turns passages into something searchable by meaning. {indexStats ? `In use: ${indexStats.current_embedding_model}. ` : ''}
+            Changing it means rebuilding the index. To compare models, create a new profile instead.
+          </p>
+          <select className="lib-select" aria-label="Embedding model" value={embeddingModel} onChange={handleEmbeddingModelChange}>
+            <optgroup label="Local (runs on this device)">
+              <option value="bge-base">BAAI/bge-base-en-v1.5: best quality, slower</option>
+              <option value="specter">SPECTER: made for scientific papers</option>
+              <option value="minilm-l6">all-MiniLM-L6-v2: good quality, faster</option>
+              <option value="minilm-l3">paraphrase-MiniLM-L3-v2: fastest</option>
+            </optgroup>
+            <optgroup label="Multilingual (local, runs on this device)">
+              <option value="bge-m3">BAAI/bge-m3: 100+ languages incl. Chinese, ~2.3GB download</option>
+              <option value="bge-large-zh">BAAI/bge-large-zh-v1.5: Chinese, ~1.3GB download</option>
+              <option value="multilingual-minilm">paraphrase-multilingual-MiniLM-L12-v2: 50+ languages, ~470MB download</option>
+            </optgroup>
+            <optgroup label="Cloud (text is sent to an external API)">
+              <option value="openai:text-embedding-3-small">OpenAI text-embedding-3-small: fast</option>
+              <option value="openai:text-embedding-3-large">OpenAI text-embedding-3-large: highest quality</option>
+            </optgroup>
+          </select>
           <div className="lib-action-row">
-            <button
-              className="btn btn--primary"
-              onClick={() => startIndexing(true)}
-              disabled={indexing}
-            >
-              {indexing && indexStatus?.progress?.mode === 'incremental'
-                ? 'Syncing...'
-                : indexStats?.new_items && indexStats.new_items > 0
-                  ? `Sync ${indexStats.new_items} New Item${indexStats.new_items !== 1 ? 's' : ''}`
-                  : 'Sync Library'
-              }
+            <button className="btn" onClick={handleSaveModel} disabled={savingModel || embeddingModel === settings.embeddingModel}>
+              {savingModel ? 'Saving…' : modelSaveSuccess ? 'Saved' : 'Save model'}
             </button>
+          </div>
 
-            <button
-              className="btn"
-              onClick={() => startIndexing(false)}
-              disabled={indexing}
-            >
-              {indexing && indexStatus?.progress?.mode === 'full'
-                ? 'Reindexing...'
-                : 'Full Reindex'
-              }
-            </button>
-
-            {indexing && (
-              <button
-                className="lib-cancel-btn"
-                onClick={stopIndexing}
-              >
-                {indexStatus?.progress?.mode === 'incremental' ? 'Pause' : 'Stop'}
+          <h3 className="scope-section-title">Rebuild the index</h3>
+          <p className="lib-hint">
+            Reads every PDF again and replaces its passages, which can take hours. Only needed if the index is damaged or you changed how PDFs are read.
+          </p>
+          {confirmingRebuild ? (
+            <div className="lib-action-row">
+              <button className="btn btn--danger" onClick={() => startIndexing(false)} disabled={indexing}>
+                Yes, rebuild
               </button>
-            )}
-          </div>
-
-          {/* Progress Display */}
-          {indexStatus && indexStatus.status === 'indexing' && indexStatus.progress && !indexStatus.progress.error && (
-            <div className="indexing-progress">
-              <div className="progress-header">
-                <span className="progress-label">
-                  {indexStatus.progress.mode === 'incremental' ? 'Syncing' : 'Reindexing'}...
-                </span>
-                {indexStatus.progress.eta_seconds != null && indexStatus.progress.eta_seconds > 0 && (
-                  <span className="progress-eta">
-                    ~{indexStatus.progress.eta_seconds < 60
-                      ? `${indexStatus.progress.eta_seconds}s`
-                      : `${Math.ceil(indexStatus.progress.eta_seconds / 60)}m`}
-                  </span>
-                )}
-              </div>
-
-              <div className="progress-bar">
-                {indexStatus.progress.total_items ? (
-                  <div
-                    className="progress-fill"
-                    style={{
-                      width: `${Math.min(100, Math.round((100 * (indexStatus.progress.processed_items ?? 0) / (indexStatus.progress.total_items ?? 1))))}%`
-                    }}
-                  />
-                ) : (
-                  <div className="progress-fill-indeterminate" />
-                )}
-              </div>
-
-              <div className="progress-details">
-                {indexStatus.progress.processed_items ?? 0} / {indexStatus.progress.total_items ?? 0} items
-                {indexStatus.progress.mode === 'incremental' && (indexStatus.progress.skipped_items ?? 0) > 0 && (
-                  <span> ({indexStatus.progress.skipped_items} already indexed)</span>
-                )}
-              </div>
+              <button className="btn" onClick={() => setConfirmingRebuild(false)}>Keep the index</button>
             </div>
+          ) : (
+            <button className="btn" onClick={() => setConfirmingRebuild(true)} disabled={indexing}>Rebuild the index…</button>
           )}
+        </details>
 
-          {/* Error Display */}
-          {indexStatus && indexStatus.progress?.error && (
-            <div className="error-banner" style={{ marginTop: '14px', marginBottom: '10px' }}>
-              <strong>Indexing Failed:</strong> {indexStatus.progress.error}
-            </div>
-          )}
-
-          <p className="muted" style={{ fontSize: '12px', marginTop: '10px', lineHeight: '1.5' }}>
-            <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>Sync Library:</strong> Indexes new items only — safe to interrupt and resume. Use this for your first index and for ongoing updates. &bull;{' '}
-            <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>Full Reindex:</strong> Wipes and rebuilds the entire index from scratch. Only needed if your index is corrupted or you change embedding models.
-          </p>
-
-          <div className="info-box" style={{ fontSize: '12px', marginTop: '14px', lineHeight: '1.5', borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)', padding: '8px 0', color: 'var(--ink-2)' }}>
-            <strong style={{ display: 'block', marginBottom: '4px', color: 'var(--text-main)' }}>Large libraries:</strong>
-            Indexing can take a long time for large collections. If you close the app or are interrupted, just click <strong>Sync Library</strong> again — it will pick up where it left off.
-          </div>
-        </section>
-
-        {/* Metadata Sync Section */}
-        <section className="lib-section lib-section-last">
-          <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Metadata Sync
-          </h3>
-
-          <p className="muted" style={{ fontSize: '12px', marginBottom: '14px', lineHeight: '1.5' }}>
-            Update titles, authors, tags, and other metadata from Zotero without re-embedding documents
-          </p>
-
-          <div>
-            <button
-              className="btn btn--primary"
-              onClick={handleMetadataSync}
-              disabled={syncingMetadata}
-            >
-              {syncingMetadata ? (
-                <>
-                  <span className="spinner" style={{ marginRight: '8px' }}></span>
-                  Syncing Metadata...
-                </>
-              ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '8px' }}>
-                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Sync Metadata from Zotero
-                </>
-              )}
-            </button>
-          </div>
-
-          {metadataSyncSuccess && (
-            <div className="migration-result success" style={{ marginTop: '12px' }}>
-              ✓ {metadataSyncSuccess}
-            </div>
-          )}
-
-          {metadataSyncError && (
-            <div className="migration-result error" style={{ marginTop: '12px' }}>
-              ✗ {metadataSyncError}
-            </div>
-          )}
-
-          <div className="lib-info-box" style={{ marginTop: '12px' }}>
-            <div style={{ fontWeight: 600, marginBottom: '4px', fontSize: '12px' }}>When to use:</div>
-            <ul style={{ margin: '4px 0', paddingLeft: '18px', fontSize: '12px', lineHeight: '1.7' }}>
-              <li>You've edited titles, authors, or tags in Zotero</li>
-              <li>You've changed item types or added collections</li>
-              <li>You want fresh metadata without re-processing PDFs</li>
-            </ul>
-            <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.85 }}>
-              <strong>Note:</strong> This updates metadata only. To index new PDFs, use "Sync Library" above.
-            </div>
-          </div>
-        </section>
-
-      </main>
+      </div>
 
       {/* Cloud embedding privacy warning modal */}
       {cloudWarningTarget && (
-        <div className="cloud-warning-overlay" role="dialog" aria-modal="true">
+        <div
+          className="cloud-warning-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cloud-warning-title"
+          onKeyDown={e => { if (e.key === 'Escape') setCloudWarningTarget(null); }}
+        >
           <div className="cloud-warning-modal">
             <div className="cloud-warning-header">
-              <span className="cloud-warning-icon">⚠️</span>
-              <h3>Your document text will leave this device</h3>
+              <span className="cloud-warning-icon" aria-hidden="true">⚠️</span>
+              <h3 id="cloud-warning-title">Your document text will leave this device</h3>
             </div>
 
             <div className="cloud-warning-body">
@@ -728,6 +587,7 @@ const LibraryManagementPanel: React.FC = () => {
             <div className="cloud-warning-footer">
               <button
                 className="btn"
+                autoFocus
                 onClick={() => setCloudWarningTarget(null)}
               >
                 Cancel

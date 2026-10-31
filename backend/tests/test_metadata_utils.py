@@ -27,7 +27,7 @@ class TestBuildMetadataWhereClause:
         """Test year maximum filter."""
         where = build_metadata_where_clause(year_max=2023)
         
-        assert where == {"year": {"$lte": 2023}}
+        assert where == {"$and": [{"year": {"$lte": 2023}}, {"year": {"$gt": 0}}]}  # undated items are year 0
     
     def test_year_range(self):
         """Test year range filter."""

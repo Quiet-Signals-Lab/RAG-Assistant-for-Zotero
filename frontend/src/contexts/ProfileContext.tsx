@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { request } from '../api/client';
+import { BACKEND_BACK, request } from '../api/client';
 
 export interface Profile {
   id: string;
@@ -15,16 +15,13 @@ interface ProfileContextType {
   activeProfile: Profile | null;
   isLoading: boolean;
   error: string | null;
+  clearError: () => void;
   
   // Profile operations
   loadProfiles: () => Promise<void>;
   createProfile: (id: string, name: string, description?: string) => Promise<Profile | null>;
-  updateProfile: (id: string, name: string, description?: string) => Promise<boolean>;
   deleteProfile: (id: string, force?: boolean) => Promise<boolean>;
   switchProfile: (id: string) => Promise<boolean>;
-  
-  exportProfile: (id: string) => Promise<void>;
-  importProfile: (file: File) => Promise<Profile | null>;
 }
 
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
@@ -51,6 +48,13 @@ export const ProfileProvider: React.FC<ProfileProviderProps> = ({ children }) =>
   useEffect(() => {
     loadProfiles();
   }, []);
+
+  // No active profile means the first load failed: try again once the backend answers.
+  useEffect(() => {
+    if (activeProfileId) return;
+    window.addEventListener(BACKEND_BACK, loadProfiles);
+    return () => window.removeEventListener(BACKEND_BACK, loadProfiles);
+  }, [activeProfileId]);
 
   const loadProfiles = async () => {
     try {
@@ -98,34 +102,6 @@ export const ProfileProvider: React.FC<ProfileProviderProps> = ({ children }) =>
     }
   };
 
-  const updateProfile = async (
-    id: string,
-    name?: string,
-    description?: string
-  ): Promise<boolean> => {
-    try {
-      setError(null);
-      
-      const data = await request<{ success: boolean; profile: Profile }>(`/api/profiles/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ name, description })
-      });
-      
-      if (data.success) {
-        // Reload profiles to update list
-        await loadProfiles();
-        return true;
-      }
-      
-      return false;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update profile';
-      setError(errorMessage);
-      console.error('Error updating profile:', err);
-      return false;
-    }
-  };
-
   const deleteProfile = async (id: string, force: boolean = false): Promise<boolean> => {
     try {
       setError(null);
@@ -161,9 +137,10 @@ export const ProfileProvider: React.FC<ProfileProviderProps> = ({ children }) =>
       if (data.success && data.activeProfile) {
         setActiveProfileId(data.activeProfile.id);
         
-        // Navigate to root and reload to reinitialize everything with new profile
-        // This ensures all components use the new profile's data
-        window.location.href = '/';
+        // Reinitialize everything with the new profile. The packaged app runs from
+        // file://, so an absolute path would leave it; the query carries the backend URL.
+        window.location.hash = '#/';
+        window.location.reload();
         
         return true;
       }
@@ -177,19 +154,6 @@ export const ProfileProvider: React.FC<ProfileProviderProps> = ({ children }) =>
     }
   };
 
-  const exportProfile = async (id: string): Promise<void> => {
-
-    console.log('Export profile:', id);
-    setError('Export feature coming soon');
-  };
-
-  const importProfile = async (file: File): Promise<Profile | null> => {
-
-    console.log('Import profile:', file.name);
-    setError('Import feature coming soon');
-    return null;
-  };
-
   const activeProfile = profiles.find(p => p.id === activeProfileId) || null;
 
   const value: ProfileContextType = {
@@ -198,13 +162,11 @@ export const ProfileProvider: React.FC<ProfileProviderProps> = ({ children }) =>
     activeProfile,
     isLoading,
     error,
+    clearError: () => setError(null),
     loadProfiles,
     createProfile,
-    updateProfile,
     deleteProfile,
-    switchProfile,
-    exportProfile,
-    importProfile
+    switchProfile
   };
 
   return (

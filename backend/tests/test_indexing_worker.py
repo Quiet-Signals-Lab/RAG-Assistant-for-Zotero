@@ -146,3 +146,11 @@ def test_cancellation_stops_the_loop(bot):
     _run(bot, incremental=False, pages_by_path={})
     assert bot.index_progress["processed_items"] == 0
     assert bot._cancel_indexing is False
+
+
+def test_a_full_reindex_keeps_an_item_whose_pdf_cannot_be_read_today(bot):
+    bot.zlib.search_parent_items_with_pdfs.return_value = [_item(1, "/unplugged.pdf"), _item(2, "/b.pdf")]
+    _run(bot, incremental=False, pages_by_path={"/b.pdf": [{"page_num": 1, "text": "Hello world. This is a test."}]},
+         exists=lambda p: p == "/b.pdf")
+    bot.chroma.delete_item.assert_called_once_with("2")
+

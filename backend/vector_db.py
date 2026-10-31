@@ -72,6 +72,7 @@ _META_PAGE = 10_000
 # Most chunks of one item in the fused pool handed to the reranker. The list shows at
 # most six passages per item, so more only crowds other items out.
 POOL_PER_ITEM = 8
+BM25_MAX_SCOPE_IDS = 5000
 
 
 class ChromaClient:
@@ -151,6 +152,7 @@ class ChromaClient:
                     " id TEXT PRIMARY KEY, item_id TEXT NOT NULL, fts_rowid INTEGER NOT NULL, text TEXT)"
                 )
                 conn.execute("CREATE INDEX IF NOT EXISTS chunk_map_item ON chunk_map(item_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS chunk_map_fts ON chunk_map(fts_rowid)")
                 if "text" not in {r[1] for r in conn.execute("PRAGMA table_info(chunk_map)")}:
                     conn.execute("ALTER TABLE chunk_map ADD COLUMN text TEXT")  # stores from before 0.8
                 conn.execute(
@@ -288,8 +290,8 @@ class ChromaClient:
             return [dict(zip(self._ITEM_FIELDS, row)) for row in conn.execute(
                 f"SELECT {','.join(self._ITEM_FIELDS)} FROM items")]
 
-    def query_bm25(self, query: str, k: int = 10) -> List[Dict[str, Any]]:
-        """Keyword (BM25) retrieval via FTS5.
+    def query_bm25(self, query: str, k: int = 10, item_ids: Optional[set] = None) -> List[Dict[str, Any]]:
+        """Keyword (BM25) retrieval via FTS5, within `item_ids` when given.
 
         Returns a list of dicts with 'id', 'score', 'document' and 'metadata',
         best first. Only chunks matching at least one query token are returned.
@@ -299,6 +301,9 @@ class ChromaClient:
             return []
         if self._fts_count() == 0 and self.collection.count() > 0:
             self.build_bm25_index()
+        if item_ids is not None and not item_ids:
+            return []
+        scope = "" if item_ids is None else f" AND m.item_id IN ({','.join('?' * len(item_ids))})"
         # FTS5 takes its optimised ranking path only for its own `rank` column (bm25 by
         # default): the same query with ORDER BY bm25(chunks) took 124 s on 62k passages
         # for a 15-word query, ORDER BY rank 0.5 s, with the same results.
@@ -306,8 +311,8 @@ class ChromaClient:
             rows = conn.execute(
                 "SELECT m.id, -rank AS score FROM chunks "
                 "JOIN chunk_map m ON m.fts_rowid = chunks.rowid "
-                "WHERE chunks MATCH ? ORDER BY rank LIMIT ?",
-                (match, int(k)),
+                f"WHERE chunks MATCH ?{scope} ORDER BY rank LIMIT ?",
+                (match, *(item_ids or ()), int(k)),
             ).fetchall()
         if not rows:
             return []
@@ -489,7 +494,12 @@ class ChromaClient:
             dense_results = apply_client_side_filters(dense_results, client_where)
 
         # Get sparse (BM25) results
-        bm25_results = self.query_bm25(query, k=k * 3 if client_where else k * 2)
+        # Filtering the global top k afterwards would lose a scoped item that many others
+        # outrank. A scope too wide to bind as SQL parameters is filtered that way below.
+        scoped_ids = self._item_ids_matching(where) if where else None
+        if scoped_ids is not None and len(scoped_ids) > BM25_MAX_SCOPE_IDS:
+            scoped_ids = None
+        bm25_results = self.query_bm25(query, k=k * 3 if client_where else k * 2, item_ids=scoped_ids)
 
         # Apply metadata filter to BM25 results if specified
         if chroma_where:

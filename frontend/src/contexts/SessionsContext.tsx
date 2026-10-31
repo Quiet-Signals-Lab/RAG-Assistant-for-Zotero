@@ -1,41 +1,37 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import type { Session, Snippet, Source, Message } from "../types/session";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import type { Session, Source, Message } from "../types/session";
 import { useProfile } from "./ProfileContext";
-import { apiFetch } from "../api/client";
+import { apiFetch, BACKEND_BACK } from "../api/client";
 
 
 type SessionsShape = {
   sessions: Record<string, Session>;
   currentSessionId: string | null;
-  leftCollapsed: boolean;
-  rightCollapsed: boolean;
-  leftActiveTab: string;
-  setLeftActiveTab: (tab: string) => void;
+  /** The saved sessions could not be read, so nothing is being written. */
+  loadFailed: boolean;
   createSession: (
+    sessionId: string,
     initialUserQuestion: string,
     initialAnswer?: string,
     responseSources?: Source[],
-    initialSources?: Source[],
-    initialSnippets?: Snippet[],
     customTitle?: string,
     userMessageId?: string,
     assistantMessageId?: string,
     reasoning?: string
-  ) => { sessionId: string; assistantMessageId: string };
-  /** An empty session scoped to these items, made current; the first question fills it. */
-  startSession: (title: string, itemIds: string[]) => string;
+  ) => void;
   appendMessage: (sessionId: string, message: Message) => void;
   updateSessionTitle: (sessionId: string, newTitle: string) => void;
-  addSnippet: (sessionId: string, snippet: Snippet) => void;
-  upsertSource: (sessionId: string, source: Source) => void;
   setCurrentSession: (id: string | null) => void;
   deleteSession: (id: string) => void;
-  toggleLeft: () => void;
-  toggleRight: () => void;
   getSession: (id: string) => Session | null;
 };
 
 const SessionsContext = createContext<SessionsShape | null>(null);
+
+/** Per profile: a shared backup would pour one profile's sessions into another after a failed load. */
+function backupKey(profileId: string) {
+  return `zotero_llm_sessions_v1:${profileId}`;
+}
 
 function nowISO() {
   return new Date().toISOString();
@@ -45,19 +41,11 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
   const { activeProfileId, isLoading: profileLoading } = useProfile();
   const [sessions, setSessions] = useState<Record<string, Session>>({});
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(false);
-  const [rightCollapsed, setRightCollapsed] = useState<boolean>(false);
-  const [leftActiveTab, setLeftActiveTab] = useState<string>(() => {
-    return localStorage.getItem('leftActiveTab') || 'evidence';
-  });
-  const [isLoadingFromBackend, setIsLoadingFromBackend] = useState(false);
-
-  const STORAGE_KEY = "zotero_llm_sessions_v1";
-
-  // Persist active tab when it changes
-  useEffect(() => {
-    localStorage.setItem('leftActiveTab', leftActiveTab);
-  }, [leftActiveTab]);
+  // Starts true and stays true after a failed load: a failed read must never be followed by a write.
+  const [isLoadingFromBackend, setIsLoadingFromBackend] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const saved = useRef<string | null>(null); // the save payload the backend already holds
 
   // Load sessions from backend when profile becomes available
   useEffect(() => {
@@ -68,55 +56,48 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
     const loadFromBackend = async () => {
       try {
         setIsLoadingFromBackend(true);
-        console.log(`[SessionsContext] Loading sessions from backend for profile: ${activeProfileId}`);
-        
         const response = await apiFetch(`/api/profiles/${activeProfileId}/sessions`);
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`[SessionsContext] Loaded sessions from backend:`, data);
-          
-          if (data.sessions) {
-            setSessions(data.sessions);
-          }
-          if (data.currentSessionId && data.sessions && data.sessions[data.currentSessionId]) {
-            setCurrentSessionId(data.currentSessionId);
-          }
-          if (typeof data.leftCollapsed === 'boolean') {
-            setLeftCollapsed(data.leftCollapsed);
-          }
-          if (typeof data.rightCollapsed === 'boolean') {
-            setRightCollapsed(data.rightCollapsed);
-          }
-        } else {
-          console.warn('[SessionsContext] Failed to load sessions from backend, falling back to localStorage');
-          loadFromLocalStorage();
-        }
+        const data = await response.json();
+        const loaded: Record<string, Session> = data.sessions ?? {};
+        const current = data.currentSessionId && loaded[data.currentSessionId] ? data.currentSessionId : null;
+
+        saved.current = JSON.stringify({ sessions: loaded, currentSessionId: current });
+        // A retry keeps sessions started while the backend was away; the backend's copy of the rest wins.
+        setSessions((prev) => (loadAttempt ? { ...prev, ...loaded } : loaded));
+        setCurrentSessionId((prev) => (loadAttempt ? prev ?? current : current));
+        setLoadFailed(false);
+        setIsLoadingFromBackend(false);
       } catch (err) {
         console.error('[SessionsContext] Error loading sessions from backend:', err);
         loadFromLocalStorage();
-      } finally {
-        setIsLoadingFromBackend(false);
+        setLoadFailed(true);
       }
     };
 
     const loadFromLocalStorage = () => {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = localStorage.getItem(backupKey(activeProfileId));
         if (!raw) return;
         const parsed = JSON.parse(raw);
         if (parsed.sessions) setSessions(parsed.sessions);
         if (parsed.currentSessionId && parsed.sessions && parsed.sessions[parsed.currentSessionId]) {
           setCurrentSessionId(parsed.currentSessionId);
         }
-        if (typeof parsed.leftCollapsed === "boolean") setLeftCollapsed(parsed.leftCollapsed);
-        if (typeof parsed.rightCollapsed === "boolean") setRightCollapsed(parsed.rightCollapsed);
       } catch (e) {
         console.warn("Failed to load sessions from localStorage", e);
       }
     };
 
     loadFromBackend();
-  }, [activeProfileId, profileLoading]);
+  }, [activeProfileId, profileLoading, loadAttempt]);
+
+  // A failed load tries again once the backend answers.
+  useEffect(() => {
+    if (!loadFailed) return;
+    const retry = () => setLoadAttempt((n) => n + 1);
+    window.addEventListener(BACKEND_BACK, retry);
+    return () => window.removeEventListener(BACKEND_BACK, retry);
+  }, [loadFailed]);
 
   // Save to backend whenever sessions change (debounced)
   useEffect(() => {
@@ -124,20 +105,17 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
       return;
     }
 
+    const payload = JSON.stringify({ sessions, currentSessionId });
+    if (payload === saved.current) return;
+
     const saveToBackend = async () => {
       try {
-        const payload = { sessions, currentSessionId, leftCollapsed, rightCollapsed };
-        console.log(`[SessionsContext] Saving sessions to backend for profile: ${activeProfileId}`);
-        
-        const response = await apiFetch(`/api/profiles/${activeProfileId}/sessions`, {
+        await apiFetch(`/api/profiles/${activeProfileId}/sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: payload
         });
-        
-        if (!response.ok) {
-          console.error('[SessionsContext] Failed to save sessions to backend');
-        }
+        saved.current = payload;
       } catch (err) {
         console.error('[SessionsContext] Error saving sessions to backend:', err);
       }
@@ -145,8 +123,7 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
 
     // Also save to localStorage as backup
     try {
-      const payload = JSON.stringify({ sessions, currentSessionId, leftCollapsed, rightCollapsed });
-      localStorage.setItem(STORAGE_KEY, payload);
+      localStorage.setItem(backupKey(activeProfileId), payload);
     } catch (e) {
       console.warn("Failed to persist sessions to localStorage", e);
     }
@@ -154,31 +131,27 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
     // Debounce backend saves to avoid too many requests
     const timeoutId = setTimeout(saveToBackend, 1000);
     return () => clearTimeout(timeoutId);
-  }, [sessions, currentSessionId, leftCollapsed, rightCollapsed, activeProfileId, profileLoading, isLoadingFromBackend]);
+  }, [sessions, currentSessionId, activeProfileId, profileLoading, isLoadingFromBackend]);
 
   function createSession(
+    sessionId: string,
     initialUserQuestion: string, 
     initialAnswer = "", 
     responseSources: Source[] = [],
-    initialSources: Source[] = [], 
-    initialSnippets: Snippet[] = [], 
     customTitle?: string,
     userMessageId?: string,
     assistantMessageId?: string,
     reasoning?: string
-  ): { sessionId: string; assistantMessageId: string } {
-    const id = crypto.randomUUID();
+  ) {
     const createdAt = nowISO();
-    const userMsgId = userMessageId ?? crypto.randomUUID();
-    const assistantMsgId = assistantMessageId ?? crypto.randomUUID();
     const userMsg: Message = { 
-      id: userMsgId, 
+      id: userMessageId ?? crypto.randomUUID(), 
       role: "user", 
       content: initialUserQuestion, 
       createdAt 
     };
     const assistantMsg: Message = { 
-      id: assistantMsgId, 
+      id: assistantMessageId ?? crypto.randomUUID(), 
       role: "assistant", 
       content: initialAnswer, 
       createdAt,
@@ -186,29 +159,17 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
       timestamp: Date.now(),
       reasoning  // Include reasoning if present
     };
-    console.log("[SessionsContext] Creating assistant message with sources:", responseSources);
-    console.log("[SessionsContext] Assistant message ID:", assistantMsgId);
     const title = customTitle || (initialUserQuestion || "New session").slice(0, 80);
     const s: Session = {
-      id,
+      id: sessionId,
       title,
       createdAt,
       updatedAt: createdAt,
-      messages: [userMsg, assistantMsg].filter(Boolean),
-      snippets: initialSnippets || [],
-      sources: initialSources || [],
+      messages: [userMsg, assistantMsg],
     };
-    setSessions((prev) => ({ ...prev, [id]: s }));
-    setCurrentSessionId(id);
-    return { sessionId: id, assistantMessageId: assistantMsgId };
-  }
-
-  function startSession(title: string, itemIds: string[]): string {
-    const id = crypto.randomUUID();
-    const createdAt = nowISO();
-    setSessions((prev) => ({ ...prev, [id]: { id, title, createdAt, updatedAt: createdAt, messages: [], snippets: [], sources: [], itemIds } }));
-    setCurrentSessionId(id);
-    return id;
+    setSessions((prev) => ({ ...prev, [sessionId]: s }));
+    // Whoever opened another session while this answer was on its way stays there.
+    setCurrentSessionId((current) => current ?? sessionId);
   }
 
   function appendMessage(sessionId: string, message: Message) {
@@ -229,44 +190,8 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
     });
   }
 
-  function addSnippet(sessionId: string, snippet: Snippet) {
-    setSessions((prev) => {
-      const s = prev[sessionId];
-      if (!s) return prev;
-      const exists = s.snippets.find((x) => x.id === snippet.id);
-      const updated = {
-        ...s,
-        snippets: exists ? s.snippets.map((x) => (x.id === snippet.id ? snippet : x)) : [...s.snippets, snippet],
-        updatedAt: nowISO(),
-      };
-      return { ...prev, [sessionId]: updated };
-    });
-  }
-
-  function upsertSource(sessionId: string, source: Source) {
-    setSessions((prev) => {
-      const s = prev[sessionId];
-      if (!s) return prev;
-      const exists = s.sources.find((x) => x.documentId === source.documentId);
-      const updated = {
-        ...s,
-        sources: exists ? s.sources.map((x) => (x.documentId === source.documentId ? { ...x, ...source } : x)) : [...s.sources, source],
-        updatedAt: nowISO(),
-      };
-      return { ...prev, [sessionId]: updated };
-    });
-  }
-
   function setCurrentSession(id: string | null) {
     setCurrentSessionId(id);
-  }
-
-  function toggleLeft() {
-    setLeftCollapsed((p) => !p);
-  }
-
-  function toggleRight() {
-    setRightCollapsed((p) => !p);
   }
 
   const getSession = useCallback((id: string) => {
@@ -290,20 +215,12 @@ export const SessionsProvider: React.FC<React.PropsWithChildren> = ({ children }
       value={{
         sessions,
         currentSessionId,
-        leftCollapsed,
-        rightCollapsed,
-        leftActiveTab,
-        setLeftActiveTab,
+        loadFailed,
         createSession,
-        startSession,
         appendMessage,
         updateSessionTitle,
-        addSnippet,
-        upsertSource,
         setCurrentSession,
         deleteSession,
-        toggleLeft,
-        toggleRight,
         getSession,
       }}
     >

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { deskModel } from "../../api/search";
-import { useSettings, type Settings } from "../../contexts/SettingsContext";
+import { useSettings } from "../../contexts/SettingsContext";
 import ActiveModelPanel from "../models/ActiveModelPanel";
 import type { DeskModel } from "../../types/desk";
 
@@ -48,7 +48,9 @@ const ClerkRoom: React.FC = () => {
   async function toggle(key: JobKey, value: boolean) {
     setSaving(key);
     try {
-      await updateSettings({ [key]: value } as Partial<Settings>);
+      await updateSettings({ [key]: value });
+    } catch {
+      // the error banner shows it, and the box stays as saved
     } finally {
       setSaving(null);
     }

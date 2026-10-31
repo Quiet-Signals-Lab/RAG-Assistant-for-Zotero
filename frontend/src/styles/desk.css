@@ -128,7 +128,6 @@
   display: none;
 }
 
-
 .icon-button {
   width: 32px;
   height: 32px;
@@ -158,6 +157,7 @@
   display: grid;
   grid-template-columns: 44px minmax(260px, 300px) minmax(0, 1fr) minmax(320px, 400px);
   min-height: 0;
+  overflow: hidden; /* the evidence slide-over waits off-screen under 1100px */
 }
 
 .desk__rail {
@@ -236,24 +236,10 @@
   color: var(--ink-4);
 }
 
-.panel-head__tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 14px;
-  font-size: 12px;
-  min-width: 0;
-}
-
 .panel-head--rule {
   border-bottom: 2px solid var(--ink);
   padding-bottom: 6px;
   margin-bottom: 8px;
-}
-
-.panel-head--split {
-  display: flex;
-  justify-content: space-between;
 }
 
 /* The results toolbar: selects and buttons share one height, one border and one gap. */
@@ -271,7 +257,7 @@
   gap: 4px;
   min-height: 28px;
   padding: 0 4px 0 9px;
-  border: 1px solid var(--rule);
+  border: 1px solid var(--edge);
   border-radius: var(--radius-sm);
   font: 400 12px/1.2 var(--font-sans);
   color: var(--ink-3);
@@ -292,7 +278,6 @@
   max-width: 160px;
 }
 
-.tool-button,
 .link-button {
   font: inherit;
   color: var(--ink);
@@ -824,11 +809,11 @@ mark {
 .desk-intro h2,
 .desk-empty h2 {
   margin: 0 0 8px;
-  font: 400 24px/1.25 var(--font-serif);
+  font: 500 24px/1.25 var(--font-sans);
 }
 
 .desk-empty--slim h2 {
-  font-size: 19px;
+  font-size: 18px;
 }
 
 .desk-intro p,
@@ -1053,7 +1038,7 @@ mark {
   font: 13px var(--font-sans);
   color: var(--ink);
   background: var(--page);
-  border: 1px solid var(--rule);
+  border: 1px solid var(--edge);
   border-radius: var(--radius-sm);
   padding: 5px 7px;
   min-width: 0;
@@ -1123,7 +1108,7 @@ mark {
 
 .about__name {
   margin: 0;
-  font: 600 19px/1.25 var(--font-sans);
+  font: 600 18px/1.25 var(--font-sans);
   color: var(--ink);
 }
 
@@ -1273,7 +1258,7 @@ mark {
 }
 
 .reading dt {
-  font: 500 11px/1.6 var(--font-sans);
+  font: 500 12px/1.6 var(--font-sans);
   color: var(--ink-4);
 }
 

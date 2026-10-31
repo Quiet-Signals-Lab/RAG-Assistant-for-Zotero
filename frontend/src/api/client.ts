@@ -15,6 +15,11 @@ function resolveBaseUrl(): string {
 
 const BASE_URL = resolveBaseUrl();
 
+const BACKEND_DOWN = "The app's background service is not responding. It may still be starting; if this lasts, restart the app.";
+/** Window events: a request could not reach the backend, and it answers again. */
+const BACKEND_UNREACHABLE = "backend:unreachable";
+const BACKEND_BACK = "backend:back";
+
 /** Turn a non-2xx response into an Error carrying the backend's message. */
 async function errorFromResponse(res: Response): Promise<Error> {
   const text = await res.text();
@@ -43,9 +48,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
  */
 async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
   const fullPath = BASE_URL + (path.startsWith("/") ? path : `/${path}`);
-  const res = await fetch(fullPath, options);
+  let res: Response;
+  try {
+    res = await fetch(fullPath, options);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    window.dispatchEvent(new Event(BACKEND_UNREACHABLE));
+    throw new Error(BACKEND_DOWN);
+  }
   if (!res.ok) throw await errorFromResponse(res);
   return res;
 }
 
-export { BASE_URL, request, apiFetch };
+export { BACKEND_BACK, BACKEND_DOWN, BACKEND_UNREACHABLE, BASE_URL, request, apiFetch };

@@ -118,6 +118,70 @@
   margin-bottom: 0;
 }
 
+details.lib-advanced > summary {
+  cursor: pointer;
+  font: 500 12px/1.4 var(--font-sans);
+  color: var(--ink-3);
+}
+
+.lib-advanced .scope-section-title {
+  margin: 18px 0 4px;
+}
+
+.lib-advanced .lib-action-row {
+  margin-top: 8px;
+}
+
+.lib-hint {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.lib-hint strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.lib-filter {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg, transparent);
+  color: var(--ink);
+}
+
+.lib-checklist {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+}
+
+.lib-checklist label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lib-checklist label > span:first-of-type {
+  flex: 1;
+}
+
+.lib-checklist__count {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
 /* ── Section titles — identical to .scope-section-title ───────────────────── */
 
 /* .scope-section-title is already defined globally in prompt-scaffolding.css.
@@ -190,7 +254,7 @@
   width: 100%;
   padding: 8px 11px;
   font-size: 13px;
-  border: 1.5px solid var(--border-subtle);
+  border: 1.5px solid var(--edge);
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
   color: var(--text-main);
@@ -204,15 +268,6 @@
   border-color: var(--accent);
   background: var(--bg-surface);
   box-shadow: none;
-}
-
-.model-info {
-  margin-top: -14px;
-}
-
-.model-info strong {
-  color: var(--text-main);
-  font-weight: 600;
 }
 
 /* ── Action row ───────────────────────────────────────────────────────────── */
@@ -312,89 +367,6 @@
 .progress-details {
   font-size: 12px;
   color: var(--text-muted);
-}
-
-/* ── Migration status rows ────────────────────────────────────────────────── */
-
-.lib-status-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
-  margin-bottom: 4px;
-  border: 1.5px solid var(--border-subtle);
-}
-
-.lib-status-row.loading {
-  border-color: var(--border-subtle);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.lib-status-row.needs-update {
-  border-color: var(--rule);
-  background: transparent;
-}
-
-.lib-status-row.up-to-date {
-  border-color: var(--rule);
-  background: transparent;
-}
-
-.lib-status-row.error {
-  border-color: var(--error);
-  background: transparent;
-  color: var(--error);
-}
-
-.status-indicator {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.status-text {
-  flex: 1;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.status-text strong {
-  font-weight: 600;
-}
-
-/* ── Info box (migration details) ─────────────────────────────────────────── */
-
-.lib-info-box {
-  background: var(--bg-panel);
-  border: 1.5px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  color: var(--text-muted);
-}
-
-/* ── Migration result banners ─────────────────────────────────────────────── */
-
-.migration-result {
-  padding: 11px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.migration-result.success {
-  background: transparent;
-  color: var(--ok);
-  border: 1.5px solid var(--rule);
-}
-
-.migration-result.error {
-  background: transparent;
-  color: var(--error);
-  border: 1.5px solid var(--error);
 }
 
 /* ── Spinner ──────────────────────────────────────────────────────────────── */

@@ -17,6 +17,7 @@ const ModelStatus: React.FC = () => {
   const model = settings.activeModel;
   const provider = availableProviders.find((p) => p.id === providerId);
   const local = !!provider && !provider.requires_api_key;
+  const providerConfig = JSON.stringify(settings.providers[providerId]);
   const [check, setCheck] = useState<Check>({ ok: null, detail: "" });
 
   useEffect(() => {
@@ -26,6 +27,7 @@ const ModelStatus: React.FC = () => {
     }
     let cancelled = false;
     const run = async () => {
+      if (document.hidden) return;
       let next: Check;
       try {
         const r = await apiFetch(`/api/providers/${providerId}/validate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
@@ -47,7 +49,7 @@ const ModelStatus: React.FC = () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [providerId, model, local, settings.providers]);
+  }, [providerId, model, local, providerConfig]);
 
   const name = model ? model.split("/").pop() : "";
   const label = !providerId || !model ? "No model selected" : `${name} selected${local && check.ok === false ? " (Not running)" : ""}`;

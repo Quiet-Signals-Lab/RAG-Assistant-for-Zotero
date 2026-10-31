@@ -8,7 +8,7 @@ import '../../styles/active-model-panel.css';
  * in the left sidebar for quick model switching during chat sessions.
  */
 const ActiveModelPanel: React.FC<{ hint?: string; bare?: boolean }> = ({ hint = 'writes RAG Chat answers', bare }) => {
-  const { settings, updateSettings, availableProviders } = useSettings();
+  const { settings, updateSettings, availableProviders, loadFailed } = useSettings();
   const [availableModels, setAvailableModels] = useState<Record<string, ModelInfo[]>>({});
   const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
@@ -43,7 +43,7 @@ const ActiveModelPanel: React.FC<{ hint?: string; bare?: boolean }> = ({ hint = 
   // Auto-select first model when models load for active provider if no model is currently selected
   useEffect(() => {
     const models = availableModels[settings.activeProviderId];
-    if (models && models.length > 0 && !settings.activeModel) {
+    if (models && models.length > 0 && !settings.activeModel && !loadFailed) {
       handleModelChange(models[0].id);
     }
   }, [availableModels[settings.activeProviderId]]);
@@ -51,7 +51,7 @@ const ActiveModelPanel: React.FC<{ hint?: string; bare?: boolean }> = ({ hint = 
   // Auto-switch active provider if the current one is disabled or has no credentials
   useEffect(() => {
     const activeIsConfigured = configuredProviders.find(p => p.id === settings.activeProviderId);
-    if (!activeIsConfigured && configuredProviders.length > 0 && !saving) {
+    if (!activeIsConfigured && configuredProviders.length > 0 && !saving && !loadFailed) {
       handleProviderChange(configuredProviders[0].id);
     }
   }, [settings.activeProviderId, settings.providers, availableProviders]);
@@ -86,7 +86,6 @@ const ActiveModelPanel: React.FC<{ hint?: string; bare?: boolean }> = ({ hint = 
     }
   };
 
-  const currentProvider = availableProviders.find(p => p.id === settings.activeProviderId);
   const models = availableModels[settings.activeProviderId] || [];
 
   // Filter providers to only show those with credentials or local providers
@@ -121,11 +120,7 @@ const ActiveModelPanel: React.FC<{ hint?: string; bare?: boolean }> = ({ hint = 
         </div>
       )}
       
-      <main className="active-model-panel">
-        <div className="active-model-note">
-          <strong>Note:</strong> Only providers with API keys configured or local servers running are shown.
-        </div>
-
+      <div className="active-model-panel">
         <div className="active-model-field">
           <label className="active-model-label" htmlFor="active-provider">
             Provider
@@ -144,12 +139,12 @@ const ActiveModelPanel: React.FC<{ hint?: string; bare?: boolean }> = ({ hint = 
                 </option>
               ))
             ) : (
-              <option value="">No providers configured</option>
+              <option value="">None set up</option>
             )}
           </select>
           {configuredProviders.length === 0 && (
             <p className="active-model-hint" style={{ color: 'var(--text-warning, #ff9800)' }}>
-              Configure API keys in Settings to use cloud providers, or enable Ollama/LM Studio for local models.
+              Add an API key or turn on Ollama or LM Studio in Settings.
             </p>
           )}
         </div>
@@ -158,7 +153,7 @@ const ActiveModelPanel: React.FC<{ hint?: string; bare?: boolean }> = ({ hint = 
           <label className="active-model-label" htmlFor="active-model">
             Model
             {loadingModels[settings.activeProviderId] ? (
-              <span className="active-model-loading"> (loading...)</span>
+              <span className="active-model-loading"> (loading…)</span>
             ) : (
               <button
                 className="active-model-refresh-btn"
@@ -188,39 +183,12 @@ const ActiveModelPanel: React.FC<{ hint?: string; bare?: boolean }> = ({ hint = 
             )}
           </select>
           <p className="active-model-hint">
-            Make sure your provider is running and has models loaded.
+            {models.length === 0 ? 'Nothing listed: check that the provider is running and has a model installed.' : 'Providers with no key, or switched off in Settings, are not listed.'}
           </p>
         </div>
 
-        {currentProvider && (
-          <div className="active-model-info">
-            <div className="active-model-info-row">
-              <span className="active-model-info-label">Streaming:</span>
-              <span className="active-model-info-value">
-                {currentProvider.supports_streaming ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
-            {settings.activeModel && (
-              <div className="active-model-info-row">
-                <span className="active-model-info-label">Selected:</span>
-                <span className="active-model-info-value">{settings.activeModel}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Fixed space for save notification */}
-        <div className="active-model-notification-container">
-          {saveSuccess && (
-            <div className="active-model-success">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Saved
-            </div>
-          )}
-        </div>
-      </main>
+        <div role="status" className="active-model-saved">{saveSuccess && 'Saved'}</div>
+      </div>
     </div>
   );
 };

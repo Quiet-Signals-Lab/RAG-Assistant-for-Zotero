@@ -1,5 +1,7 @@
 """Ranking rules of the reference desk (backend/desk.py)."""
 
+import pytest
+
 from backend import desk
 
 
@@ -218,3 +220,14 @@ def test_author_limit_matches_a_whole_last_name():
     assert _matches_where_clause({"authors": "Pearl,Bareinboim"}, where)
     assert _matches_where_clause({"authors": "Bareinboim,pearl"}, where)
     assert not _matches_where_clause({"authors": "Lang,Pearlmutter,Price"}, where)
+
+
+@pytest.mark.parametrize("text,term", [
+    ("trade organisations in Europe", "organisations"),
+    ("business processes", "processes"),
+    ("working classes", "classes"),
+    ("canals of Venice", "canals"),
+])
+def test_an_excluded_plural_matches_itself(text, term):
+    assert desk.excluded(text, [term])
+

@@ -12,16 +12,17 @@
   --ink: #1c1a17;            /* text, heavy rules, filled marks, primary button */
   --ink-2: #3a342b;          /* body text on paper */
   --ink-3: #5a5347;          /* secondary text */
-  --ink-4: #6e665a;          /* labels, mono metadata */
+  --ink-4: #60594e;          /* labels, mono metadata */
   --rule: #d9d2c3;           /* every hairline; replaces every shadow */
   --rule-dotted: #8a8172;    /* the "see also" cross-reference line */
+  --edge: #7e7568;           /* field outlines and scrollbars: 3:1 on every surface */
   --brass: #d6b26a;          /* the bookmark gold: keylines, label edges */
   --brass-deep: #b8923e;     /* brass on paper where it must read as a mark */
   --stamp: #b8322a;          /* date-due red: only for what is yours (pins) */
   --catalogue-blue: #a9bbd2; /* card rules, on the known-item card only */
   --mark: #efe2bc;           /* highlighted query terms */
   --selected: #f2ecdf;       /* the selected row: a card on the page */
-  --notice: #8c6309;         /* one-line notices: something was set aside */
+  --notice: #775408;         /* one-line notices: something was set aside */
   --ok: #3e6b3a;             /* status text only: done, connected */
   --error: #a23a2c;          /* status text only: failed */
 
@@ -71,7 +72,7 @@
   --accent-focus: var(--ink);
   --danger: var(--stamp);
   --scrollbar-track: transparent;
-  --scrollbar-thumb: var(--rule);
+  --scrollbar-thumb: rgba(28, 26, 23, 0.22);
 }
 
 /* After hours: ink becomes the room, paper becomes the text. Brass and stamp stay. */
@@ -84,12 +85,13 @@
   --ink: #eae2d0;
   --ink-2: #d2c8b4;
   --ink-3: #a89e8c;
-  --ink-4: #948a78;
+  --ink-4: #988f7d;
   --rule: #3a342a;
   --rule-dotted: #7a705f;
+  --edge: #7b7161;
   --brass: #d6b26a;
   --brass-deep: #d6b26a;
-  --stamp: #e0574c;
+  --stamp: #e46b61;
   --catalogue-blue: #4c627a;
   --mark: #4a3f22;
   --selected: #2b2720;
@@ -98,4 +100,5 @@
   --error: #ec8a7c;
 
   --bg-hover: rgba(234, 226, 208, 0.05);
+  --scrollbar-thumb: rgba(234, 226, 208, 0.22);
 }

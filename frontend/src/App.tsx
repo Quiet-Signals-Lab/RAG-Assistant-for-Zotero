@@ -2,6 +2,7 @@
 import React from "react";
 import { HashRouter as Router, Routes, Route } from "react-router-dom";
 import AppShell from "./components/layout/AppShell";
+import AppBanners from "./components/feedback/AppBanners";
 import Settings from "./pages/Settings";
 import "./styles/globals.css";
 import "./styles/theme.css";
@@ -23,6 +24,7 @@ const App: React.FC = () => (
 							<ResponseSelectionProvider>
 								<DeskProvider>
 									<ChatProvider>
+										<AppBanners />
 										<Routes>
 											<Route path="/" element={<AppShell />} />
 											<Route path="/settings" element={<Settings />} />

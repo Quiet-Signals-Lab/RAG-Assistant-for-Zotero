@@ -173,14 +173,18 @@ const PromptScaffoldingPanel: React.FC = () => {
   useEffect(() => {
     if (!isMetadataAware || !isManualMode) {
       setEstimatedItemCount(0);
+      setLoadingCount(false);
       return;
     }
     
+    // Typing sends one count, and a slow reply cannot overwrite a newer one.
+    const controller = new AbortController();
+    setLoadingCount(true);
     const fetchCount = async () => {
-      setLoadingCount(true);
       try {
         const response = await apiFetch('/api/metadata/count_filtered', {
           method: 'POST',
+          signal: controller.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             year_min: yearStart ? parseInt(yearStart) : undefined,
@@ -194,6 +198,7 @@ const PromptScaffoldingPanel: React.FC = () => {
         });
         
         const data = await response.json();
+        if (controller.signal.aborted) return;
         if (data.unique_items !== undefined) {
           setEstimatedItemCount(data.unique_items);
           setCountError(null);
@@ -204,15 +209,19 @@ const PromptScaffoldingPanel: React.FC = () => {
           setCountError(data.error || 'Could not count items for this filter');
         }
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error('Failed to fetch filtered item count:', err);
         setEstimatedItemCount(0);
         setCountError(err instanceof Error ? err.message : 'Could not reach the backend');
-      } finally {
-        setLoadingCount(false);
       }
+      setLoadingCount(false);
     };
     
-    fetchCount();
+    const timer = window.setTimeout(fetchCount, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [selectedTags, selectedCollections, yearStart, yearEnd, titleFilter, authorFilter, itemTypeFilter, isMetadataAware, isManualMode]);
   
   return (
@@ -222,34 +231,30 @@ const PromptScaffoldingPanel: React.FC = () => {
         <span className="panel-head__hint">which items RAG Chat searches</span>
       </div>
       
-      <main className="scope-panel">
+      <div className="scope-panel">
         {/* Search Engine Mode Toggle */}
         <section className="scope-section">
           <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-              <path d="M12 1v6m0 6v6M23 12h-6m-6 0H1" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Search Engine Mode
+            What to search
           </h3>
           <div className="toggle-group">
             <button
               className={`toggle-btn ${!isMetadataAware ? 'active' : ''}`}
               onClick={() => handleSearchModeChange('original')}
             >
-              Semantic only
+              Whole library
             </button>
             <button
               className={`toggle-btn ${isMetadataAware ? 'active' : ''}`}
               onClick={() => handleSearchModeChange('metadata-aware')}
             >
-              Metadata-Aware
+              With filters
             </button>
           </div>
           <p className="muted" style={{ fontSize: '12px', marginTop: '12px', lineHeight: '1.5' }}>
             {!isMetadataAware 
-              ? 'Wide net search with no filters — casts the broadest possible search across your entire library. Returns fewer chunks per paper to maximize coverage across documents.'
-              : 'Smart filtering by tags, collections, and publication dates for precise results'}
+              ? 'Searches everything by meaning, and takes a few passages from each item so more items get a say.'
+              : 'Limits the search by tag, collection, date and more.'}
           </p>
         </section>
         
@@ -257,29 +262,26 @@ const PromptScaffoldingPanel: React.FC = () => {
         {isMetadataAware && (
           <section className="scope-section">
             <h3 className="scope-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Filter Mode
+            Where filters come from
             </h3>
             <div className="toggle-group">
               <button
                 className={`toggle-btn ${!isManualMode ? 'active' : ''}`}
                 onClick={() => handleFilterModeChange('auto')}
               >
-                Auto-Extract
+                My question
               </button>
               <button
                 className={`toggle-btn ${isManualMode ? 'active' : ''}`}
                 onClick={() => handleFilterModeChange('manual')}
               >
-                Manual
+                Set by hand
               </button>
             </div>
             <p className="muted" style={{ fontSize: '12px', marginTop: '12px', lineHeight: '1.5' }}>
               {!isManualMode
-                ? 'Filters extracted automatically from queries (e.g., "papers after 2020 about machine learning")'
-                : 'Define filters manually using the controls below for maximum precision'}
+                ? 'Read from what you ask, as in “papers after 2020 about machine learning”.'
+                : 'Choose the filters below.'}
             </p>
           </section>
         )}
@@ -290,10 +292,6 @@ const PromptScaffoldingPanel: React.FC = () => {
         {/* Tags Section */}
         <section className="scope-section">
           <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="7" cy="7" r="1" fill="currentColor"/>
-            </svg>
             Tags
             {selectedTags.length > 0 && (
               <span className="filter-badge">{selectedTags.length}</span>
@@ -310,7 +308,7 @@ const PromptScaffoldingPanel: React.FC = () => {
               <input
                 type="text"
                 className="search-input"
-                placeholder="Search tags..."
+                placeholder="Search tags…"
                 value={tagSearchQuery}
                 onChange={(e) => setTagSearchQuery(e.target.value)}
               />
@@ -328,7 +326,7 @@ const PromptScaffoldingPanel: React.FC = () => {
             </div>
             
             {loadingTags && (
-              <div className="scope-loading">Loading tags...</div>
+              <div className="scope-loading">Loading tags…</div>
             )}
             
             {tagError && (
@@ -362,7 +360,7 @@ const PromptScaffoldingPanel: React.FC = () => {
             
             {!loadingTags && !tagError && availableTags.length === 0 && (
               <div className="scope-empty">
-                <p>No tags found in your library</p>
+                <p>No tags in your library</p>
               </div>
             )}
           </div>
@@ -371,9 +369,6 @@ const PromptScaffoldingPanel: React.FC = () => {
         {/* Collections Section */}
         <section className="scope-section">
           <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
             Collections
             {selectedCollections.length > 0 && (
               <span className="filter-badge">{selectedCollections.length}</span>
@@ -390,7 +385,7 @@ const PromptScaffoldingPanel: React.FC = () => {
               <input
                 type="text"
                 className="search-input"
-                placeholder="Search collections..."
+                placeholder="Search collections…"
                 value={collectionSearchQuery}
                 onChange={(e) => setCollectionSearchQuery(e.target.value)}
               />
@@ -408,7 +403,7 @@ const PromptScaffoldingPanel: React.FC = () => {
             </div>
             
             {loadingCollections && (
-              <div className="scope-loading">Loading collections...</div>
+              <div className="scope-loading">Loading collections…</div>
             )}
             
             {!loadingCollections && filteredCollections.length > 0 && (
@@ -434,7 +429,7 @@ const PromptScaffoldingPanel: React.FC = () => {
             
             {!loadingCollections && availableCollections.length === 0 && (
               <div className="scope-empty">
-                <p>No collections found</p>
+                <p>No collections in your library</p>
               </div>
             )}
           </div>
@@ -443,17 +438,13 @@ const PromptScaffoldingPanel: React.FC = () => {
         {/* Date Range Section */}
         <section className="scope-section">
           <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-              <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
             Publication Year
           </h3>
           
           <div className="date-range-filter">
             <input 
               type="number" 
-              placeholder="From (e.g., 2020)"
+              placeholder="From, e.g. 2020"
               value={yearStart}
               onChange={(e) => setYearStart(e.target.value)}
               min="1900"
@@ -463,7 +454,7 @@ const PromptScaffoldingPanel: React.FC = () => {
             <span style={{ color: 'var(--text-muted)', padding: '0 8px' }}>-</span>
             <input 
               type="number" 
-              placeholder="To (e.g., 2024)"
+              placeholder="To, e.g. 2024"
               value={yearEnd}
               onChange={(e) => setYearEnd(e.target.value)}
               min="1900"
@@ -476,9 +467,6 @@ const PromptScaffoldingPanel: React.FC = () => {
         {/* Text Filters Section (Title & Author combined) */}
         <section className="scope-section">
           <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
             Text Filters
           </h3>
           
@@ -487,7 +475,7 @@ const PromptScaffoldingPanel: React.FC = () => {
               <input
                 type="text"
                 className="text-filter-input"
-                placeholder="Title keywords..."
+                placeholder="Title keywords…"
                 value={titleFilter}
                 onChange={(e) => setTitleFilter(e.target.value)}
               />
@@ -506,7 +494,7 @@ const PromptScaffoldingPanel: React.FC = () => {
               <input
                 type="text"
                 className="text-filter-input"
-                placeholder="Author name..."
+                placeholder="Author name…"
                 value={authorFilter}
                 onChange={(e) => setAuthorFilter(e.target.value)}
               />
@@ -526,10 +514,6 @@ const PromptScaffoldingPanel: React.FC = () => {
         {/* Item Type Section */}
         <section className="scope-section">
           <h3 className="scope-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2"/>
-              <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
             Item Type
             {itemTypeFilter.length > 0 && (
               <span className="filter-badge">{itemTypeFilter.length}</span>
@@ -538,7 +522,7 @@ const PromptScaffoldingPanel: React.FC = () => {
           
           <div className="item-type-filter">
             {loadingItemTypes ? (
-              <div className="loading-message">Loading item types...</div>
+              <div className="loading-message">Loading item types…</div>
             ) : availableItemTypes.length === 0 ? (
               <div className="empty-message">No item types found</div>
             ) : (
@@ -601,9 +585,9 @@ const PromptScaffoldingPanel: React.FC = () => {
               
               {!loadingCount && !countError && estimatedItemCount === 0 && hasActiveFilters() && (
                 <p className="scope-note muted">
-                  No indexed items match. Scope filters run on metadata captured when
-                  items were indexed, so tags or collections you changed in Zotero
-                  since then won't match until you sync metadata in Settings.
+                  No indexed items match. Filters use the details saved when items were
+                  indexed, so tags or collections you changed in Zotero since then match
+                  only after Library → Advanced → Update details from Zotero.
                 </p>
               )}
               
@@ -612,7 +596,7 @@ const PromptScaffoldingPanel: React.FC = () => {
                   className="btn"
                   onClick={handleClearFilters}
                 >
-                  Clear All Filters
+                  Clear filters
                 </button>
               )}
               
@@ -620,42 +604,18 @@ const PromptScaffoldingPanel: React.FC = () => {
                 className="btn btn--primary"
                 onClick={handleApplyFilters}
               >
-                Apply Filters to Search
+                Apply filters
               </button>
               
               {hasActiveFilters() && (
                 <p className="scope-note" style={{ color: 'var(--success)' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                    <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
-                  Filters are active! Your searches will be constrained to the selected scope.
+                  Filters are on: answers come only from these items.
                 </p>
               )}
             </>
           )}
-          
-          {!isMetadataAware && (
-            <p className="scope-note">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                <path d="M12 16v-4M12 8h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              Enable "Metadata-Aware Search" above to use filtering features.
-            </p>
-          )}
-          
-          {isMetadataAware && !isManualMode && (
-            <p className="scope-note">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                <path d="M12 8v4l2 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              Auto-extract mode is active. Filters will be extracted automatically from your queries.
-            </p>
-          )}
         </div>
-      </main>
+      </div>
     </div>
   );
 };

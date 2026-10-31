@@ -5,8 +5,15 @@ Constructs where clauses for metadata-based filtering.
 
 from typing import Dict, Any, List, Optional
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+
+def year_of(date: Optional[str]) -> int:
+    """The year in a Zotero date, or 0 when it has none."""
+    match = re.search(r'\b(1\d{3}|20\d{2})\b', date or "")
+    return int(match.group(0)) if match else 0
 
 
 def build_metadata_where_clause(
@@ -58,12 +65,14 @@ def build_metadata_where_clause(
     """
     conditions = []
     
-    # Year range conditions (automatically excludes year=-1)
+    # Undated items are stored as year 0, which only an upper bound would let through.
     if year_min is not None:
         conditions.append({"year": {"$gte": year_min}})
     
     if year_max is not None:
         conditions.append({"year": {"$lte": year_max}})
+        if not year_min:
+            conditions.append({"year": {"$gt": 0}})
     
     # Tags conditions (any tag matches) - uses $contains_item which requires client-side filtering
     if tags:

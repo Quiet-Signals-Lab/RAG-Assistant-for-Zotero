@@ -329,7 +329,7 @@ def excluded(text: str, terms: Sequence[str]) -> bool:
         return False
     words = {stem(w) for w in _WORD.findall((text or "").lower())}
     for term in terms:
-        stems = {stem(w) for w in title_words(term)}
+        stems = set(title_words(term))
         if stems and stems <= words:
             return True
     return False

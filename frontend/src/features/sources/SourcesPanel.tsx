@@ -23,7 +23,7 @@ const SourcesPanel: React.FC = () => {
 
   const state = !session
     ? "Ask a question to see the sources an answer cites."
-    : !selectedResponseId
+    : !session.messages.some((m) => m.id === selectedResponseId)
       ? "Choose an answer in the conversation to see its sources."
       : sources.length === 0
         ? "This answer cites no sources."
@@ -51,15 +51,15 @@ const SourcesPanel: React.FC = () => {
 
       {sources.length > 0 && (
         <ol className="cited">
-          {sources.map((source, index) => {
+          {sources.map((source) => {
             const query = encodeURIComponent(source.title);
             return (
               <li key={source.documentId} className="cited__row">
-                <span className="cited__number">[{index + 1}]</span>
+                <span className="cited__number">[{source.documentId}]</span>
                 <div className="cited__body">
                   <p className="cited__title">{source.title}</p>
                   <p className="cited__meta">
-                    {source.author || "Unknown author"}
+                    {(source.author || "Unknown author").replace(/,(?=\S)/g, ", ")}
                     {source.year ? ` (${source.year})` : ""}
                     {source.snippets?.length ? ` · ${source.snippets.length} passage${source.snippets.length === 1 ? "" : "s"}` : ""}
                     {source.pageNumber ? ` · p. ${source.pageNumber}` : ""}

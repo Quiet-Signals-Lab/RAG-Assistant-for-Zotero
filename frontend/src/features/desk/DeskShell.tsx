@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { request } from "../../api/client";
+import { BACKEND_BACK, request } from "../../api/client";
 import LibraryManagementPanel from "../library/LibraryManagementPanel";
 import { getElectronAPI } from "../../utils/electron";
 import Bibliography from "./Bibliography";
@@ -18,8 +18,7 @@ import SourcesPanel from "../sources/SourcesPanel";
 import SnippetsPanel from "../sessions/SnippetsPanel";
 import PromptScaffoldingPanel from "../prompts/PromptScaffoldingPanel";
 import buyMeACoffee from "../../assets/buymeacoffee.png";
-
-type IndexStats = { indexed_items: number; total_chunks: number; current_embedding_model: string };
+import type { IndexStats } from "../../types/desk";
 
 const REPO = "https://github.com/Quiet-Signals-Lab/RAG-Assistant-for-Zotero";
 
@@ -93,9 +92,14 @@ const DeskShell: React.FC = () => {
   const labels = mode === "chat" ? chatRoomLabels : roomLabels;
   const [stats, setStats] = useState<IndexStats | null>(null);
 
+  // Only the results list reads these, and the library panel fetches its own.
   useEffect(() => {
-    request<IndexStats>("/api/index_stats").then(setStats).catch(() => setStats(null));
-  }, [desk.room]);
+    if (mode === "chat" || desk.room === "library") return;
+    const load = () => request<IndexStats>("/api/index_stats").then(setStats).catch(() => setStats(null));
+    load();
+    window.addEventListener(BACKEND_BACK, load);
+    return () => window.removeEventListener(BACKEND_BACK, load);
+  }, [desk.room, mode]);
 
   return (
     <div className="desk" data-pane={desk.pane}>
@@ -153,7 +157,7 @@ const DeskShell: React.FC = () => {
         </aside>
 
         <main className={mode === "chat" ? "desk__browse desk__browse--chat" : "desk__browse"}>
-          {mode === "chat" ? <ChatView /> : <Bibliography indexEmpty={stats?.indexed_items === 0} />}
+          {mode === "chat" ? <ChatView /> : <Bibliography stats={stats} />}
         </main>
 
         <aside className="desk__verify" aria-label={mode === "chat" ? "Sources" : "Evidence"}>
