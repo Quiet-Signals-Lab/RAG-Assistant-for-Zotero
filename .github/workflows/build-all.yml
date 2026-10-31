@@ -20,7 +20,7 @@ jobs:
         include:
           - os: ubuntu-24.04
             name: linux
-          - os: macos-14  # Apple Silicon arm64
+          - os: macos-15  # Apple Silicon arm64
             name: macos
             arch: arm64
           - os: windows-latest
