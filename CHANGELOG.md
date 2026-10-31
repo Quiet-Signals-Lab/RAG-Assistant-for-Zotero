@@ -23,6 +23,7 @@ Run **Library → Advanced → Update details from Zotero** once. It repairs ite
 - The Evidence panel starts at the top of each new item, and the window no longer scrolls sideways below 1100 pixels wide.
 
 ### Security
+- Dependency updates close the open security advisories for Pillow 13, certifi, pyasn1, filelock, setuptools, Electron 44.10, vite, undici, follow-redirects and fast-uri. The certifi and Electron updates drop certificate authorities with compromised keys.
 - The backend refuses requests from web pages and from other host names. Before, any site you visited could send it requests, such as stopping an index or starting a chat. Eight unused endpoints were removed.
 
 ### Changed
