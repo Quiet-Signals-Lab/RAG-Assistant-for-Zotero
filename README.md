@@ -73,13 +73,6 @@ The app is not notarised on Windows and may throw a safety warning.
 - **Model providers**: local models via Ollama or LM Studio, or OpenAI, Anthropic, Google, Mistral, Groq or OpenRouter
 - **Profiles, automatic updates, macOS, Windows and Linux**
 
-### What the reference desk will never do
-
-- Answer your question for you, or write a summary across papers.
-- Send your PDFs anywhere. If you allow the desk clerk to use a cloud model, your query and the passages a job needs go to that provider; with a local model or none, nothing leaves your computer.
-- Write to your Zotero database. It is only ever read.
-- Require an account or an API key.
-
 ## Prerequisites
 
 To use this application locally, you need:
